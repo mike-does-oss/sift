@@ -70,4 +70,18 @@ describe("settings", () => {
     expect(maskedSettings().anthropicApiKey).toBe("");
     expect(getSettings().anthropicApiKey).toBe("");
   });
+
+  it("rejects non-string values instead of coercing them", () => {
+    expect(() =>
+      updateSettings({ anthropicApiKey: null } as unknown as Partial<typeof DEFAULT_SETTINGS>)
+    ).toThrow();
+    // Rejected patch must not have partially persisted.
+    expect(getSettings().anthropicApiKey).toBe("");
+    expect(maskedSettings().anthropicApiKey).toBe("");
+
+    expect(() =>
+      updateSettings({ ollamaModel: 123 } as unknown as Partial<typeof DEFAULT_SETTINGS>)
+    ).toThrow();
+    expect(getSettings().ollamaModel).toBe(DEFAULT_SETTINGS.ollamaModel);
+  });
 });

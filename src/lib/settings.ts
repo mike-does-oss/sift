@@ -59,13 +59,18 @@ export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
   if (patch.provider !== undefined && !isValidProvider(patch.provider)) {
     throw new Error(`Invalid provider: "${patch.provider}". Must be one of ${PROVIDERS.join(", ")}.`);
   }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    if (typeof value !== "string") {
+      throw new Error(`Setting "${key}" must be a string, got ${typeof value}.`);
+    }
+  }
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
-    const stringValue = String(value);
     db.insert(settings)
-      .values({ key, value: stringValue })
-      .onConflictDoUpdate({ target: settings.key, set: { value: stringValue } })
+      .values({ key, value })
+      .onConflictDoUpdate({ target: settings.key, set: { value } })
       .run();
   }
 
