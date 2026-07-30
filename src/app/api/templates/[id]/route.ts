@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { templates } from "@/db/schema";
+import { templates, schedules } from "@/db/schema";
 
 async function find(id: string) {
   return db.query.templates.findFirst({ where: eq(templates.id, id) });
@@ -64,6 +64,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   if (!(await find(id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const usedBy = await db.query.schedules.findFirst({ where: eq(schedules.templateId, id) });
+  if (usedBy) {
+    return NextResponse.json(
+      { error: `This template is used by schedule "${usedBy.name}" — delete or repoint that schedule first.` },
+      { status: 409 }
+    );
   }
 
   await db.delete(templates).where(eq(templates.id, id));

@@ -5,9 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, FileText, Loader2 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Set up PDF.js worker — derive the version from the installed package so the
-// CDN worker build always matches the API build (a mismatch throws at runtime).
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+// Set up PDF.js worker — bundle the worker asset from the installed package
+// instead of fetching it from a CDN, so the app works fully offline and the
+// worker build always matches the API build (no version-mismatch crash).
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 interface PDFPreviewProps {
   file: File | null;

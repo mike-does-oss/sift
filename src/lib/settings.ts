@@ -59,10 +59,16 @@ export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
   if (patch.provider !== undefined && !isValidProvider(patch.provider)) {
     throw new Error(`Invalid provider: "${patch.provider}". Must be one of ${PROVIDERS.join(", ")}.`);
   }
+  const KEY_SETTINGS = new Set<keyof SiftSettings>(["anthropicApiKey", "openaiApiKey"]);
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
     if (typeof value !== "string") {
       throw new Error(`Setting "${key}" must be a string, got ${typeof value}.`);
+    }
+    // Empty string is legal only for the two key fields, where it means
+    // "clear the key". Every other setting must have a real value.
+    if (value === "" && !KEY_SETTINGS.has(key as keyof SiftSettings)) {
+      throw new Error(`Setting "${key}" cannot be empty.`);
     }
   }
 

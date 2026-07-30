@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { jobs, documents } from "@/db/schema";
 
 export async function GET(req: NextRequest) {
-  const limit = Math.min(200, Number(req.nextUrl.searchParams.get("limit") ?? 50));
+  const parsed = Number(req.nextUrl.searchParams.get("limit"));
+  const limit = Math.min(200, Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 50);
   const rows = await db
     .select({ job: jobs, filename: documents.filename })
     .from(jobs)

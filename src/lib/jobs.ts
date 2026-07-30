@@ -11,25 +11,56 @@ const STALE_MS = 10 * 60 * 1000; // keep < any future long-running change; singl
 
 interface Snapshot { fields: ExtractionField[]; prompt: string; extractMultiple: boolean }
 
-const claimStmt = sqlite.prepare(`
-  UPDATE jobs SET status = 'processing', started_at = @now, attempts = attempts + 1
-  WHERE id = (
-    SELECT id FROM jobs
-    WHERE status = 'pending'
-       OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS} AND completed_at IS NULL)
-       OR (status = 'processing' AND started_at < @stale AND attempts < ${MAX_ATTEMPTS})
-    ORDER BY created_at LIMIT 1
-  )
-  RETURNING id
-`);
+// Job ids currently inside runOne in this process. Excluded from the claim
+// query so the stale-reclaim arm (meant for orphans from a past process)
+// can never re-claim a job this same process is still actively running.
+const inFlight = new Set<string>();
+
+const claimStmtCache = new Map<string, import("better-sqlite3").Statement<unknown[]>>();
+
+function buildClaimStmt(excludeCount: number): import("better-sqlite3").Statement<unknown[]> {
+  const key = String(excludeCount);
+  const cached = claimStmtCache.get(key);
+  if (cached) return cached;
+  const notIn = excludeCount > 0
+    ? `AND id NOT IN (${Array.from({ length: excludeCount }, () => "?").join(", ")})`
+    : "";
+  const stmt = sqlite.prepare<unknown[]>(`
+    UPDATE jobs SET status = 'processing', started_at = ?, attempts = attempts + 1
+    WHERE id = (
+      SELECT id FROM jobs
+      WHERE (
+        status = 'pending'
+        OR (status = 'failed' AND attempts < ${MAX_ATTEMPTS} AND completed_at IS NULL)
+        OR (status = 'processing' AND started_at < ? AND attempts < ${MAX_ATTEMPTS})
+      )
+      ${notIn}
+      ORDER BY created_at LIMIT 1
+    )
+    RETURNING id
+  `);
+  claimStmtCache.set(key, stmt);
+  return stmt;
+}
 
 function claimOne(): string | null {
   const now = Date.now();
-  const row = claimStmt.get({ now, stale: now - STALE_MS }) as { id: string } | undefined;
+  const excluded = Array.from(inFlight);
+  const stmt = buildClaimStmt(excluded.length);
+  const row = stmt.get(now, now - STALE_MS, ...excluded) as { id: string } | undefined;
   return row?.id ?? null;
 }
 
 async function runOne(jobId: string): Promise<void> {
+  inFlight.add(jobId);
+  try {
+    await runOneInner(jobId);
+  } finally {
+    inFlight.delete(jobId);
+  }
+}
+
+async function runOneInner(jobId: string): Promise<void> {
   const job = await db.query.jobs.findFirst({ where: eq(jobs.id, jobId) });
   if (!job) return;
   try {

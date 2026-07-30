@@ -27,6 +27,7 @@ export default function TemplatesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [addingPresetKey, setAddingPresetKey] = useState<string | null>(null);
   const [addedPresetKey, setAddedPresetKey] = useState<string | null>(null);
 
@@ -102,9 +103,14 @@ export default function TemplatesPage() {
 
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/templates/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setDeleteError(data?.error || "Failed to delete template");
+      return;
+    }
     setTemplates((prev) => prev.filter((t) => t.id !== id));
     setConfirmDeleteId(null);
+    setDeleteError(null);
   };
 
   const handleAddPreset = async (preset: (typeof PRESET_TEMPLATES)[number]) => {
@@ -298,6 +304,7 @@ export default function TemplatesPage() {
       </section>
 
       <section className="space-y-2">
+        {deleteError && <p className="text-sm text-[var(--error)]">{deleteError}</p>}
         {isLoading ? (
           <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
         ) : templates.length === 0 && !isEditingForm ? (
@@ -338,7 +345,10 @@ export default function TemplatesPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setConfirmDeleteId(t.id)}
+                    onClick={() => {
+                      setDeleteError(null);
+                      setConfirmDeleteId(t.id);
+                    }}
                     className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
                     aria-label={`Delete ${t.name}`}
                   >

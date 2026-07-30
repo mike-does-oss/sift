@@ -14,6 +14,10 @@ npm run dev
 
 Requires Node 20+. SQLite auto-creates at `./data/sift.db` on first run — no separate database setup. The app is at http://localhost:3000.
 
+### Localhost only, by default
+
+There is no auth. `npm run dev` / `npm start` bind to `127.0.0.1` only, so the app is reachable from this machine alone. If you want LAN access anyway, run `next dev -H 0.0.0.0` (or `next start -H 0.0.0.0`, or your own interface) — at your own risk, since anyone who can reach that address can read your extraction history, spend your BYO API key, and edit your settings.
+
 ## Provider setup
 
 ### Ollama (default, local)
@@ -48,7 +52,7 @@ In local (Ollama) mode, documents never leave your machine. With a cloud provide
 | Hosting | Cloud only | Self-host or (later) hosted |
 | Data locality | Leaves your infra | **Stays local** with Ollama |
 | Pricing | Per-page toll (~3–10¢) | At-cost inference / free self-host |
-| Model choice | Vendor-locked | **Any** — Ollama, OpenAI, Anthropic, Gemini, compat |
+| Model choice | Vendor-locked | **Any** — Ollama, Anthropic, OpenAI today; Gemini + OpenAI-compatible planned |
 | Source | Closed | **Open** |
 | Setup for non-tech users | Strong | Parity target for v1 |
 

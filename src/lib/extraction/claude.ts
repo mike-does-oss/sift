@@ -26,7 +26,7 @@ Rules:
 }
 
 export async function extractWithClaude(input: ExtractionInput): Promise<ExtractionOutput> {
-  const apiKey = input.apiKey ?? process.env.ANTHROPIC_API_KEY;
+  const apiKey = input.apiKey;
   if (!apiKey) return { success: false, error: "Anthropic API key not set — add it in Settings" };
   const client = new Anthropic({ apiKey });
 

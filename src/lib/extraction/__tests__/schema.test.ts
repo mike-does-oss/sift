@@ -7,9 +7,18 @@ const fields = [
   { id: "3", name: "line_items", type: "array" as const },
 ];
 
+// Minimal shape of what buildJsonSchema returns, just enough for these
+// assertions — avoids `as any` on the real (structurally-varying) return type.
+interface JsonSchemaLike {
+  type?: string;
+  additionalProperties?: boolean;
+  required?: string[];
+  properties: Record<string, { type: string | string[]; items?: JsonSchemaLike; additionalProperties?: boolean }>;
+}
+
 describe("buildJsonSchema", () => {
   it("builds a strict single-record schema", () => {
-    const s = buildJsonSchema(fields, false) as any;
+    const s = buildJsonSchema(fields, false) as unknown as JsonSchemaLike;
     expect(s.type).toBe("object");
     expect(s.additionalProperties).toBe(false);
     expect(s.required).toEqual(["invoice_number", "total", "line_items"]);
@@ -19,9 +28,9 @@ describe("buildJsonSchema", () => {
   });
 
   it("wraps in items array when extractMultiple", () => {
-    const s = buildJsonSchema(fields, true) as any;
+    const s = buildJsonSchema(fields, true) as unknown as JsonSchemaLike;
     expect(s.properties.items.type).toBe("array");
     expect(s.required).toEqual(["items"]);
-    expect(s.properties.items.items.additionalProperties).toBe(false);
+    expect(s.properties.items.items?.additionalProperties).toBe(false);
   });
 });

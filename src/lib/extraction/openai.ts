@@ -4,7 +4,7 @@ import { buildJsonSchema } from "./schema";
 import type { ExtractionInput, ExtractionOutput } from "./types";
 
 export async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput> {
-  const apiKey = input.apiKey ?? process.env.OPENAI_API_KEY;
+  const apiKey = input.apiKey;
   if (!apiKey) return { success: false, error: "OpenAI API key not set — add it in Settings" };
   const openai = new OpenAI({ apiKey });
 

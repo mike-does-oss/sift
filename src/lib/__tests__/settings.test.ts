@@ -71,6 +71,15 @@ describe("settings", () => {
     expect(getSettings().anthropicApiKey).toBe("");
   });
 
+  it("rejects an empty string for non-key settings, but still clears api keys", () => {
+    expect(() => updateSettings({ ollamaModel: "" })).toThrow('Setting "ollamaModel" cannot be empty.');
+    expect(getSettings().ollamaModel).toBe(DEFAULT_SETTINGS.ollamaModel);
+
+    updateSettings({ anthropicApiKey: "sk-ant-test1234" });
+    expect(() => updateSettings({ anthropicApiKey: "" })).not.toThrow();
+    expect(getSettings().anthropicApiKey).toBe("");
+  });
+
   it("rejects non-string values instead of coercing them", () => {
     expect(() =>
       updateSettings({ anthropicApiKey: null } as unknown as Partial<typeof DEFAULT_SETTINGS>)
