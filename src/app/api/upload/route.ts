@@ -7,7 +7,15 @@ import { saveBuffer } from "@/lib/storage";
 const MAX_SIZE_BYTES = 32 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const formData = await request.formData();
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Expected multipart form data with a \"file\" field." },
+      { status: 400 }
+    );
+  }
   const file = formData.get("file");
   const scheduleId = formData.get("scheduleId");
 
