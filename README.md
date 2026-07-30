@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sift
 
-## Getting Started
+![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-First, run the development server:
+Open-source, self-hostable document extractor that runs fully local by default (Ollama) and never marks up your tokens (BYO cloud key).
+
+## Quick start
 
 ```bash
+git clone https://github.com/yourname/sift && cd sift
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires Node 20+. SQLite auto-creates at `./data/sift.db` on first run — no separate database setup. The app is at http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Provider setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Ollama (default, local)
 
-## Learn More
+1. [Install Ollama](https://ollama.com).
+2. `ollama pull gemma3:4b`.
+3. If Ollama isn't running on the default `http://localhost:11434`, set the base URL in Settings.
 
-To learn more about Next.js, take a look at the following resources:
+v0 does text-only PDF extraction locally. Scanned or image-only PDFs need a cloud provider for now.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Anthropic / OpenAI (BYO key)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Add your API key and model in Settings. Keys are stored in your local SQLite database on this machine — plaintext, single-user; treat `./data` as sensitive.
 
-## Deploy on Vercel
+## Privacy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+In local (Ollama) mode, documents never leave your machine. With a cloud provider, document content goes to that provider only — there is no third-party server of ours involved.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Features
+
+- Extraction playground with 9 preset templates (invoices, receipts, bank statements, pay stubs, purchase orders, utility bills, résumés, contracts)
+- Batches
+- Recurring schedules with document inboxes and Run now
+- History with provider/model recorded per job
+- CSV/JSON export
+- Provider settings with test-connection
+
+## Comparison
+
+| | Parseur / Parserr / Docparser | **Sift** |
+|---|---|---|
+| Hosting | Cloud only | Self-host or (later) hosted |
+| Data locality | Leaves your infra | **Stays local** with Ollama |
+| Pricing | Per-page toll (~3–10¢) | At-cost inference / free self-host |
+| Model choice | Vendor-locked | **Any** — Ollama, OpenAI, Anthropic, Gemini, compat |
+| Source | Closed | **Open** |
+| Setup for non-tech users | Strong | Parity target for v1 |
+
+## Screenshots
+
+<!-- screenshots added post-E2E -->
+
+## License
+
+MIT
