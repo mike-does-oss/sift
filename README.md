@@ -54,7 +54,21 @@ In local (Ollama) mode, documents never leave your machine. With a cloud provide
 
 ## Screenshots
 
-<!-- screenshots added post-E2E -->
+**Extract playground** — upload a PDF, define fields, extract locally:
+
+![Extract playground](docs/screenshots/sift-dashboard.png)
+
+**Settings** — pick a provider, manage keys, test the connection:
+
+![Settings](docs/screenshots/sift-settings.png)
+
+**History** — every job with the provider and model that ran it:
+
+![History](docs/screenshots/sift-history.png)
+
+**Schedules** — a document inbox processed on a daily or weekly cadence:
+
+![Schedule detail](docs/screenshots/sift-schedule-detail.png)
 
 ## License
 
