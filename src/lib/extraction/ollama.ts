@@ -41,8 +41,13 @@ export async function ollamaChat(
 export async function extractWithOllama(
   input: ExtractionInput & { baseUrl: string }
 ): Promise<ExtractionOutput> {
-  const pdf = await getDocumentProxy(new Uint8Array(Buffer.from(input.pdfBase64, "base64")));
-  const { text } = await extractText(pdf, { mergePages: true });
+  let text: string;
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(Buffer.from(input.pdfBase64, "base64")));
+    ({ text } = await extractText(pdf, { mergePages: true }));
+  } catch {
+    return { success: false, error: "Couldn't read this PDF — the file may be corrupted or not a real PDF." };
+  }
   if (!text.trim()) {
     return { success: false, error: "No selectable text found in this PDF. Local extraction is text-only in v0 — scanned documents need a cloud provider (or wait for vision support)." };
   }

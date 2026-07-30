@@ -31,7 +31,26 @@ export async function POST(request: NextRequest) {
   }
 
   const pdfBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-  const result = await runExtraction({ pdfBase64, filename: file.name, fields, prompt, extractMultiple });
+
+  let result: Awaited<ReturnType<typeof runExtraction>>;
+  try {
+    result = await runExtraction({ pdfBase64, filename: file.name, fields, prompt, extractMultiple });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
+    await db.insert(jobs).values({
+      templateSnapshot: { fields, prompt, extractMultiple },
+      status: "failed",
+      attempts: 1,
+      result: null,
+      error: message,
+      source: "single",
+      provider: null,
+      model: null,
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
 
   await db.insert(jobs).values({
     templateSnapshot: { fields, prompt, extractMultiple },
