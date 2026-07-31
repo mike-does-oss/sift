@@ -1,0 +1,15 @@
+From: receipts@bluebeancafe.example
+To: mike@example.com
+Subject: Your Blue Bean Cafe receipt #R-2214
+Date: Thu, 31 Jul 2026 09:14:22 +1000
+Content-Type: text/plain; charset=utf-8
+
+Thanks for visiting Blue Bean Cafe!
+
+Receipt: R-2214
+Date: 31 July 2026
+Items:
+  Flat white (large)     6.50
+  Almond croissant       7.80
+Total: 14.30 AUD
+Paid with: Visa ending 4402

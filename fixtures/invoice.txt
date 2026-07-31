@@ -1,0 +1,13 @@
+INVOICE
+
+Invoice Number: INV-2026-0731
+Invoice Date: 2026-07-31
+Vendor: WhyPred Consulting Pty Ltd
+Bill To: Acme Industries
+
+Description                     Amount
+Consulting services (July)      1,200.00
+GST (10%)                         120.00
+Total Due:                      1,320.00 AUD
+
+Payment due within 14 days.

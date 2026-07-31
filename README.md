@@ -26,21 +26,31 @@ There is no auth. `npm run dev` / `npm start` bind to `127.0.0.1` only, so the a
 2. `ollama pull gemma3:4b`.
 3. If Ollama isn't running on the default `http://localhost:11434`, set the base URL in Settings.
 
-v0 does text-only PDF extraction locally. Scanned or image-only PDFs need a cloud provider for now.
+Vision-capable models (gemma3 is one) also read images locally. Text-layer PDFs extract locally with any model; scanned PDFs need a vision path (local vision model for images, or a cloud provider for PDFs).
 
-### Anthropic / OpenAI (BYO key)
+### Anthropic / OpenAI / Gemini (BYO key)
 
 Add your API key and model in Settings. Keys are stored in your local SQLite database on this machine — plaintext, single-user; treat `./data` as sensitive.
+
+### Any OpenAI-compatible endpoint
+
+Point the OpenAI-compatible provider at a base URL — Groq, vLLM, LM Studio, or Ollama's own `/v1` endpoint all work. API key optional (many local servers don't need one).
 
 ## Privacy
 
 In local (Ollama) mode, documents never leave your machine. With a cloud provider, document content goes to that provider only — there is no third-party server of ours involved.
 
+## Formats
+
+PDF, email (`.eml`), images (PNG/JPEG/WEBP, via vision models), and plain text (`.txt`/`.md`/`.csv`).
+
 ## Features
 
-- Extraction playground with 9 preset templates (invoices, receipts, bank statements, pay stubs, purchase orders, utility bills, résumés, contracts)
-- Batches
-- Recurring schedules with document inboxes and Run now
+- Two-pane workspace: document on the left, fields and results on the right — extracted values are highlighted where they appear in the source text
+- Review and edit every value before export; exports use your edits
+- Per-extraction provider/model picker with an always-on 🔒 Local / ☁ Cloud badge
+- 9 preset templates (invoices, receipts, bank statements, pay stubs, purchase orders, utility bills, résumés, contracts)
+- Batches and recurring schedules with document inboxes and Run now
 - History with provider/model recorded per job
 - CSV/JSON export
 - Provider settings with test-connection
@@ -52,13 +62,13 @@ In local (Ollama) mode, documents never leave your machine. With a cloud provide
 | Hosting | Cloud only | Self-host or (later) hosted |
 | Data locality | Leaves your infra | **Stays local** with Ollama |
 | Pricing | Per-page toll (~3–10¢) | At-cost inference / free self-host |
-| Model choice | Vendor-locked | **Any** — Ollama, Anthropic, OpenAI today; Gemini + OpenAI-compatible planned |
+| Model choice | Vendor-locked | **Any** — Ollama, Anthropic, OpenAI, Gemini, and any OpenAI-compatible endpoint |
 | Source | Closed | **Open** |
 | Setup for non-tech users | Strong | Parity target for v1 |
 
 ## Screenshots
 
-**Extract playground** — upload a PDF, define fields, extract locally:
+**Workspace** — extract locally, watch values get lifted off the page:
 
 ![Extract playground](docs/screenshots/sift-dashboard.png)
 
