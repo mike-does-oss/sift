@@ -22,6 +22,9 @@ export function validateModelName(raw: unknown): ModelNameValidation {
   if (!model) {
     return { ok: false, error: '"model" is required and must be a string.' };
   }
+  if (model.length > 128) {
+    return { ok: false, error: '"model" must be 128 characters or fewer.' };
+  }
   if (!MODEL_NAME_PATTERN.test(model)) {
     return { ok: false, error: '"model" may only contain letters, numbers, and . _ : / -' };
   }

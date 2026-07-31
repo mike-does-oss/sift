@@ -50,3 +50,4 @@ describe("createPullProgressTracker", () => {
     expect(percent).toBe(100);
   });
 });
+

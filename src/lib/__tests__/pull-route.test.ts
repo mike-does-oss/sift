@@ -129,3 +129,8 @@ describe("proxyOllamaPull", () => {
     expect(result.kind).toBe("error");
   });
 });
+
+it("rejects model names longer than 128 characters", () => {
+  const result = validateModelName("a".repeat(129));
+  expect(result.ok).toBe(false);
+});

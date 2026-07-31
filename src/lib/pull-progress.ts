@@ -30,6 +30,10 @@ export function createPullProgressTracker() {
         totalSum += layer.total;
       }
 
+      // Note: if Ollama announces a large new layer mid-download the summed
+      // ratio can dip briefly. That's accepted — layers are normally all
+      // announced up front, and a truthful dip beats holding a misleading
+      // "100%" while bytes are still downloading.
       const percent = totalSum > 0 ? Math.min(100, Math.round((completedSum / totalSum) * 100)) : null;
       return { status: progress.status, percent };
     },
