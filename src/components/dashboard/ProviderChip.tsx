@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { HardDrive, Sparkles, Cloud } from "lucide-react";
 
 type Provider = "ollama" | "anthropic" | "openai";
 
@@ -12,22 +11,29 @@ interface Settings {
   openaiModel: string;
 }
 
-const PROVIDER_LABELS: Record<Provider, string> = {
-  ollama: "Local",
+// Cloud provider display names for the "☁ Cloud · <provider> <model>" badge
+// copy (playbook §4). Ollama has no entry here — it renders as "🔒 Local".
+const CLOUD_PROVIDER_LABELS: Record<Exclude<Provider, "ollama">, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
-};
-
-const PROVIDER_ICONS: Record<Provider, typeof HardDrive> = {
-  ollama: HardDrive,
-  anthropic: Sparkles,
-  openai: Cloud,
 };
 
 function modelFor(settings: Settings): string {
   if (settings.provider === "anthropic") return settings.anthropicModel;
   if (settings.provider === "openai") return settings.openaiModel;
   return settings.ollamaModel;
+}
+
+/** "🔒 Local · gemma3:4b" or "☁ Cloud · Anthropic claude-sonnet-5" (§4 privacy contract). */
+function badgeCopy(settings: Settings): { emoji: string; text: string } {
+  const model = modelFor(settings);
+  if (settings.provider === "ollama") {
+    return { emoji: "🔒", text: `Local · ${model}` };
+  }
+  return {
+    emoji: "☁",
+    text: `Cloud · ${CLOUD_PROVIDER_LABELS[settings.provider]} ${model}`,
+  };
 }
 
 /**
@@ -71,18 +77,19 @@ export function ProviderChip() {
     );
   }
 
-  const Icon = PROVIDER_ICONS[settings.provider];
+  const { emoji, text } = badgeCopy(settings);
 
   return (
     <div className="px-2 py-1.5">
       <div
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)]"
-        title={`${PROVIDER_LABELS[settings.provider]} · ${modelFor(settings)}`}
+        className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+        title={text}
+        aria-label={text}
       >
-        <Icon className="w-3.5 h-3.5 text-[var(--accent)] flex-shrink-0" strokeWidth={1.75} />
-        <span className="truncate">
-          {PROVIDER_LABELS[settings.provider]} · {modelFor(settings)}
+        <span aria-hidden="true" className="flex-shrink-0 not-italic">
+          {emoji}
         </span>
+        <span className="truncate">{text}</span>
       </div>
     </div>
   );

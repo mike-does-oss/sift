@@ -203,7 +203,7 @@ export default function BatchDetailPage() {
         {jobs.map(({ job, filename }) => (
           <div key={job.id} className="flex items-start gap-3 px-4 py-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+              <p className="data text-sm font-medium text-[var(--text-primary)] truncate">
                 {filename ?? "Unknown file"}
               </p>
               {job.status === "failed" && job.error && (

@@ -94,10 +94,10 @@ export default function HistoryPage() {
                 <span className="w-20 flex-shrink-0 text-xs font-medium text-[var(--text-secondary)]">
                   {SOURCE_LABELS[job.source]}
                 </span>
-                <span className="flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">
+                <span className="data flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">
                   {filename ?? "—"}
                 </span>
-                <span className="w-32 flex-shrink-0 text-xs text-[var(--text-tertiary)] truncate">
+                <span className="data w-32 flex-shrink-0 text-xs text-[var(--text-tertiary)] truncate">
                   {job.provider
                     ? `${PROVIDER_LABELS[job.provider] ?? job.provider} · ${job.model ?? "—"}`
                     : "—"}
@@ -108,7 +108,7 @@ export default function HistoryPage() {
                 {job.status === "failed" && job.error && (
                   <p className="text-xs text-[var(--error)] mb-2">{job.error}</p>
                 )}
-                <pre className="p-3 rounded-lg bg-[var(--surface-inset)] text-xs font-mono text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+                <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
                   {job.result ? JSON.stringify(job.result, null, 2) : "No result"}
                 </pre>
               </div>

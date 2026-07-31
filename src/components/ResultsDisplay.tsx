@@ -221,7 +221,7 @@ export function ResultsDisplay({
                 {fields.map((field) => (
                   <th
                     key={field.id}
-                    className="px-4 py-2 text-left text-xs font-medium text-[var(--text-tertiary)]"
+                    className="data px-4 py-2 text-left text-xs font-medium text-[var(--text-tertiary)]"
                   >
                     {field.name}
                   </th>
@@ -241,7 +241,7 @@ export function ResultsDisplay({
                     {index + 1}
                   </td>
                   {fields.map((field) => (
-                    <td key={field.id} className="px-4 py-2.5 text-[var(--text-primary)]">
+                    <td key={field.id} className="data px-4 py-2.5 text-[var(--text-primary)]">
                       {formatValue(row[field.name])}
                     </td>
                   ))}
@@ -257,7 +257,7 @@ export function ResultsDisplay({
             <span className="ml-1">View JSON</span>
           </summary>
           <div className="px-4 pb-4">
-            <pre className="p-3 rounded-lg bg-[var(--surface-inset)] text-xs font-mono text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+            <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
               {JSON.stringify(results, null, 2)}
             </pre>
           </div>
@@ -329,7 +329,7 @@ export function ResultsDisplay({
             className="flex items-start gap-4 px-4 py-3 hover:bg-[var(--surface-overlay)]/30 transition-colors"
           >
             <div className="w-28 flex-shrink-0">
-              <span className="text-xs font-medium text-[var(--text-secondary)]">
+              <span className="data text-xs font-medium text-[var(--text-secondary)]">
                 {field.name}
               </span>
               <span className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-0.5">
@@ -337,7 +337,7 @@ export function ResultsDisplay({
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-sm text-[var(--text-primary)] break-words">
+              <span className="data text-sm text-[var(--text-primary)] break-words">
                 {formatValue(singleResult[field.name])}
               </span>
             </div>
@@ -351,7 +351,7 @@ export function ResultsDisplay({
           <span className="ml-1">View JSON</span>
         </summary>
         <div className="px-4 pb-4">
-          <pre className="p-3 rounded-lg bg-[var(--surface-inset)] text-xs font-mono text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)]">
+          <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)]">
             {JSON.stringify(singleResult, null, 2)}
           </pre>
         </div>

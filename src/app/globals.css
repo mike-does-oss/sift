@@ -1,38 +1,57 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
 @import "tailwindcss";
+
+/*
+ * Sift design system (playbook §13) — "an instrument, not the default AI
+ * look": quiet paper-toned surfaces, a single confident field-green accent,
+ * data set in mono because data *is* code.
+ *
+ * `--bg`/`--surface`/`--ink`/`--muted`/`--line`/`--accent`/`--accent-tint`
+ * are the §13-canonical tokens. Everything below them is a legacy alias so
+ * existing component classnames (var(--text-primary), var(--surface-inset),
+ * etc.) keep working unchanged, now pointed at the new palette instead of
+ * the old cream/terracotta one.
+ */
 
 /* Light theme (default) */
 :root {
-  /* Surface colors - warm light palette */
-  --surface-base: #faf9f7;
-  --surface-elevated: #ffffff;
-  --surface-overlay: #f5f4f1;
-  --surface-inset: #efeee9;
+  /* §13 canonical tokens */
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --ink: #17171a;
+  --muted: #74736e;
+  --line: #e7e4dd;
+  --accent: #2f6f4e;
+  --accent-tint: #e9f3ec;
 
-  /* Text hierarchy */
-  --text-primary: #1a1a1a;
-  --text-secondary: #5c5c5c;
-  --text-tertiary: #8c8c8c;
+  /* Derived, same spirit as §13 but not spelled out there */
+  --ink-tertiary: #9b9a93;
+  --line-strong: #c9c5bb;
+  --accent-muted: #24593e;
+  --surface-overlay: #f5f3ee;
+  --surface-inset: #f0ede6;
 
-  /* Borders */
-  --border-default: #d9d7d2;
-  --border-subtle: #e8e6e1;
-  --border-strong: #c5c3be;
+  /* Legacy aliases — old token names, new values */
+  --surface-base: var(--bg);
+  --surface-elevated: var(--surface);
+  --text-primary: var(--ink);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--ink-tertiary);
+  --border-default: var(--line);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --accent-subtle: var(--accent-tint);
 
-  /* Accent - warm copper/bronze */
-  --accent: #b8794a;
-  --accent-muted: #9a6840;
-  --accent-subtle: rgba(184, 121, 74, 0.12);
-
-  /* Semantic colors */
-  --success: #2d9d5e;
-  --success-subtle: rgba(45, 157, 94, 0.12);
+  /* Semantic colors ("verified" ties to the field-green accent; error stays
+     a plain functional red — not part of the old cream/terracotta palette) */
+  --success: var(--accent);
+  --success-subtle: var(--accent-tint);
   --error: #dc3545;
   --error-subtle: rgba(220, 53, 69, 0.12);
 
-  /* Typography */
-  --font-display: 'Instrument Serif', Georgia, serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
+  /* Typography — vars populated by next/font (see layout.tsx) */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -46,34 +65,40 @@
   --btn-text: #ffffff;
 }
 
-/* Dark theme */
+/* Dark theme — a deliberate dark palette, not a naive inversion */
 html.dark {
-  /* Surface colors - warm dark palette */
-  --surface-base: #0d0d0f;
-  --surface-elevated: #16161a;
-  --surface-overlay: #1c1c21;
-  --surface-inset: #09090b;
+  /* §13 canonical tokens, dark set */
+  --bg: #141416;
+  --surface: #1d1d20;
+  --ink: #ededea;
+  --muted: #9c9a93;
+  --line: #2c2c30;
+  --accent: #4e9b72;
+  --accent-tint: #1f3229;
 
-  /* Text hierarchy */
-  --text-primary: #f5f5f4;
-  --text-secondary: #a8a8a8;
-  --text-tertiary: #6b6b6b;
+  /* Derived */
+  --ink-tertiary: #6e6c67;
+  --line-strong: #3a3a3f;
+  --accent-muted: #3d7d5b;
+  --surface-overlay: #232326;
+  --surface-inset: #0e0e10;
 
-  /* Borders */
-  --border-default: #2a2a2e;
-  --border-subtle: #1f1f23;
-  --border-strong: #3a3a3e;
-
-  /* Accent - warm copper/bronze */
-  --accent: #d4a574;
-  --accent-muted: #b8956a;
-  --accent-subtle: rgba(212, 165, 116, 0.12);
+  /* Legacy aliases — old token names, new values */
+  --surface-base: var(--bg);
+  --surface-elevated: var(--surface);
+  --text-primary: var(--ink);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--ink-tertiary);
+  --border-default: var(--line);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --accent-subtle: var(--accent-tint);
 
   /* Semantic colors */
-  --success: #6ee7a8;
-  --success-subtle: rgba(110, 231, 168, 0.12);
-  --error: #f87171;
-  --error-subtle: rgba(248, 113, 113, 0.12);
+  --success: var(--accent);
+  --success-subtle: var(--accent-tint);
+  --error: #e2726a;
+  --error-subtle: rgba(226, 114, 106, 0.14);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -83,8 +108,8 @@ html.dark {
   /* Card shadow */
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
 
-  /* Button text */
-  --btn-text: #0d0d0f;
+  /* Button text — dark ink reads on the lightened accent green */
+  --btn-text: #0e1512;
 }
 
 * {
@@ -105,10 +130,18 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Display font utility */
+/* Display font utility — headings, brand, eyebrows */
 .font-display {
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Data utility — extracted values, field keys, model names, filenames.
+   Mono is meaningful here, not decorative: it marks "this is data." */
+.data {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* Custom scrollbar */
