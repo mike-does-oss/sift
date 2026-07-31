@@ -7,6 +7,14 @@ import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHand
 import type { ExtractionField, ExtractionData } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo } from "@/lib/api";
+import { createPullProgressTracker } from "@/lib/pull-progress";
+
+const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
+
+type PullUiState =
+  | { status: "idle" }
+  | { status: "pulling"; percent: number | null; statusText: string }
+  | { status: "error"; error: string };
 
 interface Template {
   id: string;
@@ -83,6 +91,9 @@ export default function DashboardPage() {
   const [providersLoaded, setProvidersLoaded] = useState(false);
   const [providersFailed, setProvidersFailed] = useState(false);
   const [providerKey, setProviderKey] = useState("");
+  const [defaultOllamaModel, setDefaultOllamaModel] = useState(DEFAULT_OLLAMA_MODEL);
+  const [pullState, setPullState] = useState<PullUiState>({ status: "idle" });
+  const pullAbortRef = useRef<AbortController | null>(null);
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -116,8 +127,10 @@ export default function DashboardPage() {
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null),
         ]);
+        const loadedSettings = (settingsBody?.settings as DefaultSettings) ?? null;
         setProviders(providerList);
-        setProviderKey(defaultProviderKey(providerList, (settingsBody?.settings as DefaultSettings) ?? null));
+        setProviderKey(defaultProviderKey(providerList, loadedSettings));
+        if (loadedSettings?.ollamaModel) setDefaultOllamaModel(loadedSettings.ollamaModel);
       } catch {
         // Provider list is best-effort: the picker stays empty, but extraction
         // must still work — canExtract below skips the provider requirement
@@ -144,6 +157,50 @@ export default function DashboardPage() {
 
   const localProvider = providers.find((p) => p.id === "ollama");
   const cloudProviders = providers.filter((p) => p.id !== "ollama");
+  // Ollama reachable but nothing installed yet (post-onboarding state) —
+  // `note` is only set when the provider is unreachable, so its absence
+  // here means the "no models" affordance below applies.
+  const showOllamaPullAffordance = providersLoaded && !!localProvider && localProvider.models.length === 0 && !localProvider.note;
+
+  // Aborting on unmount stops the in-flight fetch/stream read if the user
+  // navigates away mid-download. Ollama caches layers it has already
+  // fetched, so a re-click resumes rather than restarting from zero.
+  useEffect(() => {
+    return () => {
+      pullAbortRef.current?.abort();
+    };
+  }, []);
+
+  const handlePullOllamaModel = async () => {
+    if (pullState.status === "pulling") return;
+    const model = defaultOllamaModel || DEFAULT_OLLAMA_MODEL;
+
+    const controller = new AbortController();
+    pullAbortRef.current = controller;
+    const tracker = createPullProgressTracker();
+    setPullState({ status: "pulling", percent: null, statusText: "Starting…" });
+
+    try {
+      await webSiftApi.pullModel(
+        model,
+        (progress) => {
+          const { status, percent } = tracker.update(progress);
+          setPullState({ status: "pulling", percent, statusText: status });
+        },
+        controller.signal
+      );
+      setPullState({ status: "idle" });
+      // Refetch providers so the newly installed model populates the picker
+      // — only claim the selection if nothing usable was selected before,
+      // respecting whatever the user already had picked.
+      const refreshed = await webSiftApi.listProviders();
+      setProviders(refreshed);
+      setProviderKey((prev) => prev || defaultProviderKey(refreshed, null));
+    } catch (err) {
+      if (controller.signal.aborted) return; // deliberate navigation-away abort, not a real failure
+      setPullState({ status: "error", error: err instanceof Error ? err.message : "Download failed." });
+    }
+  };
 
   const handleLoadTemplate = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -311,6 +368,39 @@ export default function DashboardPage() {
 
         {providersFailed && (
           <p className="text-xs text-[var(--text-tertiary)]">Couldn&apos;t load providers — using your saved settings</p>
+        )}
+
+        {showOllamaPullAffordance && (
+          <div className="basis-full flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--text-tertiary)]">
+              No local models — Download {defaultOllamaModel}
+              {defaultOllamaModel === DEFAULT_OLLAMA_MODEL ? " (~3.3 GB)" : ""}
+            </span>
+            <button
+              onClick={handlePullOllamaModel}
+              disabled={pullState.status === "pulling"}
+              className="px-2.5 py-1 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+            >
+              {pullState.status === "pulling" ? "Downloading…" : "Download"}
+            </button>
+            {pullState.status === "pulling" && (
+              <>
+                <div className="w-24 h-1 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+                  <div
+                    className={`h-full bg-[var(--accent)] transition-all ${
+                      pullState.percent === null ? "w-1/3 animate-pulse" : ""
+                    }`}
+                    style={pullState.percent !== null ? { width: `${pullState.percent}%` } : undefined}
+                  />
+                </div>
+                <span className="text-xs text-[var(--text-tertiary)]">
+                  {pullState.statusText}
+                  {pullState.percent !== null ? ` · ${pullState.percent}%` : ""}
+                </span>
+              </>
+            )}
+            {pullState.status === "error" && <span className="text-xs text-[var(--error)]">{pullState.error}</span>}
+          </div>
         )}
 
         {privacyBadge && (

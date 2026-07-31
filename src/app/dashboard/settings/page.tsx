@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   HardDrive,
@@ -9,8 +9,11 @@ import {
   Zap,
   Plug,
   Check,
+  Download,
 } from "lucide-react";
 import type { SiftSettings } from "@/lib/settings";
+import { webSiftApi } from "@/lib/api";
+import { createPullProgressTracker } from "@/lib/pull-progress";
 
 type Provider = SiftSettings["provider"];
 
@@ -57,6 +60,44 @@ type TestState =
   | { status: "testing" }
   | { status: "ok"; models?: string[] }
   | { status: "error"; error: string };
+
+type PullState =
+  | { status: "idle" }
+  | { status: "pulling"; percent: number | null; statusText: string }
+  | { status: "success" }
+  | { status: "error"; error: string };
+
+function PullProgressBar({ state }: { state: PullState }) {
+  if (state.status === "pulling") {
+    return (
+      <div className="space-y-1">
+        <div className="h-1.5 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+          <div
+            className={`h-full bg-[var(--accent)] transition-all ${
+              state.percent === null ? "w-1/3 animate-pulse" : ""
+            }`}
+            style={state.percent !== null ? { width: `${state.percent}%` } : undefined}
+          />
+        </div>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          {state.statusText}
+          {state.percent !== null ? ` · ${state.percent}%` : ""}
+        </p>
+      </div>
+    );
+  }
+  if (state.status === "success") {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-[var(--success)]">
+        <Check className="w-3.5 h-3.5" /> Downloaded — refreshing models…
+      </p>
+    );
+  }
+  if (state.status === "error") {
+    return <p className="text-xs text-[var(--error)]">{state.error}</p>;
+  }
+  return null;
+}
 
 function TestConnectionButton({
   label,
@@ -119,6 +160,8 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [ollamaTest, setOllamaTest] = useState<TestState>({ status: "idle" });
+  const [pullState, setPullState] = useState<PullState>({ status: "idle" });
+  const pullAbortRef = useRef<AbortController | null>(null);
   const [anthropicTest, setAnthropicTest] = useState<TestState>({ status: "idle" });
   const [openaiTest, setOpenaiTest] = useState<TestState>({ status: "idle" });
   const [geminiTest, setGeminiTest] = useState<TestState>({ status: "idle" });
@@ -252,6 +295,43 @@ export default function SettingsPage() {
     }
   };
 
+  // Aborting on unmount stops the in-flight fetch/stream read if the user
+  // navigates away mid-download. Ollama caches layers it has already
+  // fetched, so a re-click on "Download model" resumes rather than
+  // restarting from zero.
+  useEffect(() => {
+    return () => {
+      pullAbortRef.current?.abort();
+    };
+  }, []);
+
+  const handlePullModel = async () => {
+    const model = ollamaModel.trim();
+    if (!model || pullState.status === "pulling") return;
+
+    const controller = new AbortController();
+    pullAbortRef.current = controller;
+    const tracker = createPullProgressTracker();
+    setPullState({ status: "pulling", percent: null, statusText: "Starting…" });
+
+    try {
+      await webSiftApi.pullModel(
+        model,
+        (progress) => {
+          const { status, percent } = tracker.update(progress);
+          setPullState({ status: "pulling", percent, statusText: status });
+        },
+        controller.signal
+      );
+      setPullState({ status: "success" });
+      await runTest("ollama", setOllamaTest);
+      setTimeout(() => setPullState((s) => (s.status === "success" ? { status: "idle" } : s)), 2500);
+    } catch (err) {
+      if (controller.signal.aborted) return; // deliberate navigation-away abort, not a real failure
+      setPullState({ status: "error", error: err instanceof Error ? err.message : "Download failed." });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -336,15 +416,27 @@ export default function SettingsPage() {
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
               Model
             </label>
-            <input
-              type="text"
-              value={ollamaModel}
-              onChange={(e) => setOllamaModel(e.target.value)}
-              placeholder="gemma3:4b"
-              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={ollamaModel}
+                onChange={(e) => setOllamaModel(e.target.value)}
+                placeholder="gemma3:4b"
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg input-base text-sm font-mono"
+              />
+              <button
+                onClick={handlePullModel}
+                disabled={pullState.status === "pulling" || !ollamaModel.trim()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {pullState.status === "pulling" ? "Downloading…" : "Download model"}
+              </button>
+            </div>
           </div>
         </div>
+
+        <PullProgressBar state={pullState} />
 
         <div className="flex flex-wrap items-center gap-2">
           <TestConnectionButton

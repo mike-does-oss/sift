@@ -22,6 +22,19 @@ export interface ProviderInfo {
   configured: boolean;
 }
 
+/**
+ * One line of Ollama's `POST /api/pull` NDJSON stream, as surfaced to
+ * `SiftApi.pullModel`'s progress callback. `completed`/`total` are per-layer
+ * byte counts (present once Ollama starts downloading a layer's `digest`) —
+ * see `src/lib/pull-progress.ts` for summing them into an overall percent.
+ */
+export interface PullProgress {
+  status: string;
+  digest?: string;
+  completed?: number;
+  total?: number;
+}
+
 export interface ExtractResponse {
   success: boolean;
   data?: ExtractionData;
@@ -51,6 +64,31 @@ export interface SiftApi {
    * per-request override fields `provider` and `model`.
    */
   extract(formData: FormData): Promise<ExtractResponse>;
+  /**
+   * Downloads an Ollama model via `POST /api/providers/pull`, invoking
+   * `onProgress` once per NDJSON line the server forwards. Resolves once the
+   * stream ends with a "success" status; rejects with the stream's error
+   * line, an HTTP error, or (if `signal` fires) an `AbortError`.
+   */
+  pullModel(model: string, onProgress: (progress: PullProgress) => void, signal?: AbortSignal): Promise<void>;
+}
+
+interface OllamaPullLine {
+  status?: string;
+  error?: string;
+  digest?: string;
+  completed?: number;
+  total?: number;
+}
+
+function parsePullLine(line: string): OllamaPullLine | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as OllamaPullLine;
+  } catch {
+    return null; // ignore malformed lines rather than failing the whole download
+  }
 }
 
 class WebSiftApi implements SiftApi {
@@ -66,6 +104,69 @@ class WebSiftApi implements SiftApi {
   async extract(formData: FormData): Promise<ExtractResponse> {
     const res = await fetch("/api/extract", { method: "POST", body: formData });
     return (await res.json()) as ExtractResponse;
+  }
+
+  async pullModel(
+    model: string,
+    onProgress: (progress: PullProgress) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const res = await fetch("/api/providers/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+      signal,
+    });
+
+    if (!res.ok || !res.body) {
+      let message = `Failed to start model download (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch {
+        // no JSON error body — fall back to the generic message above
+      }
+      throw new Error(message);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastStatus = "";
+
+    const handleLine = (raw: string) => {
+      const parsed = parsePullLine(raw);
+      if (!parsed) return;
+      if (parsed.error) throw new Error(parsed.error);
+      if (parsed.status) {
+        lastStatus = parsed.status;
+        onProgress({
+          status: parsed.status,
+          digest: parsed.digest,
+          completed: parsed.completed,
+          total: parsed.total,
+        });
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      // The last split segment is either empty (buffer ended on a newline)
+      // or a partial line split across chunk boundaries — keep it for next
+      // time instead of parsing it early.
+      buffer = lines.pop() ?? "";
+      for (const line of lines) handleLine(line);
+    }
+    if (buffer) handleLine(buffer);
+
+    if (lastStatus !== "success") {
+      throw new Error(
+        lastStatus ? `Download ended unexpectedly (last status: "${lastStatus}").` : "Download ended unexpectedly."
+      );
+    }
   }
 }
 
