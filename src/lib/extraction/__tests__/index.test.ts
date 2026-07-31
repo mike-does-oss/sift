@@ -31,7 +31,13 @@ const BASE_SETTINGS = {
   compatModel: "gemma3:4b",
 };
 
-const baseInput = { pdfBase64: "AAAA", filename: "doc.pdf", fields: [], prompt: "", extractMultiple: false };
+const baseInput = {
+  source: { kind: "text" as const, text: "document body" },
+  filename: "doc.txt",
+  fields: [],
+  prompt: "",
+  extractMultiple: false,
+};
 
 describe("runExtraction — no override", () => {
   beforeEach(() => {

@@ -3,6 +3,7 @@ import { db, sqlite } from "@/db";
 import { jobs, documents, schedules, templates } from "@/db/schema";
 import { runExtraction } from "@/lib/extraction";
 import { readDocument } from "@/lib/storage";
+import { parseDocument } from "@/lib/documents";
 import { isScheduleDue } from "@/lib/schedule";
 import type { ExtractionField } from "@/types";
 
@@ -67,10 +68,11 @@ async function runOneInner(jobId: string): Promise<void> {
     if (!job.documentId) throw new Error("Job has no document");
     const doc = await db.query.documents.findFirst({ where: eq(documents.id, job.documentId) });
     if (!doc) throw new Error("Document not found");
-    const pdfBase64 = readDocument(doc.filePath).toString("base64");
+    const buf = readDocument(doc.filePath);
+    const source = await parseDocument(buf, doc.filename);
     const snap = job.templateSnapshot as Snapshot;
     const result = await runExtraction({
-      pdfBase64, filename: doc.filename,
+      source, filename: doc.filename,
       fields: snap.fields, prompt: snap.prompt, extractMultiple: snap.extractMultiple,
     });
     if (!result.success) throw Object.assign(new Error(result.error), { provider: result.provider, model: result.model });

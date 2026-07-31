@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { jobs } from "@/db/schema";
 import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
 import { isProviderId } from "@/lib/api";
+import { parseDocument } from "@/lib/documents";
 import type { ExtractionField } from "@/types";
 
 export async function POST(request: NextRequest) {
@@ -41,11 +42,18 @@ export async function POST(request: NextRequest) {
     override = { provider: providerField, model: modelField || undefined };
   }
 
-  const pdfBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  const buf = Buffer.from(await file.arrayBuffer());
+  let source: Awaited<ReturnType<typeof parseDocument>>;
+  try {
+    source = await parseDocument(buf, file.name);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Couldn't read this file.";
+    return NextResponse.json({ success: false, error: message }, { status: 400 });
+  }
 
   let result: Awaited<ReturnType<typeof runExtraction>>;
   try {
-    result = await runExtraction({ pdfBase64, filename: file.name, fields, prompt, extractMultiple }, override);
+    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple }, override);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({

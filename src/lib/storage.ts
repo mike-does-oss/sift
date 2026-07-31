@@ -3,15 +3,15 @@ import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
-export function saveBuffer(buf: Buffer): { filePath: string; sizeBytes: number } {
-  const rel = path.join("files", `${crypto.randomUUID()}.pdf`);
+export function saveBuffer(buf: Buffer, ext: string = "pdf"): { filePath: string; sizeBytes: number } {
+  const rel = path.join("files", `${crypto.randomUUID()}.${ext}`);
   writeFileSync(path.join(DATA_DIR, rel), buf);
   return { filePath: rel, sizeBytes: buf.length };
 }
 
-export async function saveUpload(file: File): Promise<{ filePath: string; sizeBytes: number }> {
+export async function saveUpload(file: File, ext?: string): Promise<{ filePath: string; sizeBytes: number }> {
   const buf = Buffer.from(await file.arrayBuffer());
-  return saveBuffer(buf);
+  return saveBuffer(buf, ext);
 }
 
 export function readDocument(filePath: string): Buffer {

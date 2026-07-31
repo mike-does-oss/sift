@@ -29,7 +29,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
       setIsDragging(false);
 
       const file = e.dataTransfer.files[0];
-      if (file && file.type === "application/pdf") {
+      if (file) {
         onFileSelect(file);
       }
     },
@@ -114,7 +114,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
           >
             <input
               type="file"
-              accept=".pdf,application/pdf"
+              accept=".pdf,.eml,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,message/rfc822,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp"
               onChange={handleFileInput}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
@@ -135,11 +135,14 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               />
             </motion.div>
             <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
-              {isDragging ? "Drop your PDF" : "Drop PDF here"}
+              {isDragging ? "Drop your document" : "Drop a document here"}
             </p>
             <p className="text-xs text-[var(--text-tertiary)]">
               or{" "}
               <span className="text-[var(--accent)] font-medium">browse files</span>
+            </p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
+              PDF, EML, TXT, MD, CSV, PNG, JPG, or WEBP
             </p>
           </motion.label>
         )}

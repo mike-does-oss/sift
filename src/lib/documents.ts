@@ -1,0 +1,143 @@
+import { extractText, getDocumentProxy } from "unpdf";
+import { simpleParser, type AddressObject } from "mailparser";
+
+const MAX_PDF_TEXT_CHARS = 40_000;
+
+export type ParsedDocument =
+  | { kind: "text"; text: string }
+  | { kind: "image"; base64: string; mediaType: "image/png" | "image/jpeg" | "image/webp" }
+  | { kind: "pdf"; base64: string; text: string };
+
+const TEXT_EXTENSIONS = new Set(["txt", "md", "csv"]);
+export const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+
+export const UNSUPPORTED_TYPE_ERROR =
+  "Unsupported file type. Sift accepts PDF, EML, TXT, MD, CSV, PNG, JPG, and WEBP files.";
+
+function extOf(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot === -1 ? "" : filename.slice(dot + 1).toLowerCase();
+}
+
+function isPdf(buf: Buffer): boolean {
+  return buf.length >= 4 && buf.subarray(0, 4).toString("latin1") === "%PDF";
+}
+
+function isPng(buf: Buffer): boolean {
+  return (
+    buf.length >= 8 &&
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  );
+}
+
+function isJpeg(buf: Buffer): boolean {
+  return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+}
+
+function isWebp(buf: Buffer): boolean {
+  return (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString("latin1") === "RIFF" &&
+    buf.subarray(8, 12).toString("latin1") === "WEBP"
+  );
+}
+
+/**
+ * Extracts selectable text from a PDF via unpdf/pdf.js. Used to build the
+ * `pdf` ParsedDocument's `text` field — feeds the text-only engines (ollama,
+ * openai-compatible) directly; base64 stays available for engines that read
+ * PDFs natively (claude, openai) regardless of whether a text layer exists.
+ * Never throws: scanned/corrupted PDFs just yield an empty string, and it's
+ * up to callers that need text (not vision) to decide that's unusable.
+ */
+async function extractPdfText(buf: Buffer): Promise<string> {
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    if (!text.trim()) return "";
+    return text.length > MAX_PDF_TEXT_CHARS ? text.slice(0, MAX_PDF_TEXT_CHARS) + "\n[document truncated]" : text;
+  } catch {
+    return "";
+  }
+}
+
+function stripHtmlTags(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function addressText(addr: AddressObject | AddressObject[] | undefined): string {
+  if (!addr) return "";
+  return Array.isArray(addr) ? addr.map((a) => a.text).join(", ") : addr.text;
+}
+
+async function parseEml(buf: Buffer): Promise<{ kind: "text"; text: string }> {
+  const parsed = await simpleParser(buf);
+  const body = parsed.text?.trim()
+    ? parsed.text.trim()
+    : parsed.html
+      ? stripHtmlTags(parsed.html)
+      : "";
+  const header = [
+    `From: ${addressText(parsed.from)}`,
+    `To: ${addressText(parsed.to)}`,
+    `Subject: ${parsed.subject ?? ""}`,
+    `Date: ${parsed.date ? parsed.date.toISOString() : ""}`,
+  ].join("\n");
+  return { kind: "text", text: `${header}\n\n${body}`.trimEnd() };
+}
+
+/**
+ * Detects the document kind and parses it into a shape the extraction
+ * engines can consume. Detection is magic-bytes-first (content wins over a
+ * misleading extension); extension is only consulted as a fallback for
+ * formats that have no reliable signature (.eml/.txt/.md/.csv).
+ */
+export async function parseDocument(buf: Buffer, filename: string): Promise<ParsedDocument> {
+  if (isPdf(buf)) {
+    const text = await extractPdfText(buf);
+    return { kind: "pdf", base64: buf.toString("base64"), text };
+  }
+  if (isPng(buf)) return { kind: "image", base64: buf.toString("base64"), mediaType: "image/png" };
+  if (isJpeg(buf)) return { kind: "image", base64: buf.toString("base64"), mediaType: "image/jpeg" };
+  if (isWebp(buf)) return { kind: "image", base64: buf.toString("base64"), mediaType: "image/webp" };
+
+  const ext = extOf(filename);
+  if (ext === "eml") return parseEml(buf);
+  if (TEXT_EXTENSIONS.has(ext)) return { kind: "text", text: buf.toString("utf-8") };
+
+  throw new Error(UNSUPPORTED_TYPE_ERROR);
+}
+
+/**
+ * Determines the extension to store the upload under, from content first
+ * (magic bytes) and filename second — used by the upload route both to
+ * reject unsupported/mislabeled files up front and to name the file on disk
+ * with its real type rather than trusting the client's extension.
+ */
+export function detectExtension(buf: Buffer, filename: string): string {
+  if (isPdf(buf)) return "pdf";
+  if (isPng(buf)) return "png";
+  if (isJpeg(buf)) {
+    const ext = extOf(filename);
+    return ext === "jpg" || ext === "jpeg" ? ext : "jpg";
+  }
+  if (isWebp(buf)) return "webp";
+
+  const ext = extOf(filename);
+  if (ext === "eml") return "eml";
+  if (TEXT_EXTENSIONS.has(ext)) return ext;
+
+  throw new Error(UNSUPPORTED_TYPE_ERROR);
+}

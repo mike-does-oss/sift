@@ -1,10 +1,13 @@
 import { buildJsonSchema } from "./schema";
-import { pdfToText } from "./pdfText";
-import type { ExtractionInput, ExtractionOutput } from "./types";
+import { PDF_NO_TEXT_ERROR, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
 
 interface CompatChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
+
+export type CompatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 
 function isModelNotFound(status: number, body: string): boolean {
   if (status === 404) return true;
@@ -24,7 +27,7 @@ export async function compatChat(
   model: string,
   schema: object,
   system: string,
-  user: string
+  user: string | CompatContentPart[]
 ): Promise<ExtractionOutput> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -72,12 +75,23 @@ export async function compatChat(
 export async function extractWithOpenAICompatible(
   input: ExtractionInput & { baseUrl: string }
 ): Promise<ExtractionOutput> {
-  const pdfText = await pdfToText(input.pdfBase64);
-  if (!pdfText.success) return pdfText;
-  const truncated = pdfText.text;
+  if (input.source.kind === "pdf" && !input.source.text.trim()) {
+    return { success: false, error: PDF_NO_TEXT_ERROR };
+  }
   const schema = buildJsonSchema(input.fields, input.extractMultiple);
-  const system = "You are a precise data extraction assistant. Extract the requested fields from the document text and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols.";
-  const user = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}\n\nDOCUMENT TEXT:\n${truncated}`;
+  const system = `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION}`;
+  const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
+
+  let user: string | CompatContentPart[];
+  if (input.source.kind === "image") {
+    user = [
+      { type: "text", text: instruction },
+      { type: "image_url", image_url: { url: `data:${input.source.mediaType};base64,${input.source.base64}` } },
+    ];
+  } else {
+    user = `${instruction}\n\nDOCUMENT TEXT:\n${input.source.text}`;
+  }
+
   const out = await compatChat(input.baseUrl, input.apiKey, input.model ?? "", schema, system, user);
   if (out.success && input.extractMultiple) {
     const d = out.data as Record<string, unknown>;

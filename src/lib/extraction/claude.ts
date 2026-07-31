@@ -1,28 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildJsonSchema } from "./schema";
-import type { ExtractionInput, ExtractionOutput } from "./types";
+import { VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
 
 function systemPrompt(extractMultiple: boolean): string {
-  return extractMultiple
-    ? `You are a precise data extraction assistant. Extract ALL matching records/rows from the provided PDF document and return them as structured JSON.
+  const base = extractMultiple
+    ? `You are a precise data extraction assistant. Extract ALL matching records/rows from the provided document and return them as structured JSON.
 
 Rules:
 - Extract ALL records that match the field definitions (e.g., all table rows, all entries)
-- Examine ALL pages of the document carefully
+- Examine the entire document carefully (all pages, or the full text/image provided)
 - If a value cannot be found for a field, use null
 - For dates, use ISO 8601 format (YYYY-MM-DD)
 - For numbers, return numeric values without currency symbols or units
 - Be precise and accurate - do not make up information`
-    : `You are a precise data extraction assistant. Extract specific information from the provided PDF document and return it as structured JSON.
+    : `You are a precise data extraction assistant. Extract specific information from the provided document and return it as structured JSON.
 
 Rules:
 - Extract ONLY the requested fields from the document
-- Examine ALL pages of the document carefully
+- Examine the entire document carefully (all pages, or the full text/image provided)
 - If a value cannot be found, use null
 - For dates, use ISO 8601 format (YYYY-MM-DD)
 - For numbers, return numeric values without currency symbols or units
 - For arrays/lists, return an array of strings
 - Be precise and accurate - do not make up information`;
+  return `${base}\n- ${VERBATIM_INSTRUCTION}`;
 }
 
 export async function extractWithClaude(input: ExtractionInput): Promise<ExtractionOutput> {
@@ -33,9 +34,20 @@ export async function extractWithClaude(input: ExtractionInput): Promise<Extract
   const schema = buildJsonSchema(input.fields, input.extractMultiple);
   const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${
     input.extractMultiple ? "ALL records/rows with" : ""
-  } the following fields from this PDF document:
+  } the following fields from this document:
 
 ${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
+
+  const content: Anthropic.Messages.ContentBlockParam[] = [];
+  if (input.source.kind === "pdf") {
+    content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: input.source.base64 } });
+    content.push({ type: "text", text: instruction });
+  } else if (input.source.kind === "image") {
+    content.push({ type: "image", source: { type: "base64", media_type: input.source.mediaType, data: input.source.base64 } });
+    content.push({ type: "text", text: instruction });
+  } else {
+    content.push({ type: "text", text: `${instruction}\n\nDOCUMENT TEXT:\n${input.source.text}` });
+  }
 
   try {
     const response = await client.messages.create({
@@ -43,15 +55,7 @@ ${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
       max_tokens: 16000,
       system: systemPrompt(input.extractMultiple),
       output_config: { format: { type: "json_schema", schema } },
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "document", source: { type: "base64", media_type: "application/pdf", data: input.pdfBase64 } },
-            { type: "text", text: instruction },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
     });
 
     if (response.stop_reason === "refusal") {
