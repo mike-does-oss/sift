@@ -72,7 +72,42 @@ function candidateStrings(value: string | number | boolean): string[] {
   return [String(value)];
 }
 
-/** Case-sensitive exact match first, then case-insensitive fallback. No fuzzy matching. */
+function isAlphanumeric(ch: string | undefined): boolean {
+  return ch !== undefined && /[a-zA-Z0-9]/.test(ch);
+}
+
+/**
+ * Word-boundary guard: a match is only valid if, on each side where the
+ * candidate's own edge character is alphanumeric, the adjacent character in
+ * the source text (if any) is NOT alphanumeric. Without this, a short value
+ * like "IN" would falsely highlight inside "MAIN STREET", or "5" inside
+ * "2025". `boundarySource` is the original-case text — position-for-position
+ * identical to `lowerText` for the ASCII content this app deals with, so it
+ * doubles as the boundary source for the case-insensitive pass too.
+ */
+function hasWordBoundary(boundarySource: string, start: number, end: number, candidate: string): boolean {
+  const firstChar = candidate[0];
+  const lastChar = candidate[candidate.length - 1];
+  const before = start > 0 ? boundarySource[start - 1] : undefined;
+  const after = end < boundarySource.length ? boundarySource[end] : undefined;
+  if (isAlphanumeric(firstChar) && isAlphanumeric(before)) return false;
+  if (isAlphanumeric(lastChar) && isAlphanumeric(after)) return false;
+  return true;
+}
+
+/** First occurrence of `needle` in `haystack` that also satisfies the word-boundary guard — not just the first `indexOf` hit. */
+function findBoundaryIndex(haystack: string, needle: string, boundarySource: string): number {
+  let fromIndex = 0;
+  while (fromIndex <= haystack.length) {
+    const idx = haystack.indexOf(needle, fromIndex);
+    if (idx === -1) return -1;
+    if (hasWordBoundary(boundarySource, idx, idx + needle.length, needle)) return idx;
+    fromIndex = idx + 1;
+  }
+  return -1;
+}
+
+/** Case-sensitive exact match first, then case-insensitive fallback. No fuzzy matching. Both require a word boundary on any alphanumeric-edged side. */
 function findFirstMatch(
   text: string,
   lowerText: string,
@@ -80,12 +115,13 @@ function findFirstMatch(
 ): { start: number; end: number } | null {
   const candidates = candidateStrings(value).filter((c) => c.length > 0);
   for (const c of candidates) {
-    const idx = text.indexOf(c);
+    const idx = findBoundaryIndex(text, c, text);
     if (idx !== -1) return { start: idx, end: idx + c.length };
   }
   for (const c of candidates) {
-    const idx = lowerText.indexOf(c.toLowerCase());
-    if (idx !== -1) return { start: idx, end: idx + c.length };
+    const lower = c.toLowerCase();
+    const idx = findBoundaryIndex(lowerText, lower, text);
+    if (idx !== -1) return { start: idx, end: idx + lower.length };
   }
   return null;
 }

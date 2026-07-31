@@ -29,8 +29,11 @@ function stringify(value: FieldValue): string {
 
 /**
  * Mono inline editor for one extracted value. Short scalar values get a text
- * input; long or array values get a textarea (arrays shown/edited as JSON —
- * invalid JSON is never silently discarded, it just doesn't commit until fixed).
+ * input; long or array values get a textarea (arrays shown/edited as JSON).
+ * Booleans get a constrained true/false select (no invalid state possible).
+ * Numbers and arrays validate on commit like each other: invalid input is
+ * never silently coerced to a string or discarded — it's flagged and the
+ * last valid value is kept until the draft is fixed.
  */
 function EditableValue({
   value,
@@ -40,6 +43,8 @@ function EditableValue({
   onCommit: (next: FieldValue) => void;
 }) {
   const isArrayVal = Array.isArray(value);
+  const isBooleanVal = typeof value === "boolean";
+  const isNumberVal = typeof value === "number";
   const initial = stringify(value);
   const [draft, setDraft] = useState(initial);
   const [invalid, setInvalid] = useState(false);
@@ -69,21 +74,36 @@ function EditableValue({
       }
       return;
     }
+    if (isNumberVal) {
+      const trimmed = text.trim();
+      const n = Number(trimmed);
+      if (trimmed !== "" && Number.isFinite(n)) {
+        setInvalid(false);
+        onCommit(n);
+      } else {
+        // Keep the draft (and the last-committed numeric value) — don't
+        // silently degrade the field to a string, mirroring the array path.
+        setInvalid(true);
+      }
+      return;
+    }
     setInvalid(false);
-    if (typeof value === "number") {
-      const n = Number(text);
-      onCommit(text.trim() !== "" && Number.isFinite(n) ? n : text);
-      return;
-    }
-    if (typeof value === "boolean") {
-      const lower = text.trim().toLowerCase();
-      if (lower === "true") return onCommit(true);
-      if (lower === "false") return onCommit(false);
-      onCommit(text);
-      return;
-    }
     onCommit(text);
   };
+
+  // Booleans are constrained to true/false — no free text, so no invalid state is reachable.
+  if (isBooleanVal) {
+    return (
+      <select
+        value={value ? "true" : "false"}
+        onChange={(e) => onCommit(e.target.value === "true")}
+        className="data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors"
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
 
   if (isArrayVal || isLong) {
     return (
@@ -104,14 +124,20 @@ function EditableValue({
   }
 
   return (
-    <input
-      type="text"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={(e) => commit(e.target.value)}
-      spellCheck={false}
-      className="data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors"
-    />
+    <div>
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        spellCheck={false}
+        inputMode={isNumberVal ? "decimal" : undefined}
+        className={`data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors ${
+          invalid ? "border-[var(--error)]" : "border-[var(--border-subtle)]"
+        }`}
+      />
+      {invalid && <p className="text-[10px] text-[var(--error)] mt-0.5">Invalid number — not saved yet</p>}
+    </div>
   );
 }
 

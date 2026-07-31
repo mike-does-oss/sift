@@ -141,9 +141,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               or{" "}
               <span className="text-[var(--accent)] font-medium">browse files</span>
             </p>
-            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
-              PDF, email, image, or text — PDF, EML, TXT, MD, CSV, PNG, JPG, or WEBP
-            </p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">PDF, email, image, or text</p>
           </motion.label>
         )}
       </AnimatePresence>

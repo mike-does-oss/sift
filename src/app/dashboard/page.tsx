@@ -81,6 +81,7 @@ export default function DashboardPage() {
   // Per-request provider/model picker (playbook §13 action bar).
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [providersFailed, setProvidersFailed] = useState(false);
   const [providerKey, setProviderKey] = useState("");
 
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -118,7 +119,11 @@ export default function DashboardPage() {
         setProviders(providerList);
         setProviderKey(defaultProviderKey(providerList, (settingsBody?.settings as DefaultSettings) ?? null));
       } catch {
-        // provider list is best-effort — the picker stays empty and the server falls back to its own default
+        // Provider list is best-effort: the picker stays empty, but extraction
+        // must still work — canExtract below skips the provider requirement
+        // in this case and the request goes out with no override, so the
+        // server picks its own (settings-driven) default.
+        setProvidersFailed(true);
       } finally {
         setProvidersLoaded(true);
       }
@@ -258,8 +263,10 @@ export default function DashboardPage() {
   const canExtract =
     Boolean(selectedFile) &&
     fields.some((f) => f.name.trim() !== "") &&
-    Boolean(selProviderId) &&
-    (selProviderId !== "ollama" || Boolean(selModel));
+    // If the provider list failed to load, fall back to a plain (no-override)
+    // extraction request — the server still applies its own configured
+    // default. Don't hard-block the core workflow on a transient fetch failure.
+    (providersFailed || (Boolean(selProviderId) && (selProviderId !== "ollama" || Boolean(selModel))));
 
   const extractedWithLabel = extractedWith
     ? (providers.find((p) => p.id === extractedWith.provider)?.label ?? extractedWith.provider)
@@ -301,6 +308,10 @@ export default function DashboardPage() {
             })}
           </optgroup>
         </select>
+
+        {providersFailed && (
+          <p className="text-xs text-[var(--text-tertiary)]">Couldn&apos;t load providers — using your saved settings</p>
+        )}
 
         {privacyBadge && (
           <div

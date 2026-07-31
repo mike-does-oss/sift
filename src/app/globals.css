@@ -341,6 +341,7 @@ html.dark .grain-overlay::before {
 .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
 .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
 .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
 
 /*
  * §13 signature: extracted values anchored to where they appear in the
@@ -380,4 +381,3 @@ html.dark .grain-overlay::before {
     animation: none;
   }
 }
-.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
