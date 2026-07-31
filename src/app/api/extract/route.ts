@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs } from "@/db/schema";
-import { runExtraction } from "@/lib/extraction";
+import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
+import { isProviderId } from "@/lib/api";
 import type { ExtractionField } from "@/types";
 
 export async function POST(request: NextRequest) {
@@ -30,11 +31,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "All fields must have a name" }, { status: 400 });
   }
 
+  const providerField = formData.get("provider") as string | null;
+  const modelField = formData.get("model") as string | null;
+  let override: ExtractionOverride | undefined;
+  if (providerField) {
+    if (!isProviderId(providerField)) {
+      return NextResponse.json({ success: false, error: `Unknown provider "${providerField}"` }, { status: 400 });
+    }
+    override = { provider: providerField, model: modelField || undefined };
+  }
+
   const pdfBase64 = Buffer.from(await file.arrayBuffer()).toString("base64");
 
   let result: Awaited<ReturnType<typeof runExtraction>>;
   try {
-    result = await runExtraction({ pdfBase64, filename: file.name, fields, prompt, extractMultiple });
+    result = await runExtraction({ pdfBase64, filename: file.name, fields, prompt, extractMultiple }, override);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({
