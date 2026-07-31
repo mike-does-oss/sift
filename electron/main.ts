@@ -2,8 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { spawn, type ChildProcess } from "child_process";
 import { promises as fsp } from "fs";
 import net from "net";
+import os from "os";
 import path from "path";
 import { detectOllama } from "./ollama";
+import { recommendModels } from "../src/lib/model-recommend";
 
 const DEV_URL_DEFAULT = "http://127.0.0.1:3000";
 const READY_TIMEOUT_MS = 30_000;
@@ -190,6 +192,18 @@ async function waitForServerReady(url: string, timeoutMs: number): Promise<void>
 // Ollama onboarding IPC
 // ---------------------------------------------------------------------------
 
+/** Hardware-sized model pick for the onboarding pull command — see src/lib/model-recommend.ts. */
+function getRecommendedModel(): { model: string; downloadSize: string } {
+  const sys = {
+    totalRamGB: Math.round(os.totalmem() / 1024 ** 3),
+    arch: process.arch,
+    platform: process.platform,
+  };
+  const recs = recommendModels(sys);
+  const rec = recs.find((r) => r.recommended) ?? recs[0];
+  return { model: rec.model, downloadSize: rec.downloadSize };
+}
+
 function wireOllamaIpc(win: BrowserWindow, dashboardUrl: string): void {
   ipcMain.handle("sift:check-ollama", async () => {
     const result = await detectOllama();
@@ -202,6 +216,8 @@ function wireOllamaIpc(win: BrowserWindow, dashboardUrl: string): void {
   ipcMain.handle("sift:continue-anyway", async () => {
     await loadDashboard(win, dashboardUrl);
   });
+
+  ipcMain.handle("sift:get-recommended-model", async () => getRecommendedModel());
 }
 
 // ---------------------------------------------------------------------------

@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { Sparkles, Table2, FolderOpen, Save, Loader2 } from "lucide-react";
 import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
 import type { ExtractionField, ExtractionData } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
+import type { ModelRec } from "@/lib/model-recommend";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
 
@@ -91,7 +93,9 @@ export default function DashboardPage() {
   const [providersLoaded, setProvidersLoaded] = useState(false);
   const [providersFailed, setProvidersFailed] = useState(false);
   const [providerKey, setProviderKey] = useState("");
-  const [defaultOllamaModel, setDefaultOllamaModel] = useState(DEFAULT_OLLAMA_MODEL);
+  // Hardware-sized suggestion for the "no local models" affordance below —
+  // distinct from the per-provider model picker above.
+  const [systemRec, setSystemRec] = useState<ModelRec | null>(null);
   const [pullState, setPullState] = useState<PullUiState>({ status: "idle" });
   const pullAbortRef = useRef<AbortController | null>(null);
 
@@ -130,7 +134,6 @@ export default function DashboardPage() {
         const loadedSettings = (settingsBody?.settings as DefaultSettings) ?? null;
         setProviders(providerList);
         setProviderKey(defaultProviderKey(providerList, loadedSettings));
-        if (loadedSettings?.ollamaModel) setDefaultOllamaModel(loadedSettings.ollamaModel);
       } catch {
         // Provider list is best-effort: the picker stays empty, but extraction
         // must still work — canExtract below skips the provider requirement
@@ -139,6 +142,18 @@ export default function DashboardPage() {
         setProvidersFailed(true);
       } finally {
         setProvidersLoaded(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await webSiftApi.getSystemInfo();
+        setSystemRec(info.recommendations.find((r) => r.recommended) ?? null);
+      } catch {
+        // best-effort hardware hint — the affordance below falls back to
+        // DEFAULT_OLLAMA_MODEL when this hasn't loaded (or failed).
       }
     })();
   }, []);
@@ -173,7 +188,7 @@ export default function DashboardPage() {
 
   const handlePullOllamaModel = async () => {
     if (pullState.status === "pulling") return;
-    const model = defaultOllamaModel || DEFAULT_OLLAMA_MODEL;
+    const model = systemRec?.model || DEFAULT_OLLAMA_MODEL;
 
     const controller = new AbortController();
     pullAbortRef.current = controller;
@@ -373,8 +388,9 @@ export default function DashboardPage() {
         {showOllamaPullAffordance && (
           <div className="basis-full flex flex-wrap items-center gap-2">
             <span className="text-xs text-[var(--text-tertiary)]">
-              No local models — Download {defaultOllamaModel}
-              {defaultOllamaModel === DEFAULT_OLLAMA_MODEL ? " (~3.3 GB)" : ""}
+              No local models — Download {systemRec?.model ?? DEFAULT_OLLAMA_MODEL}
+              {systemRec ? ` (${systemRec.downloadSize})` : ""}
+              {systemRec ? ` · ${systemRec.reason}` : ""}
             </span>
             <button
               onClick={handlePullOllamaModel}
@@ -400,6 +416,12 @@ export default function DashboardPage() {
               </>
             )}
             {pullState.status === "error" && <span className="text-xs text-[var(--error)]">{pullState.error}</span>}
+            <Link
+              href="/dashboard/settings"
+              className="text-xs text-[var(--accent)] hover:underline flex-shrink-0"
+            >
+              More options in Settings
+            </Link>
           </div>
         )}
 

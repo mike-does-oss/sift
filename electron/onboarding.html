@@ -63,6 +63,11 @@
     color: var(--muted);
     margin-bottom: 6px;
   }
+  .step .label .size-hint {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+  }
   .code-block {
     display: flex;
     align-items: center;
@@ -136,9 +141,9 @@
     </div>
 
     <div class="step">
-      <div class="label">2. Pull a model</div>
+      <div class="label">2. Pull a model <span class="size-hint" id="model-size"></span></div>
       <div class="code-block">
-        <code>ollama pull gemma3:4b</code>
+        <code id="pull-cmd">ollama pull gemma3:4b</code>
         <button class="copy-btn" id="copy-btn" type="button">Copy</button>
       </div>
     </div>
@@ -155,16 +160,35 @@
     const copyBtn = document.getElementById("copy-btn");
     const checkBtn = document.getElementById("check-btn");
     const continueBtn = document.getElementById("continue-btn");
+    const pullCmdEl = document.getElementById("pull-cmd");
+    const modelSizeEl = document.getElementById("model-size");
+
+    // Fallback default — used as-is if the recommended-model IPC call is
+    // unavailable or fails, so this page never dead-ends on hardware detection.
+    let pullCommand = "ollama pull gemma3:4b";
 
     copyBtn.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText("ollama pull gemma3:4b");
+        await navigator.clipboard.writeText(pullCommand);
         copyBtn.textContent = "Copied";
         setTimeout(() => (copyBtn.textContent = "Copy"), 1500);
       } catch {
         // clipboard API can be denied in some contexts; not fatal
       }
     });
+
+    (async () => {
+      try {
+        const rec = await window.sift.getRecommendedModel();
+        if (rec && rec.model) {
+          pullCommand = `ollama pull ${rec.model}`;
+          pullCmdEl.textContent = pullCommand;
+          if (rec.downloadSize) modelSizeEl.textContent = `(${rec.downloadSize})`;
+        }
+      } catch {
+        // IPC unavailable or failed — keep the gemma3:4b default already in the markup
+      }
+    })();
 
     checkBtn.addEventListener("click", async () => {
       checkBtn.disabled = true;

@@ -14,6 +14,7 @@ import {
 import type { SiftSettings } from "@/lib/settings";
 import { webSiftApi } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
+import type { SystemInfo, ModelRec } from "@/lib/model-recommend";
 
 type Provider = SiftSettings["provider"];
 
@@ -63,7 +64,7 @@ type TestState =
 
 type PullState =
   | { status: "idle" }
-  | { status: "pulling"; percent: number | null; statusText: string }
+  | { status: "pulling"; model: string; percent: number | null; statusText: string }
   | { status: "success" }
   | { status: "error"; error: string };
 
@@ -80,7 +81,7 @@ function PullProgressBar({ state }: { state: PullState }) {
           />
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">
-          {state.statusText}
+          <span className="font-mono">{state.model}</span> · {state.statusText}
           {state.percent !== null ? ` · ${state.percent}%` : ""}
         </p>
       </div>
@@ -162,6 +163,7 @@ export default function SettingsPage() {
   const [ollamaTest, setOllamaTest] = useState<TestState>({ status: "idle" });
   const [pullState, setPullState] = useState<PullState>({ status: "idle" });
   const pullAbortRef = useRef<AbortController | null>(null);
+  const [systemInfo, setSystemInfo] = useState<{ system: SystemInfo; recommendations: ModelRec[] } | null>(null);
   const [anthropicTest, setAnthropicTest] = useState<TestState>({ status: "idle" });
   const [openaiTest, setOpenaiTest] = useState<TestState>({ status: "idle" });
   const [geminiTest, setGeminiTest] = useState<TestState>({ status: "idle" });
@@ -206,6 +208,16 @@ export default function SettingsPage() {
       await load();
     })();
   }, [load]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setSystemInfo(await webSiftApi.getSystemInfo());
+      } catch {
+        // best-effort hint — the free-text field + button below still work
+      }
+    })();
+  }, []);
 
   const hasChanges =
     !!loaded &&
@@ -305,25 +317,29 @@ export default function SettingsPage() {
     };
   }, []);
 
-  const handlePullModel = async () => {
-    const model = ollamaModel.trim();
+  // `modelArg` lets a "Recommended for this machine" row download a specific
+  // tag without first requiring the user to type it into the model field —
+  // on success we fill the field with whatever was downloaded either way.
+  const handlePullModel = async (modelArg?: string) => {
+    const model = (modelArg ?? ollamaModel).trim();
     if (!model || pullState.status === "pulling") return;
 
     const controller = new AbortController();
     pullAbortRef.current = controller;
     const tracker = createPullProgressTracker();
-    setPullState({ status: "pulling", percent: null, statusText: "Starting…" });
+    setPullState({ status: "pulling", model, percent: null, statusText: "Starting…" });
 
     try {
       await webSiftApi.pullModel(
         model,
         (progress) => {
           const { status, percent } = tracker.update(progress);
-          setPullState({ status: "pulling", percent, statusText: status });
+          setPullState({ status: "pulling", model, percent, statusText: status });
         },
         controller.signal
       );
       setPullState({ status: "success" });
+      setOllamaModel(model);
       await runTest("ollama", setOllamaTest);
       setTimeout(() => setPullState((s) => (s.status === "success" ? { status: "idle" } : s)), 2500);
     } catch (err) {
@@ -399,6 +415,54 @@ export default function SettingsPage() {
           </h2>
         </div>
 
+        {systemInfo && systemInfo.recommendations.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-[var(--text-secondary)]">
+              Recommended for this machine
+            </p>
+            <div className="space-y-2">
+              {systemInfo.recommendations.map((rec) => {
+                const isPullingThis = pullState.status === "pulling" && pullState.model === rec.model;
+                return (
+                  <div
+                    key={rec.model}
+                    className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] p-3"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm text-[var(--text-primary)]">{rec.model}</span>
+                        <span className="text-xs text-[var(--text-tertiary)]">{rec.downloadSize}</span>
+                        {rec.vision && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-[var(--surface-overlay)] text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+                            Vision
+                          </span>
+                        )}
+                        {rec.recommended && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[10px] font-medium text-[var(--accent)] uppercase tracking-wide">
+                            Recommended
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
+                        {rec.reason}
+                        {rec.caveat ? ` ${rec.caveat}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handlePullModel(rec.model)}
+                      disabled={pullState.status === "pulling"}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {isPullingThis ? "Downloading…" : "Download"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
@@ -414,7 +478,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Model
+              Model <span className="text-[var(--text-tertiary)] normal-case">(or type any model name)</span>
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -425,12 +489,12 @@ export default function SettingsPage() {
                 className="flex-1 min-w-0 px-3 py-2 rounded-lg input-base text-sm font-mono"
               />
               <button
-                onClick={handlePullModel}
+                onClick={() => handlePullModel()}
                 disabled={pullState.status === "pulling" || !ollamaModel.trim()}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                {pullState.status === "pulling" ? "Downloading…" : "Download model"}
+                {pullState.status === "pulling" && pullState.model === ollamaModel.trim() ? "Downloading…" : "Download model"}
               </button>
             </div>
           </div>

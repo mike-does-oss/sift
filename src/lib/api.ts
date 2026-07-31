@@ -1,4 +1,5 @@
 import type { ExtractionData } from "@/types";
+import type { SystemInfo, ModelRec } from "@/lib/model-recommend";
 
 /**
  * Provider identifiers.
@@ -71,6 +72,12 @@ export interface SiftApi {
    * line, an HTTP error, or (if `signal` fires) an `AbortError`.
    */
   pullModel(model: string, onProgress: (progress: PullProgress) => void, signal?: AbortSignal): Promise<void>;
+  /**
+   * Machine hardware (RAM/arch/platform) plus model recommendations sized to
+   * it — see `src/lib/model-recommend.ts`. Backs the "Recommended for this
+   * machine" list in Settings and the workspace empty-local affordance.
+   */
+  getSystemInfo(): Promise<{ system: SystemInfo; recommendations: ModelRec[] }>;
 }
 
 interface OllamaPullLine {
@@ -167,6 +174,14 @@ class WebSiftApi implements SiftApi {
         lastStatus ? `Download ended unexpectedly (last status: "${lastStatus}").` : "Download ended unexpectedly."
       );
     }
+  }
+
+  async getSystemInfo(): Promise<{ system: SystemInfo; recommendations: ModelRec[] }> {
+    const res = await fetch("/api/system");
+    if (!res.ok) {
+      throw new Error(`Failed to load system info (${res.status})`);
+    }
+    return (await res.json()) as { system: SystemInfo; recommendations: ModelRec[] };
   }
 }
 
