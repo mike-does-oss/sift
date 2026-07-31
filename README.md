@@ -1,6 +1,6 @@
 # Sift
 
-![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
+![AGPL-3.0 License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
 
 Open-source, self-hostable document extractor that runs fully local by default (Ollama) and never marks up your tokens (BYO cloud key).
 
@@ -76,4 +76,4 @@ In local (Ollama) mode, documents never leave your machine. With a cloud provide
 
 ## License
 
-MIT
+[AGPL-3.0-or-later](LICENSE). Free to use, self-host, and modify; if you run a modified sift as a network service, you must offer its source to your users.
