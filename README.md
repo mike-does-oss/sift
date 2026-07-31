@@ -36,6 +36,16 @@ Add your API key and model in Settings. Keys are stored in your local SQLite dat
 
 Point the OpenAI-compatible provider at a base URL — Groq, vLLM, LM Studio, or Ollama's own `/v1` endpoint all work. API key optional (many local servers don't need one).
 
+## Desktop app (build it yourself, for now)
+
+```bash
+npm run desktop:build
+```
+
+Produces an unsigned `Sift.app` (plus `.dmg`/`.zip`) in `dist-desktop/` — a native window around the same app, with your data in `~/Library/Application Support/Sift/`. On first launch macOS Gatekeeper will warn because the build is unsigned: right-click the app → Open. If Ollama isn't running, the app walks you through installing it (or lets you continue with cloud keys). Signed installers and auto-update are on the roadmap.
+
+`npm run desktop:dev` runs the desktop shell against the dev server.
+
 ## Privacy
 
 In local (Ollama) mode, documents never leave your machine. With a cloud provider, document content goes to that provider only — there is no third-party server of ours involved.
