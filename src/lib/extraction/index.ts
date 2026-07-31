@@ -31,39 +31,49 @@ export async function runExtraction(
   const s = getSettings();
   const provider = override?.provider ?? s.provider;
 
-  if (provider === "anthropic") {
-    const model = override?.model || s.anthropicModel;
-    return { ...(await extractWithClaude({ ...input, apiKey: s.anthropicApiKey || undefined, model })), provider: "anthropic", model };
-  }
-  if (provider === "openai") {
-    const model = override?.model || s.openaiModel;
-    return { ...(await extractWithOpenAI({ ...input, apiKey: s.openaiApiKey || undefined, model })), provider: "openai", model };
-  }
-  if (provider === "gemini") {
-    const model = override?.model || s.geminiModel;
-    if (!s.geminiApiKey) {
-      return { success: false, error: "Gemini API key not set — add it in Settings", provider: "gemini", model };
+  switch (provider) {
+    case "anthropic": {
+      const model = override?.model || s.anthropicModel;
+      return { ...(await extractWithClaude({ ...input, apiKey: s.anthropicApiKey || undefined, model })), provider: "anthropic", model };
     }
-    return {
-      ...(await extractWithOpenAICompatible({ ...input, apiKey: s.geminiApiKey, model, baseUrl: GEMINI_BASE_URL })),
-      provider: "gemini",
-      model,
-    };
-  }
-  if (provider === "openai-compatible") {
-    const model = override?.model || s.compatModel;
-    if (!s.compatBaseUrl) {
-      return { success: false, error: "Base URL not set — add it in Settings", provider: "openai-compatible", model };
+    case "openai": {
+      const model = override?.model || s.openaiModel;
+      return { ...(await extractWithOpenAI({ ...input, apiKey: s.openaiApiKey || undefined, model })), provider: "openai", model };
     }
-    if (!model) {
-      return { success: false, error: "Model not set — add it in Settings", provider: "openai-compatible", model: "" };
+    case "gemini": {
+      const model = override?.model || s.geminiModel;
+      if (!s.geminiApiKey) {
+        return { success: false, error: "Gemini API key not set — add it in Settings", provider: "gemini", model };
+      }
+      return {
+        ...(await extractWithOpenAICompatible({ ...input, apiKey: s.geminiApiKey, model, baseUrl: GEMINI_BASE_URL })),
+        provider: "gemini",
+        model,
+      };
     }
-    return {
-      ...(await extractWithOpenAICompatible({ ...input, apiKey: s.compatApiKey || undefined, model, baseUrl: s.compatBaseUrl })),
-      provider: "openai-compatible",
-      model,
-    };
+    case "openai-compatible": {
+      const model = override?.model || s.compatModel;
+      if (!s.compatBaseUrl) {
+        return { success: false, error: "Base URL not set — add it in Settings", provider: "openai-compatible", model };
+      }
+      if (!model) {
+        return { success: false, error: "Model not set — add it in Settings", provider: "openai-compatible", model: "" };
+      }
+      return {
+        ...(await extractWithOpenAICompatible({ ...input, apiKey: s.compatApiKey || undefined, model, baseUrl: s.compatBaseUrl })),
+        provider: "openai-compatible",
+        model,
+      };
+    }
+    case "ollama": {
+      const model = override?.model || s.ollamaModel;
+      return { ...(await extractWithOllama({ ...input, model, baseUrl: s.ollamaBaseUrl })), provider: "ollama", model };
+    }
+    default: {
+      // Exhaustiveness check: adding a sixth ProviderId without a case above
+      // is now a compile error here, not a silent fall-through to Ollama.
+      const _exhaustive: never = provider;
+      throw new Error(`Unknown provider: ${_exhaustive}`);
+    }
   }
-  const model = override?.model || s.ollamaModel;
-  return { ...(await extractWithOllama({ ...input, model, baseUrl: s.ollamaBaseUrl })), provider: "ollama", model };
 }

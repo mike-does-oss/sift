@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair } from "lucide-react";
 import { useState } from "react";
 import type { ExtractionField, ExtractionData, ExtractionResult } from "@/types";
+import { toCsv, downloadText } from "@/lib/export";
 
 type FieldValue = string | number | boolean | string[] | null;
 
@@ -245,43 +246,17 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
 
   const handleDownload = () => {
     if (!edited) return;
-    const blob = new Blob([JSON.stringify(edited, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "extracted-data.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadText("extracted-data.json", JSON.stringify(edited, null, 2), "application/json");
   };
 
   const handleDownloadCSV = () => {
     if (!edited || editedArray.length === 0) return;
-
-    const headers = fields.map((f) => f.name);
-    const rows = editedArray.map((row) =>
-      fields.map((f) => {
-        const value = row[f.name];
-        if (value === null || value === undefined) return "";
-        if (Array.isArray(value)) return `"${value.join(", ")}"`;
-        if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return String(value);
-      })
-    );
-
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "extracted-data.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Column order follows `fields`, not whatever key order the JSON
+    // happened to produce; correct quoting (including "\n") comes from the
+    // shared, unit-tested escaper (src/lib/export.ts) instead of a hand-rolled
+    // one that only handled commas.
+    const rows = editedArray.map((row) => Object.fromEntries(fields.map((f) => [f.name, row[f.name] ?? null])));
+    downloadText("extracted-data.csv", toCsv(rows), "text/csv");
   };
 
   if (isLoading) {

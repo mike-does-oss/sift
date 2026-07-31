@@ -13,6 +13,7 @@ import { FileText, Image as ImageIcon, X } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { PDFPreview } from "./PDFPreview";
 import type { ExtractionData } from "@/types";
+import { computeMatchRanges, type MatchRange } from "@/lib/highlight";
 
 export interface DocumentViewHandle {
   /** Scrolls the first matching `<mark>` for this field/row into view and flashes it (playbook §13 signature). No-op if the value wasn't anchored (never appeared verbatim in the text). */
@@ -48,115 +49,6 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-interface MatchRange {
-  start: number;
-  end: number;
-  field: string;
-  row: number;
-}
-
-/** String forms to search for, in priority order. Numbers also get a thousands-separated form so "1,234.56" in the source text still anchors to the numeric value 1234.56. */
-function candidateStrings(value: string | number | boolean): string[] {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const plain = String(value);
-    let grouped = plain;
-    try {
-      grouped = value.toLocaleString("en-US");
-    } catch {
-      grouped = plain;
-    }
-    return grouped !== plain ? [plain, grouped] : [plain];
-  }
-  return [String(value)];
-}
-
-function isAlphanumeric(ch: string | undefined): boolean {
-  return ch !== undefined && /[a-zA-Z0-9]/.test(ch);
-}
-
-/**
- * Word-boundary guard: a match is only valid if, on each side where the
- * candidate's own edge character is alphanumeric, the adjacent character in
- * the source text (if any) is NOT alphanumeric. Without this, a short value
- * like "IN" would falsely highlight inside "MAIN STREET", or "5" inside
- * "2025". `boundarySource` is the original-case text — position-for-position
- * identical to `lowerText` for the ASCII content this app deals with, so it
- * doubles as the boundary source for the case-insensitive pass too.
- */
-function hasWordBoundary(boundarySource: string, start: number, end: number, candidate: string): boolean {
-  const firstChar = candidate[0];
-  const lastChar = candidate[candidate.length - 1];
-  const before = start > 0 ? boundarySource[start - 1] : undefined;
-  const after = end < boundarySource.length ? boundarySource[end] : undefined;
-  if (isAlphanumeric(firstChar) && isAlphanumeric(before)) return false;
-  if (isAlphanumeric(lastChar) && isAlphanumeric(after)) return false;
-  return true;
-}
-
-/** First occurrence of `needle` in `haystack` that also satisfies the word-boundary guard — not just the first `indexOf` hit. */
-function findBoundaryIndex(haystack: string, needle: string, boundarySource: string): number {
-  let fromIndex = 0;
-  while (fromIndex <= haystack.length) {
-    const idx = haystack.indexOf(needle, fromIndex);
-    if (idx === -1) return -1;
-    if (hasWordBoundary(boundarySource, idx, idx + needle.length, needle)) return idx;
-    fromIndex = idx + 1;
-  }
-  return -1;
-}
-
-/** Case-sensitive exact match first, then case-insensitive fallback. No fuzzy matching. Both require a word boundary on any alphanumeric-edged side. */
-function findFirstMatch(
-  text: string,
-  lowerText: string,
-  value: string | number | boolean
-): { start: number; end: number } | null {
-  const candidates = candidateStrings(value).filter((c) => c.length > 0);
-  for (const c of candidates) {
-    const idx = findBoundaryIndex(text, c, text);
-    if (idx !== -1) return { start: idx, end: idx + c.length };
-  }
-  for (const c of candidates) {
-    const lower = c.toLowerCase();
-    const idx = findBoundaryIndex(lowerText, lower, text);
-    if (idx !== -1) return { start: idx, end: idx + lower.length };
-  }
-  return null;
-}
-
-function computeMatchRanges(text: string, results: ExtractionData | null): MatchRange[] {
-  if (!text || !results) return [];
-  const rows = Array.isArray(results) ? results : [results];
-  const lowerText = text.toLowerCase();
-  const ranges: MatchRange[] = [];
-
-  rows.forEach((row, rowIndex) => {
-    for (const [field, value] of Object.entries(row)) {
-      if (value === null || value === undefined) continue;
-      const items = Array.isArray(value) ? value : [value];
-      for (const item of items) {
-        if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean") continue;
-        if (item === "") continue;
-        const match = findFirstMatch(text, lowerText, item);
-        if (match) ranges.push({ ...match, field, row: rowIndex });
-      }
-    }
-  });
-
-  // Resolve overlaps (e.g. two fields sharing a value) by keeping whichever
-  // match starts first, so marks never nest.
-  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
-  const nonOverlapping: MatchRange[] = [];
-  let lastEnd = -1;
-  for (const r of ranges) {
-    if (r.start >= lastEnd) {
-      nonOverlapping.push(r);
-      lastEnd = r.end;
-    }
-  }
-  return nonOverlapping;
 }
 
 function renderHighlightedText(text: string, ranges: MatchRange[]): ReactNode[] {

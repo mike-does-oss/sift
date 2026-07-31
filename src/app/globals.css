@@ -14,6 +14,11 @@
 
 /* Light theme (default) */
 :root {
+  /* Tells the UA to render native chrome (select popups, scrollbar gutters,
+     form control defaults) in the light palette — without this, dark mode's
+     `html.dark color-scheme: dark` below has nothing to override, and native
+     widgets stay light-scheme even when every author-styled surface is dark. */
+  color-scheme: light;
   /* §13 canonical tokens */
   --bg: #fbfaf7;
   --surface: #ffffff;
@@ -74,6 +79,7 @@
 
 /* Dark theme — a deliberate dark palette, not a naive inversion */
 html.dark {
+  color-scheme: dark;
   /* §13 canonical tokens, dark set */
   --bg: #141416;
   --surface: #1d1d20;

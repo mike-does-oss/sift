@@ -104,38 +104,44 @@ export async function POST(req: NextRequest) {
 
   const settings = getSettings();
 
-  if (body.provider === "ollama") {
-    const result = await testOllama(settings.ollamaBaseUrl);
-    return NextResponse.json(result);
-  }
-
-  if (body.provider === "anthropic") {
-    if (!settings.anthropicApiKey) {
-      return NextResponse.json({ error: "Anthropic API key not set — add it in Settings" }, { status: 400 });
+  switch (body.provider) {
+    case "ollama": {
+      const result = await testOllama(settings.ollamaBaseUrl);
+      return NextResponse.json(result);
     }
-    const result = await testAnthropic(settings.anthropicApiKey, settings.anthropicModel);
-    return NextResponse.json(result);
-  }
-
-  if (body.provider === "openai") {
-    if (!settings.openaiApiKey) {
-      return NextResponse.json({ error: "OpenAI API key not set — add it in Settings" }, { status: 400 });
+    case "anthropic": {
+      if (!settings.anthropicApiKey) {
+        return NextResponse.json({ error: "Anthropic API key not set — add it in Settings" }, { status: 400 });
+      }
+      const result = await testAnthropic(settings.anthropicApiKey, settings.anthropicModel);
+      return NextResponse.json(result);
     }
-    const result = await testOpenAI(settings.openaiApiKey, settings.openaiModel);
-    return NextResponse.json(result);
-  }
-
-  if (body.provider === "gemini") {
-    if (!settings.geminiApiKey) {
-      return NextResponse.json({ error: "Gemini API key not set — add it in Settings" }, { status: 400 });
+    case "openai": {
+      if (!settings.openaiApiKey) {
+        return NextResponse.json({ error: "OpenAI API key not set — add it in Settings" }, { status: 400 });
+      }
+      const result = await testOpenAI(settings.openaiApiKey, settings.openaiModel);
+      return NextResponse.json(result);
     }
-    const result = await testCompatModels(GEMINI_BASE_URL, settings.geminiApiKey);
-    return NextResponse.json(result);
+    case "gemini": {
+      if (!settings.geminiApiKey) {
+        return NextResponse.json({ error: "Gemini API key not set — add it in Settings" }, { status: 400 });
+      }
+      const result = await testCompatModels(GEMINI_BASE_URL, settings.geminiApiKey);
+      return NextResponse.json(result);
+    }
+    case "openai-compatible": {
+      if (!settings.compatBaseUrl) {
+        return NextResponse.json({ error: "Base URL not set — add it in Settings" }, { status: 400 });
+      }
+      const result = await testCompatModels(settings.compatBaseUrl, settings.compatApiKey);
+      return NextResponse.json(result);
+    }
+    default: {
+      // Exhaustiveness check: a sixth ProviderId without a case above is now
+      // a compile error here, not a silent fall-through to the compat branch.
+      const _exhaustive: never = body.provider;
+      return NextResponse.json({ error: `Unknown provider: ${_exhaustive}` }, { status: 400 });
+    }
   }
-
-  if (!settings.compatBaseUrl) {
-    return NextResponse.json({ error: "Base URL not set — add it in Settings" }, { status: 400 });
-  }
-  const result = await testCompatModels(settings.compatBaseUrl, settings.compatApiKey);
-  return NextResponse.json(result);
 }

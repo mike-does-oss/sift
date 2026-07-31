@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { settings } from "@/db/schema";
+import { PROVIDER_IDS, isProviderId, type ProviderId } from "@/lib/api";
 
 export interface SiftSettings {
-  provider: "ollama" | "anthropic" | "openai" | "gemini" | "openai-compatible";
+  provider: ProviderId;
   ollamaBaseUrl: string; // default "http://localhost:11434"
   ollamaModel: string; // default "gemma3:4b"
   anthropicApiKey: string; // default ""
@@ -31,12 +32,6 @@ export const DEFAULT_SETTINGS: SiftSettings = {
   compatModel: "",
 };
 
-const PROVIDERS = ["ollama", "anthropic", "openai", "gemini", "openai-compatible"] as const;
-
-function isValidProvider(value: unknown): value is SiftSettings["provider"] {
-  return typeof value === "string" && (PROVIDERS as readonly string[]).includes(value);
-}
-
 /** Reads all rows from the `settings` table into a plain key/value record. */
 function readRows(): Record<string, string> {
   const rows = db.select().from(settings).all();
@@ -53,7 +48,7 @@ export function getSettings(): SiftSettings {
       (merged as Record<keyof SiftSettings, string>)[key] = record[key];
     }
   }
-  if (!isValidProvider(merged.provider)) {
+  if (!isProviderId(merged.provider)) {
     throw new Error(`Invalid provider value stored in settings: "${merged.provider}"`);
   }
   return merged;
@@ -66,8 +61,8 @@ export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
       throw new Error(`Unknown setting key: "${key}"`);
     }
   }
-  if (patch.provider !== undefined && !isValidProvider(patch.provider)) {
-    throw new Error(`Invalid provider: "${patch.provider}". Must be one of ${PROVIDERS.join(", ")}.`);
+  if (patch.provider !== undefined && !isProviderId(patch.provider)) {
+    throw new Error(`Invalid provider: "${patch.provider}". Must be one of ${PROVIDER_IDS.join(", ")}.`);
   }
   // Empty string is legal only for these fields — either an API key (empty
   // means "clear the key") or the openai-compatible endpoint config (empty

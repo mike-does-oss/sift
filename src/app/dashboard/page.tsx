@@ -525,7 +525,7 @@ export default function DashboardPage() {
                     fields={fields.filter((f) => f.name.trim() !== "")}
                     isLoading={isLoading}
                     error={error}
-                    onJumpToValue={handleJumpToValue}
+                    onJumpToValue={extractedText ? handleJumpToValue : undefined}
                   />
                 </motion.section>
               )}

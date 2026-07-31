@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
+import { isProviderId, type ProviderId } from "@/lib/api";
 
 interface Job {
   id: string;
@@ -25,11 +26,20 @@ const SOURCE_LABELS: Record<Job["source"], string> = {
   schedule: "Schedule",
 };
 
-const PROVIDER_LABELS: Record<string, string> = {
+// Record<ProviderId, string> (not Record<string, string>) so adding a
+// provider id without a label here is a compile error, not silent drift.
+const PROVIDER_LABELS: Record<ProviderId, string> = {
   ollama: "Local",
   anthropic: "Anthropic",
   openai: "OpenAI",
+  gemini: "Gemini",
+  "openai-compatible": "OpenAI-compatible",
 };
+
+/** `job.provider` is a plain string from the DB (may predate a provider, or be corrupted) — only index the label map once it's confirmed to be a known id. */
+function labelForProvider(id: string): string {
+  return isProviderId(id) ? PROVIDER_LABELS[id] : id;
+}
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
@@ -98,9 +108,7 @@ export default function HistoryPage() {
                   {filename ?? "—"}
                 </span>
                 <span className="data w-32 flex-shrink-0 text-xs text-[var(--text-tertiary)] truncate">
-                  {job.provider
-                    ? `${PROVIDER_LABELS[job.provider] ?? job.provider} · ${job.model ?? "—"}`
-                    : "—"}
+                  {job.provider ? `${labelForProvider(job.provider)} · ${job.model ?? "—"}` : "—"}
                 </span>
                 <StatusBadge status={job.status} />
               </summary>

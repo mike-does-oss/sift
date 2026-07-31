@@ -3,8 +3,15 @@ import { db } from "@/db";
 import { jobs } from "@/db/schema";
 import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
 import { isProviderId } from "@/lib/api";
-import { parseDocument } from "@/lib/documents";
+import { parseDocument, detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
 import type { ExtractionField } from "@/types";
+
+// Mirrors /api/upload's caps (src/app/api/upload/route.ts) — applied here too
+// because /api/extract parses the file itself (mailparser/unpdf) rather than
+// just storing bytes, so an unbounded upload is a parsing-cost concern on
+// this path as well.
+const MAX_DOC_SIZE_BYTES = 32 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   let formData: FormData;
@@ -43,6 +50,21 @@ export async function POST(request: NextRequest) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
+
+  let ext: string;
+  try {
+    ext = detectExtension(buf, file.name);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Couldn't read this file.";
+    return NextResponse.json({ success: false, error: message }, { status: 400 });
+  }
+  const isImage = IMAGE_EXTENSIONS.has(ext);
+  const maxSize = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_DOC_SIZE_BYTES;
+  if (buf.length > maxSize) {
+    const limit = isImage ? "8MB" : "32MB";
+    return NextResponse.json({ success: false, error: `File must be ${limit} or smaller.` }, { status: 400 });
+  }
+
   let source: Awaited<ReturnType<typeof parseDocument>>;
   try {
     source = await parseDocument(buf, file.name);

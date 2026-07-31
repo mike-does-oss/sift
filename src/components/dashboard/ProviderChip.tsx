@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
-type Provider = "ollama" | "anthropic" | "openai" | "gemini" | "openai-compatible";
+import type { ProviderId } from "@/lib/api";
 
 interface Settings {
-  provider: Provider;
+  provider: ProviderId;
   ollamaModel: string;
   anthropicModel: string;
   openaiModel: string;
@@ -15,7 +14,7 @@ interface Settings {
 
 // Cloud provider display names for the "☁ Cloud · <provider> <model>" badge
 // copy (playbook §4). Ollama has no entry here — it renders as "🔒 Local".
-const CLOUD_PROVIDER_LABELS: Record<Exclude<Provider, "ollama">, string> = {
+const CLOUD_PROVIDER_LABELS: Record<Exclude<ProviderId, "ollama">, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   gemini: "Gemini",

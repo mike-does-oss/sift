@@ -1,7 +1,15 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import { simpleParser, type AddressObject } from "mailparser";
 
-const MAX_PDF_TEXT_CHARS = 40_000;
+// Shared truncation cap for every text-shaped ParsedDocument (PDF text
+// layer, .eml, and .txt/.md/.csv) — without it, an oversized text-only
+// source becomes an unbounded prompt for every extraction engine (and, on
+// the /api/extract path, an unbounded response body echoed to the browser).
+const MAX_TEXT_CHARS = 40_000;
+
+function capText(s: string): string {
+  return s.length > MAX_TEXT_CHARS ? s.slice(0, MAX_TEXT_CHARS) + "\n[document truncated]" : s;
+}
 
 export type ParsedDocument =
   | { kind: "text"; text: string }
@@ -62,7 +70,7 @@ async function extractPdfText(buf: Buffer): Promise<string> {
     const pdf = await getDocumentProxy(new Uint8Array(buf));
     const { text } = await extractText(pdf, { mergePages: true });
     if (!text.trim()) return "";
-    return text.length > MAX_PDF_TEXT_CHARS ? text.slice(0, MAX_PDF_TEXT_CHARS) + "\n[document truncated]" : text;
+    return capText(text);
   } catch {
     return "";
   }
@@ -95,7 +103,7 @@ async function parseEml(buf: Buffer): Promise<{ kind: "text"; text: string }> {
     `Subject: ${parsed.subject ?? ""}`,
     `Date: ${parsed.date ? parsed.date.toISOString() : ""}`,
   ].join("\n");
-  return { kind: "text", text: `${header}\n\n${body}`.trimEnd() };
+  return { kind: "text", text: capText(`${header}\n\n${body}`.trimEnd()) };
 }
 
 /**
@@ -115,7 +123,7 @@ export async function parseDocument(buf: Buffer, filename: string): Promise<Pars
 
   const ext = extOf(filename);
   if (ext === "eml") return parseEml(buf);
-  if (TEXT_EXTENSIONS.has(ext)) return { kind: "text", text: buf.toString("utf-8") };
+  if (TEXT_EXTENSIONS.has(ext)) return { kind: "text", text: capText(buf.toString("utf-8")) };
 
   throw new Error(UNSUPPORTED_TYPE_ERROR);
 }
