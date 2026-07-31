@@ -45,3 +45,7 @@ next-env.d.ts
 
 # local data
 data/
+
+# electron desktop build
+/dist-electron/
+/dist-desktop/

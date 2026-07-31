@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sift — set up Ollama</title>
+<style>
+  :root {
+    --bg: #FBFAF7;
+    --surface: #FFFFFF;
+    --ink: #17171A;
+    --muted: #74736E;
+    --line: #E7E4DD;
+    --accent: #2F6F4E;
+    --accent-tint: #E9F3EC;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 36px;
+  }
+  h1 {
+    font-family: "Space Grotesk", -apple-system, sans-serif;
+    font-weight: 600;
+    font-size: 22px;
+    margin: 0 0 8px;
+  }
+  p.lede {
+    color: var(--muted);
+    margin: 0 0 24px;
+    line-height: 1.5;
+  }
+  a.install-link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a.install-link:hover { text-decoration: underline; }
+  .step {
+    margin-bottom: 20px;
+  }
+  .step .label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .code-block {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--accent-tint);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .code-block code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .copy-btn {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: var(--accent-tint); }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 28px;
+  }
+  button.primary, button.secondary {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover { opacity: 0.92; }
+  button.secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  button.secondary:hover { background: var(--accent-tint); }
+  .status {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sift runs models on your machine</h1>
+    <p class="lede">
+      Sift needs a local model server to extract data without sending your
+      documents anywhere. We use <strong>Ollama</strong> — free, open-source,
+      and runs entirely offline.
+    </p>
+
+    <div class="step">
+      <div class="label">1. Install Ollama</div>
+      <a class="install-link" href="https://ollama.com" target="_blank" rel="noopener">https://ollama.com</a>
+    </div>
+
+    <div class="step">
+      <div class="label">2. Pull a model</div>
+      <div class="code-block">
+        <code>ollama pull gemma3:4b</code>
+        <button class="copy-btn" id="copy-btn" type="button">Copy</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="secondary" id="check-btn" type="button">Check again</button>
+      <button class="primary" id="continue-btn" type="button">Continue without local models</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const copyBtn = document.getElementById("copy-btn");
+    const checkBtn = document.getElementById("check-btn");
+    const continueBtn = document.getElementById("continue-btn");
+
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText("ollama pull gemma3:4b");
+        copyBtn.textContent = "Copied";
+        setTimeout(() => (copyBtn.textContent = "Copy"), 1500);
+      } catch {
+        // clipboard API can be denied in some contexts; not fatal
+      }
+    });
+
+    checkBtn.addEventListener("click", async () => {
+      checkBtn.disabled = true;
+      statusEl.textContent = "Checking for Ollama...";
+      try {
+        const result = await window.sift.checkOllama();
+        if (result.running) {
+          statusEl.textContent = "Found it — loading Sift...";
+        } else {
+          statusEl.textContent = "Still not reachable at 127.0.0.1:11434. Make sure Ollama is running.";
+        }
+      } finally {
+        checkBtn.disabled = false;
+      }
+    });
+
+    continueBtn.addEventListener("click", () => {
+      statusEl.textContent = "Continuing — you can add a cloud provider key in Settings.";
+      window.sift.continueAnyway();
+    });
+  </script>
+</body>
+</html>
