@@ -7,7 +7,7 @@ Open-source, self-hostable document extractor that runs fully local by default (
 ## Quick start
 
 ```bash
-git clone https://github.com/yourname/sift && cd sift
+git clone https://github.com/mike-whypred/sift && cd sift
 npm install
 npm run dev
 ```
