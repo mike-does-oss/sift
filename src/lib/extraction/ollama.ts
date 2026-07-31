@@ -1,8 +1,6 @@
-import { extractText, getDocumentProxy } from "unpdf";
 import { buildJsonSchema } from "./schema";
+import { pdfToText } from "./pdfText";
 import type { ExtractionInput, ExtractionOutput } from "./types";
-
-const MAX_CHARS = 40_000;
 
 export async function ollamaChat(
   baseUrl: string, model: string, schema: object, system: string, user: string
@@ -41,17 +39,9 @@ export async function ollamaChat(
 export async function extractWithOllama(
   input: ExtractionInput & { baseUrl: string }
 ): Promise<ExtractionOutput> {
-  let text: string;
-  try {
-    const pdf = await getDocumentProxy(new Uint8Array(Buffer.from(input.pdfBase64, "base64")));
-    ({ text } = await extractText(pdf, { mergePages: true }));
-  } catch {
-    return { success: false, error: "Couldn't read this PDF — the file may be corrupted or not a real PDF." };
-  }
-  if (!text.trim()) {
-    return { success: false, error: "No selectable text found in this PDF. Local extraction is text-only in v0 — scanned documents need a cloud provider (or wait for vision support)." };
-  }
-  const truncated = text.length > MAX_CHARS ? text.slice(0, MAX_CHARS) + "\n[document truncated]" : text;
+  const pdfText = await pdfToText(input.pdfBase64);
+  if (!pdfText.success) return pdfText;
+  const truncated = pdfText.text;
   const schema = buildJsonSchema(input.fields, input.extractMultiple);
   const system = "You are a precise data extraction assistant. Extract the requested fields from the document text and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols.";
   const user = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}\n\nDOCUMENT TEXT:\n${truncated}`;

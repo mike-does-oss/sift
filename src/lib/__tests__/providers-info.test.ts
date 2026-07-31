@@ -77,9 +77,64 @@ describe("getProviderInfo", () => {
     expect(serialized).not.toContain("sk-oai-secret");
   });
 
-  it("returns exactly the three current providers (ollama, anthropic, openai)", async () => {
+  it("returns exactly the five current providers", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) }));
     const providers = await getProviderInfo(DEFAULT_SETTINGS);
-    expect(providers.map((p) => p.id).sort()).toEqual(["anthropic", "ollama", "openai"]);
+    expect(providers.map((p) => p.id).sort()).toEqual([
+      "anthropic",
+      "gemini",
+      "ollama",
+      "openai",
+      "openai-compatible",
+    ]);
+  });
+
+  it("marks gemini unconfigured with no key, configured with one, and never echoes the key", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) }));
+
+    const unconfigured = await getProviderInfo(DEFAULT_SETTINGS);
+    const geminiUnconfigured = unconfigured.find((p) => p.id === "gemini")!;
+    expect(geminiUnconfigured.configured).toBe(false);
+    expect(geminiUnconfigured.privacy).toBe("cloud");
+    expect(geminiUnconfigured.models).toEqual(["gemini-2.0-flash", "gemini-1.5-pro"]);
+
+    const configured = await getProviderInfo({ ...DEFAULT_SETTINGS, geminiApiKey: "gm-secret" });
+    const geminiConfigured = configured.find((p) => p.id === "gemini")!;
+    expect(geminiConfigured.configured).toBe(true);
+    expect(JSON.stringify(configured)).not.toContain("gm-secret");
+  });
+
+  it("dedups the configured gemini model against the suggestions", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) }));
+    const providers = await getProviderInfo({ ...DEFAULT_SETTINGS, geminiModel: "gemini-2.0-flash" });
+    const gemini = providers.find((p) => p.id === "gemini")!;
+    expect(gemini.models).toEqual(["gemini-2.0-flash", "gemini-1.5-pro"]);
+  });
+
+  it("marks openai-compatible unconfigured until both baseUrl and model are set, with a Settings-worded note", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) }));
+
+    const none = await getProviderInfo(DEFAULT_SETTINGS);
+    const compatNone = none.find((p) => p.id === "openai-compatible")!;
+    expect(compatNone.configured).toBe(false);
+    expect(compatNone.models).toEqual([]);
+    expect(compatNone.note).toBe("Set a base URL in Settings");
+
+    const baseOnly = await getProviderInfo({ ...DEFAULT_SETTINGS, compatBaseUrl: "http://localhost:11434/v1" });
+    const compatBaseOnly = baseOnly.find((p) => p.id === "openai-compatible")!;
+    expect(compatBaseOnly.configured).toBe(false);
+    expect(compatBaseOnly.note).toBe("Set a model in Settings");
+
+    const both = await getProviderInfo({
+      ...DEFAULT_SETTINGS,
+      compatBaseUrl: "http://localhost:11434/v1",
+      compatModel: "gemma3:4b",
+    });
+    const compatBoth = both.find((p) => p.id === "openai-compatible")!;
+    expect(compatBoth.configured).toBe(true);
+    expect(compatBoth.models).toEqual(["gemma3:4b"]);
+    expect(compatBoth.note).toBeUndefined();
+    expect(compatBoth.label).toBe("OpenAI-compatible");
+    expect(compatBoth.privacy).toBe("cloud");
   });
 });

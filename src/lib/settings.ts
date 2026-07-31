@@ -2,13 +2,18 @@ import { db } from "@/db";
 import { settings } from "@/db/schema";
 
 export interface SiftSettings {
-  provider: "ollama" | "anthropic" | "openai";
+  provider: "ollama" | "anthropic" | "openai" | "gemini" | "openai-compatible";
   ollamaBaseUrl: string; // default "http://localhost:11434"
   ollamaModel: string; // default "gemma3:4b"
   anthropicApiKey: string; // default ""
   anthropicModel: string; // default "claude-sonnet-5"
   openaiApiKey: string; // default ""
   openaiModel: string; // default "gpt-4o"
+  geminiApiKey: string; // default ""
+  geminiModel: string; // default "gemini-2.0-flash"
+  compatBaseUrl: string; // default ""
+  compatApiKey: string; // default ""
+  compatModel: string; // default ""
 }
 
 export const DEFAULT_SETTINGS: SiftSettings = {
@@ -19,9 +24,14 @@ export const DEFAULT_SETTINGS: SiftSettings = {
   anthropicModel: "claude-sonnet-5",
   openaiApiKey: "",
   openaiModel: "gpt-4o",
+  geminiApiKey: "",
+  geminiModel: "gemini-2.0-flash",
+  compatBaseUrl: "",
+  compatApiKey: "",
+  compatModel: "",
 };
 
-const PROVIDERS = ["ollama", "anthropic", "openai"] as const;
+const PROVIDERS = ["ollama", "anthropic", "openai", "gemini", "openai-compatible"] as const;
 
 function isValidProvider(value: unknown): value is SiftSettings["provider"] {
   return typeof value === "string" && (PROVIDERS as readonly string[]).includes(value);
@@ -59,15 +69,24 @@ export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
   if (patch.provider !== undefined && !isValidProvider(patch.provider)) {
     throw new Error(`Invalid provider: "${patch.provider}". Must be one of ${PROVIDERS.join(", ")}.`);
   }
-  const KEY_SETTINGS = new Set<keyof SiftSettings>(["anthropicApiKey", "openaiApiKey"]);
+  // Empty string is legal only for these fields — either an API key (empty
+  // means "clear the key") or the openai-compatible endpoint config (empty
+  // means "unconfigured"; that provider is simply unusable without them).
+  // Every other setting must have a real value.
+  const CLEARABLE_SETTINGS = new Set<keyof SiftSettings>([
+    "anthropicApiKey",
+    "openaiApiKey",
+    "geminiApiKey",
+    "compatBaseUrl",
+    "compatApiKey",
+    "compatModel",
+  ]);
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
     if (typeof value !== "string") {
       throw new Error(`Setting "${key}" must be a string, got ${typeof value}.`);
     }
-    // Empty string is legal only for the two key fields, where it means
-    // "clear the key". Every other setting must have a real value.
-    if (value === "" && !KEY_SETTINGS.has(key as keyof SiftSettings)) {
+    if (value === "" && !CLEARABLE_SETTINGS.has(key as keyof SiftSettings)) {
       throw new Error(`Setting "${key}" cannot be empty.`);
     }
   }
@@ -99,5 +118,7 @@ export function maskedSettings(): SiftSettings {
     ...current,
     anthropicApiKey: maskKey(current.anthropicApiKey),
     openaiApiKey: maskKey(current.openaiApiKey),
+    geminiApiKey: maskKey(current.geminiApiKey),
+    compatApiKey: maskKey(current.compatApiKey),
   };
 }

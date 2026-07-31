@@ -80,6 +80,44 @@ describe("settings", () => {
     expect(getSettings().anthropicApiKey).toBe("");
   });
 
+  it("defaults the new gemini/openai-compatible keys", () => {
+    const defaults = getSettings();
+    expect(defaults.geminiApiKey).toBe("");
+    expect(defaults.geminiModel).toBe("gemini-2.0-flash");
+    expect(defaults.compatBaseUrl).toBe("");
+    expect(defaults.compatApiKey).toBe("");
+    expect(defaults.compatModel).toBe("");
+  });
+
+  it("accepts gemini and openai-compatible as valid providers", () => {
+    expect(updateSettings({ provider: "gemini" }).provider).toBe("gemini");
+    expect(updateSettings({ provider: "openai-compatible" }).provider).toBe("openai-compatible");
+  });
+
+  it("masks the gemini and compat api keys, and clears them on empty-string patch", () => {
+    updateSettings({ geminiApiKey: "gm-secret-1234" });
+    expect(maskedSettings().geminiApiKey).toBe("…1234");
+    expect(maskedSettings().geminiApiKey).not.toContain("gm-secret-1234");
+    updateSettings({ geminiApiKey: "" });
+    expect(getSettings().geminiApiKey).toBe("");
+
+    updateSettings({ compatApiKey: "compat-secret-5678" });
+    expect(maskedSettings().compatApiKey).toBe("…5678");
+    updateSettings({ compatApiKey: "" });
+    expect(getSettings().compatApiKey).toBe("");
+  });
+
+  it("allows compatBaseUrl and compatModel to be cleared to empty string (provider is simply unconfigured)", () => {
+    updateSettings({ compatBaseUrl: "http://localhost:11434/v1", compatModel: "gemma3:4b" });
+    expect(getSettings().compatBaseUrl).toBe("http://localhost:11434/v1");
+    expect(getSettings().compatModel).toBe("gemma3:4b");
+
+    expect(() => updateSettings({ compatBaseUrl: "" })).not.toThrow();
+    expect(() => updateSettings({ compatModel: "" })).not.toThrow();
+    expect(getSettings().compatBaseUrl).toBe("");
+    expect(getSettings().compatModel).toBe("");
+  });
+
   it("rejects non-string values instead of coercing them", () => {
     expect(() =>
       updateSettings({ anthropicApiKey: null } as unknown as Partial<typeof DEFAULT_SETTINGS>)

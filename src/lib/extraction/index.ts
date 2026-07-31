@@ -3,7 +3,10 @@ import type { ProviderId } from "@/lib/api";
 import { extractWithClaude } from "./claude";
 import { extractWithOpenAI } from "./openai";
 import { extractWithOllama } from "./ollama";
+import { extractWithOpenAICompatible } from "./openaiCompatible";
 import type { ExtractionInput, ExtractionOutput } from "./types";
+
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
 export type { ExtractionInput, ExtractionOutput } from "./types";
 export type RunResult = ExtractionOutput & { provider: string; model: string };
@@ -35,6 +38,31 @@ export async function runExtraction(
   if (provider === "openai") {
     const model = override?.model || s.openaiModel;
     return { ...(await extractWithOpenAI({ ...input, apiKey: s.openaiApiKey || undefined, model })), provider: "openai", model };
+  }
+  if (provider === "gemini") {
+    const model = override?.model || s.geminiModel;
+    if (!s.geminiApiKey) {
+      return { success: false, error: "Gemini API key not set — add it in Settings", provider: "gemini", model };
+    }
+    return {
+      ...(await extractWithOpenAICompatible({ ...input, apiKey: s.geminiApiKey, model, baseUrl: GEMINI_BASE_URL })),
+      provider: "gemini",
+      model,
+    };
+  }
+  if (provider === "openai-compatible") {
+    const model = override?.model || s.compatModel;
+    if (!s.compatBaseUrl) {
+      return { success: false, error: "Base URL not set — add it in Settings", provider: "openai-compatible", model };
+    }
+    if (!model) {
+      return { success: false, error: "Model not set — add it in Settings", provider: "openai-compatible", model: "" };
+    }
+    return {
+      ...(await extractWithOpenAICompatible({ ...input, apiKey: s.compatApiKey || undefined, model, baseUrl: s.compatBaseUrl })),
+      provider: "openai-compatible",
+      model,
+    };
   }
   const model = override?.model || s.ollamaModel;
   return { ...(await extractWithOllama({ ...input, model, baseUrl: s.ollamaBaseUrl })), provider: "ollama", model };

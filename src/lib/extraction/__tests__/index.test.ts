@@ -6,9 +6,13 @@ vi.mock("@/lib/settings", () => ({ getSettings: () => getSettingsMock() }));
 const extractWithClaudeMock = vi.fn();
 const extractWithOpenAIMock = vi.fn();
 const extractWithOllamaMock = vi.fn();
+const extractWithOpenAICompatibleMock = vi.fn();
 vi.mock("../claude", () => ({ extractWithClaude: (...args: unknown[]) => extractWithClaudeMock(...args) }));
 vi.mock("../openai", () => ({ extractWithOpenAI: (...args: unknown[]) => extractWithOpenAIMock(...args) }));
 vi.mock("../ollama", () => ({ extractWithOllama: (...args: unknown[]) => extractWithOllamaMock(...args) }));
+vi.mock("../openaiCompatible", () => ({
+  extractWithOpenAICompatible: (...args: unknown[]) => extractWithOpenAICompatibleMock(...args),
+}));
 
 import { runExtraction } from "../index";
 
@@ -20,6 +24,11 @@ const BASE_SETTINGS = {
   anthropicModel: "claude-sonnet-5",
   openaiApiKey: "oai-key",
   openaiModel: "gpt-4o",
+  geminiApiKey: "gm-key",
+  geminiModel: "gemini-2.0-flash",
+  compatBaseUrl: "http://localhost:11434/v1",
+  compatApiKey: "compat-key",
+  compatModel: "gemma3:4b",
 };
 
 const baseInput = { pdfBase64: "AAAA", filename: "doc.pdf", fields: [], prompt: "", extractMultiple: false };
@@ -93,5 +102,87 @@ describe("runExtraction — override", () => {
     const result = await runExtraction(baseInput, { provider: "openai" });
     expect(extractWithOpenAIMock.mock.calls[0][0]).toMatchObject({ model: "gpt-4o" });
     expect(result.model).toBe("gpt-4o");
+  });
+});
+
+describe("runExtraction — gemini", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getSettingsMock.mockReturnValue(BASE_SETTINGS);
+    extractWithOpenAICompatibleMock.mockResolvedValue({ success: true, data: {} });
+  });
+
+  it("dispatches gemini to the compat engine, pinned to Google's OpenAI-compatible base URL, with the gemini key/model", async () => {
+    const result = await runExtraction(baseInput, { provider: "gemini" });
+    expect(extractWithOpenAICompatibleMock).toHaveBeenCalledTimes(1);
+    expect(extractWithOpenAICompatibleMock.mock.calls[0][0]).toMatchObject({
+      apiKey: "gm-key",
+      model: "gemini-2.0-flash",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    });
+    expect(result.provider).toBe("gemini");
+    expect(result.model).toBe("gemini-2.0-flash");
+  });
+
+  it("an override model wins over the settings gemini model", async () => {
+    const result = await runExtraction(baseInput, { provider: "gemini", model: "gemini-1.5-pro" });
+    expect(extractWithOpenAICompatibleMock.mock.calls[0][0]).toMatchObject({ model: "gemini-1.5-pro" });
+    expect(result.model).toBe("gemini-1.5-pro");
+  });
+
+  it("returns a friendly error and never calls the engine when no gemini key is set", async () => {
+    getSettingsMock.mockReturnValue({ ...BASE_SETTINGS, geminiApiKey: "" });
+    const result = await runExtraction(baseInput, { provider: "gemini" });
+    expect(extractWithOpenAICompatibleMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect((result as { success: false; error: string }).error).toBe("Gemini API key not set — add it in Settings");
+  });
+});
+
+describe("runExtraction — openai-compatible", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getSettingsMock.mockReturnValue(BASE_SETTINGS);
+    extractWithOpenAICompatibleMock.mockResolvedValue({ success: true, data: {} });
+  });
+
+  it("dispatches openai-compatible to the compat engine with the configured baseUrl/model, key optional", async () => {
+    const result = await runExtraction(baseInput, { provider: "openai-compatible" });
+    expect(extractWithOpenAICompatibleMock).toHaveBeenCalledTimes(1);
+    expect(extractWithOpenAICompatibleMock.mock.calls[0][0]).toMatchObject({
+      apiKey: "compat-key",
+      model: "gemma3:4b",
+      baseUrl: "http://localhost:11434/v1",
+    });
+    expect(result.provider).toBe("openai-compatible");
+    expect(result.model).toBe("gemma3:4b");
+  });
+
+  it("passes apiKey as undefined (not an empty string) when compatApiKey is unset", async () => {
+    getSettingsMock.mockReturnValue({ ...BASE_SETTINGS, compatApiKey: "" });
+    await runExtraction(baseInput, { provider: "openai-compatible" });
+    expect(extractWithOpenAICompatibleMock.mock.calls[0][0].apiKey).toBeUndefined();
+  });
+
+  it("an override model wins over the settings compat model", async () => {
+    const result = await runExtraction(baseInput, { provider: "openai-compatible", model: "llama3" });
+    expect(extractWithOpenAICompatibleMock.mock.calls[0][0]).toMatchObject({ model: "llama3" });
+    expect(result.model).toBe("llama3");
+  });
+
+  it("returns a friendly error and never calls the engine when no base URL is set", async () => {
+    getSettingsMock.mockReturnValue({ ...BASE_SETTINGS, compatBaseUrl: "" });
+    const result = await runExtraction(baseInput, { provider: "openai-compatible" });
+    expect(extractWithOpenAICompatibleMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect((result as { success: false; error: string }).error).toBe("Base URL not set — add it in Settings");
+  });
+
+  it("returns a friendly error and never calls the engine when no model is set", async () => {
+    getSettingsMock.mockReturnValue({ ...BASE_SETTINGS, compatModel: "" });
+    const result = await runExtraction(baseInput, { provider: "openai-compatible" });
+    expect(extractWithOpenAICompatibleMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect((result as { success: false; error: string }).error).toBe("Model not set — add it in Settings");
   });
 });

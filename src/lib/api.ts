@@ -1,13 +1,11 @@
 import type { ExtractionData } from "@/types";
 
 /**
- * Provider identifiers. New providers (gemini, openai-compatible — Task 3)
- * join this union and PROVIDER_IDS additively; nothing else here should need
- * to change shape when they do.
+ * Provider identifiers.
  */
-export type ProviderId = "ollama" | "anthropic" | "openai";
+export type ProviderId = "ollama" | "anthropic" | "openai" | "gemini" | "openai-compatible";
 
-export const PROVIDER_IDS: readonly ProviderId[] = ["ollama", "anthropic", "openai"];
+export const PROVIDER_IDS: readonly ProviderId[] = ["ollama", "anthropic", "openai", "gemini", "openai-compatible"];
 
 export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);

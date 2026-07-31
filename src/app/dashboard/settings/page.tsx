@@ -6,6 +6,8 @@ import {
   HardDrive,
   Sparkles,
   Cloud,
+  Zap,
+  Plug,
   Check,
 } from "lucide-react";
 import type { SiftSettings } from "@/lib/settings";
@@ -35,6 +37,18 @@ const PROVIDERS: {
     label: "OpenAI",
     icon: Cloud,
     description: "GPT models via your own OpenAI API key.",
+  },
+  {
+    value: "gemini",
+    label: "Gemini",
+    icon: Zap,
+    description: "Gemini models via your own Google AI Studio API key.",
+  },
+  {
+    value: "openai-compatible",
+    label: "OpenAI-compatible",
+    icon: Plug,
+    description: "Any OpenAI-compatible endpoint — Groq, vLLM, LM Studio, Ollama's OpenAI mode…",
   },
 ];
 
@@ -87,11 +101,18 @@ export default function SettingsPage() {
   const [ollamaModel, setOllamaModel] = useState("");
   const [anthropicModel, setAnthropicModel] = useState("");
   const [openaiModel, setOpenaiModel] = useState("");
+  const [geminiModel, setGeminiModel] = useState("");
+  const [compatBaseUrl, setCompatBaseUrl] = useState("");
+  const [compatModel, setCompatModel] = useState("");
 
   const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
   const [anthropicRemoveKey, setAnthropicRemoveKey] = useState(false);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [openaiRemoveKey, setOpenaiRemoveKey] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [geminiRemoveKey, setGeminiRemoveKey] = useState(false);
+  const [compatKeyInput, setCompatKeyInput] = useState("");
+  const [compatRemoveKey, setCompatRemoveKey] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
@@ -100,6 +121,8 @@ export default function SettingsPage() {
   const [ollamaTest, setOllamaTest] = useState<TestState>({ status: "idle" });
   const [anthropicTest, setAnthropicTest] = useState<TestState>({ status: "idle" });
   const [openaiTest, setOpenaiTest] = useState<TestState>({ status: "idle" });
+  const [geminiTest, setGeminiTest] = useState<TestState>({ status: "idle" });
+  const [compatTest, setCompatTest] = useState<TestState>({ status: "idle" });
 
   const applyLoaded = useCallback((s: SiftSettings) => {
     setLoaded(s);
@@ -108,10 +131,17 @@ export default function SettingsPage() {
     setOllamaModel(s.ollamaModel);
     setAnthropicModel(s.anthropicModel);
     setOpenaiModel(s.openaiModel);
+    setGeminiModel(s.geminiModel);
+    setCompatBaseUrl(s.compatBaseUrl);
+    setCompatModel(s.compatModel);
     setAnthropicKeyInput("");
     setAnthropicRemoveKey(false);
     setOpenaiKeyInput("");
     setOpenaiRemoveKey(false);
+    setGeminiKeyInput("");
+    setGeminiRemoveKey(false);
+    setCompatKeyInput("");
+    setCompatRemoveKey(false);
   }, []);
 
   const load = useCallback(async () => {
@@ -141,10 +171,17 @@ export default function SettingsPage() {
       ollamaModel !== loaded.ollamaModel ||
       anthropicModel !== loaded.anthropicModel ||
       openaiModel !== loaded.openaiModel ||
+      geminiModel !== loaded.geminiModel ||
+      compatBaseUrl !== loaded.compatBaseUrl ||
+      compatModel !== loaded.compatModel ||
       anthropicKeyInput.length > 0 ||
       anthropicRemoveKey ||
       openaiKeyInput.length > 0 ||
-      openaiRemoveKey);
+      openaiRemoveKey ||
+      geminiKeyInput.length > 0 ||
+      geminiRemoveKey ||
+      compatKeyInput.length > 0 ||
+      compatRemoveKey);
 
   const handleSave = async () => {
     if (!loaded) return;
@@ -158,10 +195,17 @@ export default function SettingsPage() {
       if (ollamaModel !== loaded.ollamaModel) patch.ollamaModel = ollamaModel;
       if (anthropicModel !== loaded.anthropicModel) patch.anthropicModel = anthropicModel;
       if (openaiModel !== loaded.openaiModel) patch.openaiModel = openaiModel;
+      if (geminiModel !== loaded.geminiModel) patch.geminiModel = geminiModel;
+      if (compatBaseUrl !== loaded.compatBaseUrl) patch.compatBaseUrl = compatBaseUrl;
+      if (compatModel !== loaded.compatModel) patch.compatModel = compatModel;
       if (anthropicRemoveKey) patch.anthropicApiKey = "";
       else if (anthropicKeyInput) patch.anthropicApiKey = anthropicKeyInput;
       if (openaiRemoveKey) patch.openaiApiKey = "";
       else if (openaiKeyInput) patch.openaiApiKey = openaiKeyInput;
+      if (geminiRemoveKey) patch.geminiApiKey = "";
+      else if (geminiKeyInput) patch.geminiApiKey = geminiKeyInput;
+      if (compatRemoveKey) patch.compatApiKey = "";
+      else if (compatKeyInput) patch.compatApiKey = compatKeyInput;
 
       const res = await fetch("/api/settings", {
         method: "PATCH",
@@ -233,7 +277,7 @@ export default function SettingsPage() {
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
           Provider
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {PROVIDERS.map((p) => {
             const Icon = p.icon;
             const isSelected = provider === p.value;
@@ -491,6 +535,180 @@ export default function SettingsPage() {
             onTest={() => runTest("openai", setOpenaiTest)}
           />
           <TestResult state={openaiTest} />
+        </div>
+      </section>
+
+      {/* Gemini */}
+      <section className="card-elevated rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+            <Zap className="w-4 h-4 text-[var(--text-tertiary)]" />
+          </div>
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+            Gemini
+          </h2>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+            Model
+          </label>
+          <input
+            type="text"
+            value={geminiModel}
+            onChange={(e) => setGeminiModel(e.target.value)}
+            placeholder="gemini-2.0-flash"
+            className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+            API key
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={geminiKeyInput}
+              onChange={(e) => {
+                setGeminiKeyInput(e.target.value);
+                if (geminiRemoveKey) setGeminiRemoveKey(false);
+              }}
+              placeholder={geminiRemoveKey ? "" : loaded?.geminiApiKey || "AIza..."}
+              autoComplete="off"
+              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+            />
+            {loaded?.geminiApiKey && !geminiRemoveKey && (
+              <button
+                onClick={() => setGeminiRemoveKey(true)}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+              >
+                Remove key
+              </button>
+            )}
+            {geminiRemoveKey && (
+              <button
+                onClick={() => setGeminiRemoveKey(false)}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {geminiRemoveKey && (
+            <p className="text-xs text-[var(--error)] mt-1.5">
+              Key will be removed when you save.
+            </p>
+          )}
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5">
+            Keys are stored in your local database on this machine.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <TestConnectionButton
+            label="Test connection"
+            state={geminiTest}
+            onTest={() => runTest("gemini", setGeminiTest)}
+          />
+          <TestResult state={geminiTest} />
+        </div>
+      </section>
+
+      {/* OpenAI-compatible */}
+      <section className="card-elevated rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+            <Plug className="w-4 h-4 text-[var(--text-tertiary)]" />
+          </div>
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+            OpenAI-compatible
+          </h2>
+        </div>
+
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Any OpenAI-compatible endpoint — Groq, vLLM, LM Studio, Ollama&apos;s OpenAI mode… Works
+          with local servers too (vLLM, LM Studio); still listed as cloud here since it&apos;s
+          reached over the network like the other providers.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+              Base URL
+            </label>
+            <input
+              type="text"
+              value={compatBaseUrl}
+              onChange={(e) => setCompatBaseUrl(e.target.value)}
+              placeholder="http://localhost:11434/v1"
+              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+              Model
+            </label>
+            <input
+              type="text"
+              value={compatModel}
+              onChange={(e) => setCompatModel(e.target.value)}
+              placeholder="gemma3:4b"
+              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+            API key <span className="text-[var(--text-tertiary)] normal-case">(optional — some local servers don&apos;t need one)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={compatKeyInput}
+              onChange={(e) => {
+                setCompatKeyInput(e.target.value);
+                if (compatRemoveKey) setCompatRemoveKey(false);
+              }}
+              placeholder={compatRemoveKey ? "" : loaded?.compatApiKey || "leave blank if not required"}
+              autoComplete="off"
+              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+            />
+            {loaded?.compatApiKey && !compatRemoveKey && (
+              <button
+                onClick={() => setCompatRemoveKey(true)}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+              >
+                Remove key
+              </button>
+            )}
+            {compatRemoveKey && (
+              <button
+                onClick={() => setCompatRemoveKey(false)}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {compatRemoveKey && (
+            <p className="text-xs text-[var(--error)] mt-1.5">
+              Key will be removed when you save.
+            </p>
+          )}
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5">
+            Keys are stored in your local database on this machine.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <TestConnectionButton
+            label="Test connection"
+            state={compatTest}
+            onTest={() => runTest("openai-compatible", setCompatTest)}
+          />
+          <TestResult state={compatTest} />
         </div>
       </section>
 
