@@ -4,26 +4,32 @@ import "./globals.css";
 
 // Playbook §13 type system: Space Grotesk for headings/brand/eyebrows, Inter
 // for UI/body, IBM Plex Mono for data (field keys, extracted values, code).
-// Each exposes a CSS var consumed by globals.css (--font-display/--font-body/
-// --font-mono) so the rest of the app never imports a font directly.
+//
+// Each font gets its own next/font-generated CSS var (--font-space-grotesk/
+// --font-inter/--font-ibm-plex-mono), NOT the semantic --font-display/
+// --font-body/--font-mono names globals.css exposes to components — next/font
+// packs its own computed local-fallback font (metric-matched to the web font,
+// to avoid layout shift while it loads) into that variable's value, and
+// redeclaring the same name in globals.css would silently clobber it.
+// globals.css chains the semantic token to this variable instead.
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
-  variable: "--font-display",
+  variable: "--font-space-grotesk",
   display: "swap",
 });
 
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-body",
+  variable: "--font-inter",
   display: "swap",
 });
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-mono",
+  variable: "--font-ibm-plex-mono",
   display: "swap",
 });
 
