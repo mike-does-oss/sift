@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Requires Node 20+. SQLite auto-creates at `./data/sift.db` on first run — no separate database setup. The app is at http://localhost:3000.
+Requires Node 20+. SQLite auto-creates at `./data/sift.db` on first run — no separate database setup. The app is at http://localhost:3000. Set `SIFT_DATA_DIR` to point the database and uploaded-file storage at a different directory (defaults to `./data`); `SIFT_MIGRATIONS_DIR` similarly overrides where the Drizzle migration files are read from (defaults to `./drizzle`).
 
 ### Localhost only, by default
 

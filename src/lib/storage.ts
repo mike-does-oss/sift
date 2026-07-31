@@ -1,7 +1,6 @@
 import { writeFileSync, readFileSync } from "fs";
 import path from "path";
-
-const DATA_DIR = path.join(process.cwd(), "data");
+import { DATA_DIR } from "./dataDir";
 
 export function saveBuffer(buf: Buffer, ext: string = "pdf"): { filePath: string; sizeBytes: number } {
   const rel = path.join("files", `${crypto.randomUUID()}.${ext}`);
