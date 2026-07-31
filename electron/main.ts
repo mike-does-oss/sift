@@ -48,27 +48,41 @@ function killServer(): void {
 // External link handling
 // ---------------------------------------------------------------------------
 
-function isInternalUrl(url: string): boolean {
+function defaultPortForProtocol(protocol: string): number {
+  return protocol === "https:" ? 443 : 80;
+}
+
+/** Port the app's own server is actually listening on — 127.0.0.1/localhost
+ * navigations only count as "internal" (i.e. load in-window rather than
+ * open externally) when they target this exact port, not just any local
+ * port. */
+function portFromUrl(url: string): number {
+  const u = new URL(url);
+  return u.port ? Number(u.port) : defaultPortForProtocol(u.protocol);
+}
+
+function isInternalUrl(url: string, appPort: number): boolean {
   try {
     const u = new URL(url);
     if (u.protocol === "file:") return true;
-    if (u.hostname === "127.0.0.1" || u.hostname === "localhost") return true;
-    return false;
+    if (u.hostname !== "127.0.0.1" && u.hostname !== "localhost") return false;
+    const urlPort = u.port ? Number(u.port) : defaultPortForProtocol(u.protocol);
+    return urlPort === appPort;
   } catch {
     return false;
   }
 }
 
-function wireExternalLinks(win: BrowserWindow): void {
+function wireExternalLinks(win: BrowserWindow, appPort: number): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isInternalUrl(url)) {
+    if (!isInternalUrl(url, appPort)) {
       void shell.openExternal(url);
     }
     return { action: "deny" };
   });
 
   win.webContents.on("will-navigate", (event, url) => {
-    if (!isInternalUrl(url)) {
+    if (!isInternalUrl(url, appPort)) {
       event.preventDefault();
       void shell.openExternal(url);
     }
@@ -160,10 +174,12 @@ async function waitForServerReady(url: string, timeoutMs: number): Promise<void>
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url);
+      // Each attempt gets its own bounded timeout so a single hung
+      // connection can't eat the whole 30s deadline in one poll.
+      const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
       if (res.ok || (res.status >= 300 && res.status < 500)) return;
     } catch {
-      // server not accepting connections yet — retry
+      // server not accepting connections yet, or this attempt timed out — retry
     }
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -206,10 +222,10 @@ async function main(): Promise<void> {
   win.on("closed", () => {
     mainWindow = null;
   });
-  wireExternalLinks(win);
 
   if (!app.isPackaged) {
     const devUrl = process.env.SIFT_DEV_URL ?? DEV_URL_DEFAULT;
+    wireExternalLinks(win, portFromUrl(devUrl));
     await loadDashboard(win, devUrl);
     return;
   }
@@ -226,6 +242,8 @@ async function main(): Promise<void> {
     app.quit();
     return;
   }
+
+  wireExternalLinks(win, port);
 
   const dashboardUrl = `http://127.0.0.1:${port}/dashboard`;
   wireOllamaIpc(win, dashboardUrl);
