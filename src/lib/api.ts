@@ -28,6 +28,13 @@ export interface ExtractResponse {
   error?: string;
   provider?: string;
   model?: string;
+  /**
+   * The document text the model saw (or, for PDFs, the extracted text layer
+   * used for anchoring highlights even when the engine read the PDF natively
+   * via vision) — absent for images, which have no text representation.
+   * Additive field (Task 5): older callers that ignore it are unaffected.
+   */
+  text?: string;
 }
 
 /**

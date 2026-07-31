@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Provider = "ollama" | "anthropic" | "openai";
+type Provider = "ollama" | "anthropic" | "openai" | "gemini" | "openai-compatible";
 
 interface Settings {
   provider: Provider;
   ollamaModel: string;
   anthropicModel: string;
   openaiModel: string;
+  geminiModel: string;
+  compatModel: string;
 }
 
 // Cloud provider display names for the "☁ Cloud · <provider> <model>" badge
@@ -16,12 +18,23 @@ interface Settings {
 const CLOUD_PROVIDER_LABELS: Record<Exclude<Provider, "ollama">, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
+  gemini: "Gemini",
+  "openai-compatible": "OpenAI-compatible",
 };
 
 function modelFor(settings: Settings): string {
-  if (settings.provider === "anthropic") return settings.anthropicModel;
-  if (settings.provider === "openai") return settings.openaiModel;
-  return settings.ollamaModel;
+  switch (settings.provider) {
+    case "anthropic":
+      return settings.anthropicModel;
+    case "openai":
+      return settings.openaiModel;
+    case "gemini":
+      return settings.geminiModel;
+    case "openai-compatible":
+      return settings.compatModel;
+    default:
+      return settings.ollamaModel;
+  }
 }
 
 /** "🔒 Local · gemma3:4b" or "☁ Cloud · Anthropic claude-sonnet-5" (§4 privacy contract). */

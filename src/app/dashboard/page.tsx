@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, ArrowRight, Table2, FolderOpen, Save } from "lucide-react";
-import { FileUpload, FieldConfiguration, ResultsDisplay, PDFPreview } from "@/components";
+import { Sparkles, Table2, FolderOpen, Save, Loader2 } from "lucide-react";
+import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
 import type { ExtractionField, ExtractionData } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
+import { webSiftApi, type ProviderInfo } from "@/lib/api";
 
 interface Template {
   id: string;
@@ -15,25 +16,72 @@ interface Template {
   extractMultiple: boolean;
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  ollama: "Local",
-  anthropic: "Anthropic",
-  openai: "OpenAI",
-};
+interface DefaultSettings {
+  provider: string;
+  ollamaModel: string;
+  anthropicModel: string;
+  openaiModel: string;
+  geminiModel: string;
+  compatModel: string;
+}
+
+function modelForProvider(s: DefaultSettings): string {
+  switch (s.provider) {
+    case "anthropic":
+      return s.anthropicModel;
+    case "openai":
+      return s.openaiModel;
+    case "gemini":
+      return s.geminiModel;
+    case "openai-compatible":
+      return s.compatModel;
+    default:
+      return s.ollamaModel;
+  }
+}
+
+/** "<providerId>::<model>" — default mirrors saved settings, falling back to any other usable provider if the saved default isn't actually usable right now (e.g. no key configured, or the saved ollama model isn't installed). */
+function defaultProviderKey(providers: ProviderInfo[], settings: DefaultSettings | null): string {
+  const byId = (id: string) => providers.find((p) => p.id === id);
+
+  if (settings) {
+    const info = byId(settings.provider);
+    if (info?.id === "ollama") {
+      const preferred = settings.ollamaModel;
+      const model = info.models.includes(preferred) ? preferred : info.models[0];
+      if (model) return `ollama::${model}`;
+    } else if (info?.configured) {
+      const model = modelForProvider(settings) || info.models[0] || "";
+      if (model) return `${info.id}::${model}`;
+    }
+  }
+
+  const firstConfiguredCloud = providers.find((p) => p.id !== "ollama" && p.configured && p.models[0]);
+  if (firstConfiguredCloud) return `${firstConfiguredCloud.id}::${firstConfiguredCloud.models[0]}`;
+
+  const ollama = byId("ollama");
+  if (ollama?.models[0]) return `ollama::${ollama.models[0]}`;
+
+  return "";
+}
 
 export default function DashboardPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extractionPrompt, setExtractionPrompt] = useState("");
   const [extractMultiple, setExtractMultiple] = useState(false);
-  const [fields, setFields] = useState<ExtractionField[]>([
-    { id: "field-1", name: "name", type: "text" },
-  ]);
+  const [fields, setFields] = useState<ExtractionField[]>([{ id: "field-1", name: "name", type: "text" }]);
   const [results, setResults] = useState<ExtractionData | null>(null);
+  const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [extractedWith, setExtractedWith] = useState<{ provider: string; model: string } | null>(
-    null
-  );
+  const [extractedWith, setExtractedWith] = useState<{ provider: string; model: string } | null>(null);
+
+  const documentViewRef = useRef<DocumentViewHandle>(null);
+
+  // Per-request provider/model picker (playbook §13 action bar).
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [providerKey, setProviderKey] = useState("");
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -57,6 +105,40 @@ export default function DashboardPage() {
       await fetchTemplates();
     })();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [providerList, settingsBody] = await Promise.all([
+          webSiftApi.listProviders(),
+          fetch("/api/settings")
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+        setProviders(providerList);
+        setProviderKey(defaultProviderKey(providerList, (settingsBody?.settings as DefaultSettings) ?? null));
+      } catch {
+        // provider list is best-effort — the picker stays empty and the server falls back to its own default
+      } finally {
+        setProvidersLoaded(true);
+      }
+    })();
+  }, []);
+
+  const [selProviderId, selModel] = useMemo(() => {
+    const [id, model] = providerKey.split("::");
+    return [id ?? "", model ?? ""];
+  }, [providerKey]);
+
+  const selectedProviderInfo = providers.find((p) => p.id === selProviderId);
+  const privacyBadge = selectedProviderInfo
+    ? selectedProviderInfo.privacy === "local"
+      ? { emoji: "🔒", text: `Local · ${selModel || "no model"}` }
+      : { emoji: "☁", text: `Cloud · ${selectedProviderInfo.label} ${selModel}` }
+    : null;
+
+  const localProvider = providers.find((p) => p.id === "ollama");
+  const cloudProviders = providers.filter((p) => p.id !== "ollama");
 
   const handleLoadTemplate = (templateId: string) => {
     setSelectedTemplateId(templateId);
@@ -109,6 +191,22 @@ export default function DashboardPage() {
     }
   };
 
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+    setResults(null);
+    setExtractedText(undefined);
+    setError(null);
+    setExtractedWith(null);
+  };
+
+  const handleClear = () => {
+    setSelectedFile(null);
+    setResults(null);
+    setExtractedText(undefined);
+    setError(null);
+    setExtractedWith(null);
+  };
+
   const handleExtract = async () => {
     if (!selectedFile) return;
 
@@ -121,6 +219,7 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     setResults(null);
+    setExtractedText(undefined);
     setExtractedWith(null);
 
     try {
@@ -129,18 +228,18 @@ export default function DashboardPage() {
       formData.append("fields", JSON.stringify(validFields));
       formData.append("prompt", extractionPrompt);
       formData.append("extractMultiple", extractMultiple.toString());
+      if (selProviderId) {
+        formData.append("provider", selProviderId);
+        if (selModel) formData.append("model", selModel);
+      }
 
-      const response = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
+      const data = await webSiftApi.extract(formData);
 
       if (!data.success) {
         setError(data.error || "Extraction failed");
       } else {
-        setResults(data.data);
+        setResults(data.data ?? null);
+        setExtractedText(data.text);
         if (data.provider && data.model) {
           setExtractedWith({ provider: data.provider, model: data.model });
         }
@@ -152,63 +251,111 @@ export default function DashboardPage() {
     }
   };
 
-  const handleClear = () => {
-    setSelectedFile(null);
-    setResults(null);
-    setError(null);
-    setExtractedWith(null);
+  const handleJumpToValue = (fieldName: string, rowIndex: number) => {
+    documentViewRef.current?.scrollToMark(fieldName, rowIndex);
   };
 
-  const canExtract = selectedFile && fields.some((f) => f.name.trim() !== "");
+  const canExtract =
+    Boolean(selectedFile) &&
+    fields.some((f) => f.name.trim() !== "") &&
+    Boolean(selProviderId) &&
+    (selProviderId !== "ollama" || Boolean(selModel));
+
+  const extractedWithLabel = extractedWith
+    ? (providers.find((p) => p.id === extractedWith.provider)?.label ?? extractedWith.provider)
+    : null;
 
   return (
-    <div className="flex" style={{ minHeight: "100vh" }}>
-      {/* Left Panel - Document Preview */}
-      <motion.aside
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-1/2 border-r border-[var(--border-subtle)] bg-[var(--surface-inset)] flex flex-col sticky top-0"
-        style={{ height: "100vh" }}
-      >
-        <div className="flex-shrink-0 px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/30">
-          <h2 className="font-display text-sm text-[var(--text-secondary)]">
-            Document Preview
-          </h2>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <PDFPreview file={selectedFile} />
-        </div>
-      </motion.aside>
+    <div className="lg:flex lg:h-screen lg:flex-col">
+      {/* Action bar — provider/model picker, privacy badge, Run extraction */}
+      <div className="lg:flex-shrink-0 sticky top-0 z-10 flex flex-wrap items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/80 backdrop-blur-sm">
+        <select
+          value={providerKey}
+          onChange={(e) => setProviderKey(e.target.value)}
+          className="px-3 py-2 rounded-lg input-base text-sm min-w-[220px]"
+          aria-label="Extraction provider and model"
+        >
+          {!providersLoaded && <option value="">Loading providers…</option>}
+          {providersLoaded && !providerKey && <option value="">Select a provider…</option>}
+          <optgroup label="Local">
+            {localProvider && localProvider.models.length > 0 ? (
+              localProvider.models.map((model) => (
+                <option key={model} value={`ollama::${model}`}>
+                  Ollama · {model}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled>
+                {localProvider?.note ?? "No local models installed"}
+              </option>
+            )}
+          </optgroup>
+          <optgroup label="Cloud">
+            {cloudProviders.map((provider) => {
+              const model = provider.models[0] ?? "";
+              return (
+                <option key={provider.id} value={`${provider.id}::${model}`} disabled={!provider.configured}>
+                  {provider.configured ? `${provider.label} · ${model}` : `${provider.label} — configure in Settings`}
+                </option>
+              );
+            })}
+          </optgroup>
+        </select>
 
-      {/* Right Panel - Controls */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="w-1/2 flex flex-col"
-      >
-        <div className="flex-1 overflow-auto">
-          <div className="p-8 space-y-8">
-            {/* Upload Section */}
-            <section className="animate-slide-up" style={{ animationDelay: "0.1s" }}>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-xs font-semibold">
-                  1
-                </span>
-                <h2 className="font-display text-xl text-[var(--text-primary)]">
-                  Upload Document
-                </h2>
-              </div>
-              <FileUpload
-                onFileSelect={setSelectedFile}
-                selectedFile={selectedFile}
-                onClear={handleClear}
-              />
-            </section>
+        {privacyBadge && (
+          <div
+            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+            title={privacyBadge.text}
+          >
+            <span aria-hidden="true" className="not-italic">
+              {privacyBadge.emoji}
+            </span>
+            <span className="truncate max-w-[240px]">{privacyBadge.text}</span>
+          </div>
+        )}
 
-            {/* Templates Section */}
-            <section className="animate-slide-up" style={{ animationDelay: "0.15s" }}>
+        <div className="flex-1" />
+
+        <motion.button
+          whileHover={canExtract && !isLoading ? { scale: 1.02 } : {}}
+          whileTap={canExtract && !isLoading ? { scale: 0.98 } : {}}
+          onClick={handleExtract}
+          disabled={!canExtract || isLoading}
+          className="px-5 py-2.5 rounded-lg btn-primary text-sm flex items-center gap-2 flex-shrink-0"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Extracting…</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4" />
+              <span>Run extraction</span>
+            </>
+          )}
+        </motion.button>
+      </div>
+
+      {/* Two-pane workspace: document left, fields + results right */}
+      <div className="lg:flex-1 lg:flex lg:min-h-0">
+        <div className="lg:w-1/2 border-b lg:border-b-0 lg:border-r border-[var(--border-subtle)] bg-[var(--surface-inset)] lg:h-full lg:overflow-y-auto">
+          <div className="h-[70vh] lg:h-full">
+            <DocumentView
+              ref={documentViewRef}
+              file={selectedFile}
+              onFileSelect={handleFileSelect}
+              onClear={handleClear}
+              results={results}
+              extractedText={extractedText}
+            />
+          </div>
+        </div>
+
+        <div className="lg:w-1/2 lg:h-full lg:overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Templates */}
+            <section>
               <div className="flex items-center gap-3 mb-4">
                 <FolderOpen className="w-4 h-4 text-[var(--text-tertiary)]" />
                 <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
@@ -285,24 +432,18 @@ export default function DashboardPage() {
                   </button>
                 )}
 
-                {saveStatus === "saved" && (
-                  <span className="text-xs text-[var(--success)]">Saved</span>
-                )}
-                {saveStatus === "error" && (
-                  <span className="text-xs text-[var(--error)]">Couldn&apos;t save template</span>
-                )}
+                {saveStatus === "saved" && <span className="text-xs text-[var(--success)]">Saved</span>}
+                {saveStatus === "error" && <span className="text-xs text-[var(--error)]">Couldn&apos;t save template</span>}
               </div>
             </section>
 
-            {/* Configuration Section */}
-            <section className="animate-slide-up" style={{ animationDelay: "0.2s" }}>
+            {/* Field configuration */}
+            <section>
               <div className="flex items-center gap-3 mb-4">
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-xs font-semibold">
-                  2
+                  1
                 </span>
-                <h2 className="font-display text-xl text-[var(--text-primary)]">
-                  Define Extraction
-                </h2>
+                <h2 className="font-display text-xl text-[var(--text-primary)]">Define Extraction</h2>
               </div>
               <div className="card-elevated rounded-xl p-5">
                 <FieldConfiguration
@@ -312,7 +453,6 @@ export default function DashboardPage() {
                   onPromptChange={setExtractionPrompt}
                 />
 
-                {/* Extract Multiple Toggle */}
                 <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
                   <label className="flex items-center justify-between cursor-pointer group">
                     <div className="flex items-center gap-3">
@@ -320,19 +460,13 @@ export default function DashboardPage() {
                         <Table2 className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          Extract multiple rows
-                        </p>
-                        <p className="text-xs text-[var(--text-tertiary)]">
-                          For tables, lists, or repeated data
-                        </p>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">Extract multiple rows</p>
+                        <p className="text-xs text-[var(--text-tertiary)]">For tables, lists, or repeated data</p>
                       </div>
                     </div>
                     <div
                       className={`relative w-11 h-6 rounded-full transition-colors ${
-                        extractMultiple
-                          ? "bg-[var(--accent)]"
-                          : "bg-[var(--surface-overlay)]"
+                        extractMultiple ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
                       }`}
                     >
                       <div
@@ -352,31 +486,7 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* Extract Button */}
-            <section className="animate-slide-up" style={{ animationDelay: "0.3s" }}>
-              <motion.button
-                whileHover={canExtract && !isLoading ? { scale: 1.01 } : {}}
-                whileTap={canExtract && !isLoading ? { scale: 0.99 } : {}}
-                onClick={handleExtract}
-                disabled={!canExtract || isLoading}
-                className="w-full py-4 px-6 rounded-xl btn-primary text-base flex items-center justify-center gap-3"
-              >
-                {isLoading ? (
-                  <>
-                    <span className="w-5 h-5 border-2 border-[var(--surface-base)]/30 border-t-[var(--surface-base)] rounded-full animate-spin" />
-                    <span>Extracting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    <span>Extract Data</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </>
-                )}
-              </motion.button>
-            </section>
-
-            {/* Results Section */}
+            {/* Results */}
             <AnimatePresence mode="wait">
               {(results || isLoading || error) && (
                 <motion.section
@@ -388,18 +498,14 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--success-subtle)] text-[var(--success)] text-xs font-semibold">
-                      3
+                      2
                     </span>
-                    <h2 className="font-display text-xl text-[var(--text-primary)]">
-                      Results
-                    </h2>
+                    <h2 className="font-display text-xl text-[var(--text-primary)]">Results</h2>
                   </div>
 
                   {extractedWith && !isLoading && !error && (
                     <p className="text-xs text-[var(--text-tertiary)] mb-3">
-                      Extracted with{" "}
-                      {PROVIDER_LABELS[extractedWith.provider] ?? extractedWith.provider} ·{" "}
-                      {extractedWith.model}
+                      Extracted with {extractedWithLabel} · {extractedWith.model}
                     </p>
                   )}
 
@@ -408,13 +514,20 @@ export default function DashboardPage() {
                     fields={fields.filter((f) => f.name.trim() !== "")}
                     isLoading={isLoading}
                     error={error}
+                    onJumpToValue={handleJumpToValue}
                   />
                 </motion.section>
               )}
             </AnimatePresence>
+
+            {!results && !isLoading && !error && (
+              <p className="text-xs text-[var(--text-tertiary)] px-1">
+                Define your fields, then run extraction to see results here.
+              </p>
+            )}
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

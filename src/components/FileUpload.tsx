@@ -135,14 +135,14 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               />
             </motion.div>
             <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
-              {isDragging ? "Drop your document" : "Drop a document here"}
+              {isDragging ? "Drop it" : "Drop a document to get started"}
             </p>
             <p className="text-xs text-[var(--text-tertiary)]">
               or{" "}
               <span className="text-[var(--accent)] font-medium">browse files</span>
             </p>
             <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
-              PDF, EML, TXT, MD, CSV, PNG, JPG, or WEBP
+              PDF, email, image, or text — PDF, EML, TXT, MD, CSV, PNG, JPG, or WEBP
             </p>
           </motion.label>
         )}

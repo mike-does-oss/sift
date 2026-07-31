@@ -341,4 +341,43 @@ html.dark .grain-overlay::before {
 .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
 .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
 .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+
+/*
+ * §13 signature: extracted values anchored to where they appear in the
+ * source text — mono chips tinted with --accent-tint, small radius. Task 5
+ * (DocumentView's "Extracted text" view) renders these as <mark> elements.
+ */
+.sift-mark {
+  background: var(--accent-tint);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  padding: 0 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Clicking a result row flashes its mark (restarted via classList on every
+   click, see DocumentView.scrollToMark). Reduced-motion users still get the
+   scroll-into-view jump; the animation itself is dropped below. */
+@keyframes sift-mark-flash {
+  0% {
+    background: var(--accent);
+    color: var(--btn-text);
+  }
+  100% {
+    background: var(--accent-tint);
+    color: var(--text-primary);
+  }
+}
+
+.sift-mark.flash {
+  animation: sift-mark-flash 900ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sift-mark.flash {
+    animation: none;
+  }
+}
 .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }

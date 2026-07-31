@@ -87,5 +87,10 @@ export async function POST(request: NextRequest) {
   if (!result.success) {
     return NextResponse.json({ success: false, error: result.error, provider: result.provider, model: result.model }, { status: 500 });
   }
-  return NextResponse.json({ success: true, data: result.data, provider: result.provider, model: result.model });
+  // `text` is the document text the model saw — absent for images (vision
+  // only, no text representation). For PDFs this is the extracted text layer
+  // (used to anchor result values in the source even when the engine itself
+  // read the PDF natively via vision). Additive: existing clients ignore it.
+  const text = source.kind === "image" ? undefined : source.text;
+  return NextResponse.json({ success: true, data: result.data, provider: result.provider, model: result.model, text });
 }
