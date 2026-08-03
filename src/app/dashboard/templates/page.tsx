@@ -130,8 +130,7 @@ export default function TemplatesPage() {
 
     // Re-validate every non-empty draft at save time too (not just on blur —
     // the field the user was last typing in may never have blurred). An
-    // invalid draft is flagged inline and excluded from what gets saved
-    // rather than blocking the rest of the template from saving.
+    // invalid example blocks the save so nothing is silently dropped.
     const examples: TemplateExample[] = [];
     let anyInvalid = false;
     const revalidated = exampleDrafts.map((d) => {
@@ -145,7 +144,11 @@ export default function TemplatesPage() {
       anyInvalid = true;
       return { ...d, error: result.error };
     });
-    if (anyInvalid) setExampleDrafts(revalidated);
+    if (anyInvalid) {
+      setExampleDrafts(revalidated);
+      setError("Fix or clear the invalid example(s) before saving.");
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
