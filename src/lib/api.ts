@@ -90,6 +90,21 @@ export interface ScaffoldResponse {
 }
 
 /**
+ * Per-request provider/model override — the same shape the action-bar
+ * picker sends with `/api/extract` (as `provider`/`model` form fields), now
+ * also accepted by `SiftApi.scaffold` (§S3: scaffold used to silently
+ * ignore this and always fall back to the configured default provider).
+ * Structurally identical to `ExtractionOverride`
+ * (`src/lib/extraction/provider-resolution.ts`), redeclared here rather than
+ * imported to keep this UI-facing module free of a dependency on the
+ * server-only extraction package.
+ */
+export interface ProviderOverride {
+  provider: ProviderId;
+  model?: string;
+}
+
+/**
  * The one seam between UI code and the data layer (see playbook §14). The
  * web app implements this over `fetch('/api/...')`; a future desktop shell
  * would implement the same interface over IPC. UI code should depend only on
@@ -107,9 +122,12 @@ export interface SiftApi {
    * Meta-extraction (§T2.6): turns a plain-language task description into a
    * starting `{ fields, prompt, extractMultiple }` config via `POST
    * /api/scaffold`, dispatched through the same active-provider resolution
-   * as `extract`. Never throws on an engine-level failure — check `.error`.
+   * as `extract` — pass the same `override` the caller sends with `extract`
+   * so scaffold runs against the picker's current selection instead of the
+   * configured default. Never throws on an engine-level failure — check
+   * `.error`.
    */
-  scaffold(description: string): Promise<ScaffoldResponse>;
+  scaffold(description: string, override?: ProviderOverride): Promise<ScaffoldResponse>;
   /**
    * Downloads an Ollama model via `POST /api/providers/pull`, invoking
    * `onProgress` once per NDJSON line the server forwards. Resolves once the
@@ -180,11 +198,11 @@ class WebSiftApi implements SiftApi {
     return (await res.json()) as ExtractResponse;
   }
 
-  async scaffold(description: string): Promise<ScaffoldResponse> {
+  async scaffold(description: string, override?: ProviderOverride): Promise<ScaffoldResponse> {
     const res = await fetch("/api/scaffold", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description }),
+      body: JSON.stringify({ description, ...(override ?? {}) }),
     });
     return (await res.json()) as ScaffoldResponse;
   }

@@ -8,7 +8,7 @@ import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHand
 import type { ExtractionField, ExtractionData, TemplateExample } from "@/types";
 import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
-import { webSiftApi, type ProviderInfo } from "@/lib/api";
+import { webSiftApi, type ProviderInfo, type ProviderOverride, type ProviderId } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
 import type { ModelRec } from "@/lib/model-recommend";
 import type { Quotes } from "@/lib/highlight";
@@ -210,6 +210,17 @@ export default function DashboardPage() {
     return [id ?? "", model ?? ""];
   }, [providerKey]);
 
+  // The action bar's current provider/model selection, in the shape both
+  // `extract` and `scaffold` accept as a per-request override — built once
+  // so both call sites dispatch through the identical resolution (§S3: the
+  // "Build fields from description" action used to silently ignore this and
+  // always run against the configured default provider instead of whatever
+  // the picker shows).
+  const providerOverride: ProviderOverride | undefined = useMemo(
+    () => (selProviderId ? { provider: selProviderId as ProviderId, model: selModel || undefined } : undefined),
+    [selProviderId, selModel]
+  );
+
   // §T3 — examples ride along silently with whatever saved template is
   // currently loaded (no workspace editor for them this pass; presets never
   // carry examples). Derived straight from `templates`/`selectedTemplateId`
@@ -335,7 +346,7 @@ export default function DashboardPage() {
     setIsScaffolding(true);
     setScaffoldError(null);
     try {
-      const result: ScaffoldResponse = await webSiftApi.scaffold(extractionPrompt.trim());
+      const result: ScaffoldResponse = await webSiftApi.scaffold(extractionPrompt.trim(), providerOverride);
       if (result.error || !result.fields) {
         setScaffoldError(result.error || "Scaffolding failed");
         return;
@@ -397,9 +408,9 @@ export default function DashboardPage() {
       if (selectedTemplateExamples && selectedTemplateExamples.length > 0) {
         formData.append("examples", JSON.stringify(selectedTemplateExamples));
       }
-      if (selProviderId) {
-        formData.append("provider", selProviderId);
-        if (selModel) formData.append("model", selModel);
+      if (providerOverride) {
+        formData.append("provider", providerOverride.provider);
+        if (providerOverride.model) formData.append("model", providerOverride.model);
       }
 
       const data = await webSiftApi.extract(formData);

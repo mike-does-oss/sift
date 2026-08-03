@@ -247,6 +247,50 @@ describe("scaffoldSchema — provider resolution reuse", () => {
   });
 });
 
+// §S3: the /api/scaffold route now forwards the action bar's current
+// provider/model picker as an override — assert scaffoldSchema itself
+// honors it (resolveProvider already did; this proves the plumbing above it
+// dispatches to the *overridden* provider, not the configured default).
+describe("scaffoldSchema — override dispatch (§S3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getSettingsMock.mockReturnValue({ ...BASE_SETTINGS, provider: "ollama" });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("dispatches to the override provider, not the configured default", async () => {
+    openaiCreateMock.mockResolvedValue(
+      openaiChatResponse({
+        fields: [{ name: "vendor", type: "text", description: "d" }],
+        prompt: "p",
+        extract_multiple: false,
+      })
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await scaffoldSchema("extract the vendor", { provider: "openai" });
+
+    expect(fetchMock).not.toHaveBeenCalled(); // never touches ollama's endpoint
+    expect(openaiConstructorMock).toHaveBeenCalledWith({ apiKey: "oai-key" });
+    expect(openaiCreateMock.mock.calls[0][0].model).toBe("gpt-4o"); // configured openai model, since override omitted `model`
+    expect(result.success).toBe(true);
+  });
+
+  it("dispatches to the override's model, not the configured default model", async () => {
+    openaiCreateMock.mockResolvedValue(
+      openaiChatResponse({ fields: [{ name: "vendor", type: "text", description: "d" }], prompt: "p", extract_multiple: false })
+    );
+
+    const result = await scaffoldSchema("extract the vendor", { provider: "openai", model: "gpt-4o-mini" });
+
+    expect(openaiCreateMock.mock.calls[0][0].model).toBe("gpt-4o-mini");
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("scaffoldSchema — post-validation", () => {
   beforeEach(() => {
     getSettingsMock.mockReturnValue(BASE_SETTINGS);

@@ -1,13 +1,6 @@
-import type { ExtractionData } from "@/types";
-import { buildJsonSchema, unwrapGrounded } from "./schema";
-import {
-  PDF_NO_TEXT_ERROR,
-  QUOTE_INSTRUCTION,
-  VERBATIM_INSTRUCTION,
-  buildExamplesBlock,
-  type ExtractionInput,
-  type ExtractionOutput,
-} from "./types";
+import { buildJsonSchema } from "./schema";
+import { PDF_NO_TEXT_ERROR, type ExtractionInput, type ExtractionOutput } from "./types";
+import { textEngineSystemPrompt, textEngineInstruction, finalizeTextEngineOutput } from "./promptParts";
 
 interface CompatChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
@@ -88,10 +81,8 @@ export async function extractWithOpenAICompatible(
   }
   const grounded = input.grounded ?? false;
   const schema = buildJsonSchema(input.fields, input.extractMultiple, { grounded });
-  const system = grounded
-    ? `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION} ${QUOTE_INSTRUCTION}`
-    : `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION}`;
-  const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})${f.description ? `: ${f.description}` : ""}`).join("\n")}${buildExamplesBlock(input.examples)}`;
+  const system = textEngineSystemPrompt(grounded);
+  const instruction = textEngineInstruction(input);
 
   let user: string | CompatContentPart[];
   if (input.source.kind === "image") {
@@ -104,14 +95,5 @@ export async function extractWithOpenAICompatible(
   }
 
   const out = await compatChat(input.baseUrl, input.apiKey, input.model ?? "", schema, system, user);
-  if (!out.success) return out;
-  if (!grounded) {
-    if (input.extractMultiple) {
-      const d = out.data as Record<string, unknown>;
-      return { success: true, data: (Array.isArray(d) ? d : (d.items as never)) ?? d };
-    }
-    return out;
-  }
-  const { data, quotes } = unwrapGrounded(out.data, input.extractMultiple);
-  return { success: true, data: data as ExtractionData, quotes };
+  return finalizeTextEngineOutput(out, grounded, input.extractMultiple);
 }
