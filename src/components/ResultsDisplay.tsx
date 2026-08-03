@@ -148,13 +148,11 @@ function ExportBar({
   onCopy,
   onDownloadJson,
   onDownloadCsv,
-  showCsv,
 }: {
   copied: boolean;
   onCopy: () => void;
   onDownloadJson: () => void;
   onDownloadCsv: () => void;
-  showCsv: boolean;
 }) {
   return (
     <div className="flex items-center gap-1">
@@ -168,17 +166,15 @@ function ExportBar({
         {copied ? "Copied" : "Copy"}
       </motion.button>
 
-      {showCsv && (
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onDownloadCsv}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-        >
-          <Download className="w-3.5 h-3.5" />
-          CSV
-        </motion.button>
-      )}
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={onDownloadCsv}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+      >
+        <Download className="w-3.5 h-3.5" />
+        CSV
+      </motion.button>
 
       <motion.button
         whileHover={{ scale: 1.05 }}
@@ -324,7 +320,7 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
               <p className="text-xs text-[var(--text-tertiary)]">{resultsArray.length} rows extracted</p>
             </div>
           </div>
-          <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} showCsv />
+          <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
         </div>
 
         <div className="overflow-x-auto">
@@ -425,7 +421,7 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
             </p>
           </div>
         </div>
-        <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} showCsv={false} />
+        <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
       </div>
 
       <div className="divide-y divide-[var(--border-subtle)]">

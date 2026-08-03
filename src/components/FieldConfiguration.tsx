@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
-import { Plus, X, GripVertical, Type, Hash, Calendar, ToggleLeft, List } from "lucide-react";
+import { Plus, X, GripVertical, Type, Hash, Calendar, ToggleLeft, List, MessageSquarePlus } from "lucide-react";
 import type { ExtractionField, FieldType } from "@/types";
 
 interface FieldConfigurationProps {
@@ -27,6 +27,22 @@ export function FieldConfiguration({
   onPromptChange,
 }: FieldConfigurationProps) {
   const [isAddingField, setIsAddingField] = useState(false);
+  // Field ids whose description input has been explicitly toggled open by
+  // the user. A field with a non-empty description is always shown as
+  // visible too (see `isDescriptionVisible`), independent of this set.
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+
+  const toggleDescription = (id: string) => {
+    setExpandedDescriptions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isDescriptionVisible = (field: ExtractionField) =>
+    expandedDescriptions.has(field.id) || Boolean(field.description);
 
   const addField = () => {
     const newField: ExtractionField = {
@@ -102,41 +118,72 @@ export function FieldConfiguration({
                 exit={{ opacity: 0, x: -16, transition: { duration: 0.15 } }}
                 className="group"
               >
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-colors">
-                  <div className="cursor-grab active:cursor-grabbing text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors p-1">
-                    <GripVertical className="w-3.5 h-3.5" />
+                <div className="rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] hover:border-[var(--border-default)] transition-colors">
+                  <div className="flex items-center gap-2 p-2">
+                    <div className="cursor-grab active:cursor-grabbing text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors p-1">
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
+
+                    <input
+                      type="text"
+                      value={field.name}
+                      onChange={(e) => updateField(field.id, { name: e.target.value })}
+                      placeholder="Field name"
+                      autoFocus={isAddingField && fields[fields.length - 1]?.id === field.id}
+                      className="flex-1 px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all"
+                    />
+
+                    <select
+                      value={field.type}
+                      onChange={(e) =>
+                        updateField(field.id, { type: e.target.value as FieldType })
+                      }
+                      className="px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-xs font-medium text-[var(--text-secondary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all appearance-none cursor-pointer min-w-[90px]"
+                    >
+                      {fieldTypes.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => toggleDescription(field.id)}
+                      className={`p-1.5 rounded-md transition-all ${
+                        isDescriptionVisible(field)
+                          ? "text-[var(--accent)] bg-[var(--accent-subtle)] opacity-100"
+                          : "text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] opacity-0 group-hover:opacity-100"
+                      }`}
+                      aria-label={
+                        isDescriptionVisible(field) ? "Hide field description" : "Add field description"
+                      }
+                      title="Describe what to extract for this field"
+                    >
+                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => removeField(field.id)}
+                      className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all opacity-0 group-hover:opacity-100"
+                      aria-label="Remove field"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
-                  <input
-                    type="text"
-                    value={field.name}
-                    onChange={(e) => updateField(field.id, { name: e.target.value })}
-                    placeholder="Field name"
-                    autoFocus={isAddingField && fields[fields.length - 1]?.id === field.id}
-                    className="flex-1 px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all"
-                  />
-
-                  <select
-                    value={field.type}
-                    onChange={(e) =>
-                      updateField(field.id, { type: e.target.value as FieldType })
-                    }
-                    className="px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-xs font-medium text-[var(--text-secondary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all appearance-none cursor-pointer min-w-[90px]"
-                  >
-                    {fieldTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={() => removeField(field.id)}
-                    className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all opacity-0 group-hover:opacity-100"
-                    aria-label="Remove field"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  {isDescriptionVisible(field) && (
+                    <div className="px-2 pb-2">
+                      <input
+                        type="text"
+                        value={field.description ?? ""}
+                        onChange={(e) =>
+                          updateField(field.id, { description: e.target.value === "" ? undefined : e.target.value })
+                        }
+                        placeholder='Describe what to extract — the model reads this (e.g. "Total after tax, without currency symbol")'
+                        className="w-full px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-xs text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all"
+                      />
+                    </div>
+                  )}
                 </div>
               </Reorder.Item>
             ))}
