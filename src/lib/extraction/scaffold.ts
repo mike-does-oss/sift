@@ -38,14 +38,19 @@ export const SCAFFOLD_SYSTEM_PROMPT =
   "refined extraction prompt, and whether the task needs one record (false) or one row per repeated item (true). " +
   "No commentary.";
 
-/** Strict meta-schema: the shape scaffoldSchema asks the model to fill in, describing a document-extraction schema. */
+/**
+ * Strict meta-schema: the shape scaffoldSchema asks the model to fill in,
+ * describing a document-extraction schema. Deliberately omits `minItems`/
+ * `maxItems` on the `fields` array — OpenAI's strict structured-output mode
+ * rejects those keywords with a 400 (documented restriction: strict schemas
+ * support only a subset of JSON Schema). Bounds (1..MAX_FIELDS) are enforced
+ * purely in `postValidate` instead, uniformly across every engine.
+ */
 export const SCAFFOLD_META_SCHEMA = {
   type: "object" as const,
   properties: {
     fields: {
       type: "array",
-      minItems: 1,
-      maxItems: MAX_FIELDS,
       items: {
         type: "object" as const,
         properties: {
@@ -86,15 +91,30 @@ function isFieldType(value: unknown): value is FieldType {
 }
 
 /**
+ * Resolves a normalized name against names already assigned: the first
+ * occurrence keeps the bare name, each later collision gets the next free
+ * `<name>_2`, `<name>_3`, … suffix — so "Invoice" and "Invoice #" (both
+ * normalizing to "invoice") become "invoice" and "invoice_2" instead of the
+ * second silently vanishing.
+ */
+function dedupeName(name: string, seenCounts: Map<string, number>): string {
+  const count = seenCounts.get(name) ?? 0;
+  seenCounts.set(name, count + 1);
+  return count === 0 ? name : `${name}_${count + 1}`;
+}
+
+/**
  * Validates and normalizes the model's raw meta-extraction response into the
  * shape the workspace field editor expects: non-empty snake_case names,
- * deduped, types constrained to the supported union (defaulting to "text"
- * like the editor's own unknown-type fallback — see `schema.ts`
- * `fieldValueSchema`'s default case), capped at `MAX_FIELDS`, with generated
- * `scaffold-<n>` ids assigned sequentially over the surviving fields (no
- * gaps from dropped entries).
+ * collisions suffixed (see `dedupeName`) rather than dropped, types
+ * constrained to the supported union (defaulting to "text" like the editor's
+ * own unknown-type fallback — see `schema.ts` `fieldValueSchema`'s default
+ * case), capped at `MAX_FIELDS`, with generated `scaffold-<n>` ids assigned
+ * sequentially over the surviving fields (no gaps from dropped entries).
+ * Bounds (empty/over-cap) are enforced here rather than in the meta-schema —
+ * see `SCAFFOLD_META_SCHEMA`'s comment.
  */
-function postValidate(raw: unknown): ScaffoldResult {
+export function postValidate(raw: unknown): ScaffoldResult {
   if (!raw || typeof raw !== "object") {
     return { success: false, error: "The model returned an unexpected response — try rephrasing your description." };
   }
@@ -103,7 +123,7 @@ function postValidate(raw: unknown): ScaffoldResult {
   const prompt = typeof obj.prompt === "string" ? obj.prompt : "";
   const extractMultiple = obj.extract_multiple === true;
 
-  const seenNames = new Set<string>();
+  const seenCounts = new Map<string, number>();
   const fields: ExtractionField[] = [];
 
   for (const entry of rawFields) {
@@ -111,9 +131,9 @@ function postValidate(raw: unknown): ScaffoldResult {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;
 
-    const name = toSnakeCase(typeof e.name === "string" ? e.name : "");
-    if (!name || seenNames.has(name)) continue;
-    seenNames.add(name);
+    const normalized = toSnakeCase(typeof e.name === "string" ? e.name : "");
+    if (!normalized) continue;
+    const name = dedupeName(normalized, seenCounts);
 
     const type: FieldType = isFieldType(e.type) ? e.type : "text";
     const description = typeof e.description === "string" && e.description.trim() ? e.description.trim() : undefined;
@@ -127,7 +147,10 @@ function postValidate(raw: unknown): ScaffoldResult {
   }
 
   if (fields.length === 0) {
-    return { success: false, error: "Couldn't derive any fields from that description — try rephrasing it." };
+    return {
+      success: false,
+      error: "The model couldn't derive any fields from that description — try adding more detail.",
+    };
   }
 
   return { success: true, fields, prompt, extractMultiple };
