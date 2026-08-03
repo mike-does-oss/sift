@@ -13,7 +13,7 @@ import { FileText, Image as ImageIcon, X } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { PDFPreview } from "./PDFPreview";
 import type { ExtractionData } from "@/types";
-import { computeMatchRanges, type MatchRange } from "@/lib/highlight";
+import { computeMatchRanges, type MatchRange, type Quotes } from "@/lib/highlight";
 
 export interface DocumentViewHandle {
   /** Scrolls the first matching `<mark>` for this field/row into view and flashes it (playbook §13 signature). No-op if the value wasn't anchored (never appeared verbatim in the text). */
@@ -28,6 +28,8 @@ interface DocumentViewProps {
   results: ExtractionData | null;
   /** The document text the model saw, from the extract response — undefined for images. */
   extractedText?: string;
+  /** Per-field/row source quotes from a grounded extraction — undefined when the engine/response didn't ground. Quote matches take precedence over value matching (see `computeMatchRanges`). */
+  quotes?: Quotes;
 }
 
 type ClientKind = "pdf" | "image" | "text";
@@ -79,7 +81,7 @@ function prefersReducedMotion(): boolean {
  * verbatim-matching result value with a `<mark>` (the product's signature).
  */
 export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(function DocumentView(
-  { file, onFileSelect, onClear, results, extractedText },
+  { file, onFileSelect, onClear, results, extractedText, quotes },
   ref
 ) {
   const [view, setView] = useState<"document" | "extracted">("document");
@@ -119,9 +121,9 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
     }
   }, [file]);
 
-  const ranges = useMemo(
-    () => computeMatchRanges(extractedText ?? "", results),
-    [extractedText, results]
+  const { ranges } = useMemo(
+    () => computeMatchRanges(extractedText ?? "", results, quotes),
+    [extractedText, results, quotes]
   );
   const segments = useMemo(
     () => renderHighlightedText(extractedText ?? "", ranges),

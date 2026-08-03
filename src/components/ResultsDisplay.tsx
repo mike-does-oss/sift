@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion";
 import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ExtractionField, ExtractionData, ExtractionResult } from "@/types";
 import { toCsv, downloadText } from "@/lib/export";
+import { computeMatchRanges, type Quotes } from "@/lib/highlight";
 import { SaveToDatasetPanel } from "./SaveToDatasetPanel";
 
 type FieldValue = string | number | boolean | string[] | null;
@@ -17,6 +18,15 @@ interface ResultsDisplayProps {
   error: string | null;
   /** Scrolls the value's first anchor mark into view in the document pane, if it appears verbatim in the text. */
   onJumpToValue?: (fieldName: string, rowIndex: number) => void;
+  /**
+   * The document text the model saw, from the extract response — undefined
+   * for images. Only used to compute the "not found in source" hint below;
+   * pass it whenever `onJumpToValue`'s same availability rule (extracted-text
+   * view exists) is met, undefined otherwise so no hint is computed.
+   */
+  extractedText?: string;
+  /** Per-field/row source quotes from a grounded extraction — undefined when the engine/response didn't ground. */
+  quotes?: Quotes;
 }
 
 function valuesEqual(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
@@ -190,7 +200,15 @@ function ExportBar({
   );
 }
 
-export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValue }: ResultsDisplayProps) {
+export function ResultsDisplay({
+  results,
+  fields,
+  isLoading,
+  error,
+  onJumpToValue,
+  extractedText,
+  quotes,
+}: ResultsDisplayProps) {
   const [copied, setCopied] = useState(false);
   // Working copy the user edits. Immutable updates only, so sharing object
   // identity with `results` at rest is safe. Resyncs whenever a *new*
@@ -207,6 +225,21 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
   const isArray = Array.isArray(results);
   const resultsArray: ExtractionResult[] = isArray ? results : results ? [results] : [];
   const editedArray: ExtractionResult[] = Array.isArray(edited) ? edited : edited ? [edited] : [];
+
+  // "Not found in source" hint (grounded extraction, T2): keyed off the
+  // original extracted values/quotes, not the edited working copy — the
+  // question this answers is "did the model's own extraction show up
+  // verbatim in the document", which editing a cell doesn't change. Only
+  // computed when an extracted-text view exists at all (same availability
+  // rule `onJumpToValue`'s presence already encodes for the crosshair) —
+  // `extractedText` is undefined for images, so this stays a no-op there.
+  const anchoredMap = useMemo(() => {
+    if (!extractedText || !results) return null;
+    const { anchors } = computeMatchRanges(extractedText, results, quotes);
+    const map = new Map<string, boolean>();
+    anchors.forEach((a) => map.set(`${a.row}:${a.field}`, a.anchored));
+    return map;
+  }, [extractedText, results, quotes]);
 
   const updateField = (rowIndex: number, fieldName: string, value: FieldValue) => {
     setEdited((prev) => {
@@ -364,10 +397,25 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
                   const original = resultsArray[rowIndex]?.[field.name] ?? null;
                   const current = row[field.name] ?? null;
                   const isEdited = !valuesEqual(current, original);
+                  // Non-null value, but neither its quote nor the value
+                  // itself was found verbatim in the document text — a
+                  // light trust signal, not a validation error (the value
+                  // may still be correct; it just can't be verified against
+                  // the source the way anchored cells can).
+                  const unanchored =
+                    anchoredMap !== null && original !== null && anchoredMap.get(`${rowIndex}:${field.name}`) === false;
                   return (
-                    <td key={field.id} className="px-2 py-2 min-w-[9rem]">
+                    <td
+                      key={field.id}
+                      className="px-2 py-2 min-w-[9rem]"
+                      title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
+                    >
                       <div className="group/cell flex items-start gap-1">
-                        <div className="flex-1 min-w-0">
+                        <div
+                          className={`flex-1 min-w-0 ${
+                            unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
+                          }`}
+                        >
                           <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
                         </div>
                         <div className="flex-shrink-0 flex flex-col items-center gap-0.5 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity">

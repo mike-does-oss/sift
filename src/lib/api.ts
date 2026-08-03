@@ -1,5 +1,6 @@
 import type { ExtractionData } from "@/types";
 import type { SystemInfo, ModelRec } from "@/lib/model-recommend";
+import type { Quotes } from "@/lib/highlight";
 
 /**
  * Provider identifiers.
@@ -70,6 +71,14 @@ export interface ExtractResponse {
    * Additive field (Task 5): older callers that ignore it are unaffected.
    */
   text?: string;
+  /**
+   * Per-field (single) or per-row (multi) source quotes from a grounded
+   * extraction — absent when the engine/request didn't ground (see
+   * `ExtractionOutput.quotes`, `src/lib/extraction/types.ts`). Feeds
+   * `computeMatchRanges`' quote-first anchoring precedence; additive like
+   * `text` above.
+   */
+  quotes?: Quotes;
 }
 
 /**

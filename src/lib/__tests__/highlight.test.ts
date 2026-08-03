@@ -52,7 +52,7 @@ describe("computeMatchRanges — repeated values anchor per row (SF6)", () => {
       { vendor: "Acme Corp", amount: 100 },
       { vendor: "Acme Corp", amount: 250.5 },
     ];
-    const ranges = computeMatchRanges(text, results);
+    const { ranges } = computeMatchRanges(text, results);
 
     const vendorRanges = ranges.filter((r) => r.field === "vendor").sort((a, b) => a.row - b.row);
     expect(vendorRanges).toHaveLength(2);
@@ -74,7 +74,7 @@ describe("computeMatchRanges — repeated values anchor per row (SF6)", () => {
       { vendor: "Acme Corp" },
       { vendor: "Acme Corp" },
     ];
-    const ranges = computeMatchRanges(text, results);
+    const { ranges } = computeMatchRanges(text, results);
     // Only one span in the text can be claimed — the third row's search
     // (starting after row 1's match) finds nothing and falls back to the
     // same first occurrence row 0 already claimed, so overlap resolution
@@ -82,5 +82,97 @@ describe("computeMatchRanges — repeated values anchor per row (SF6)", () => {
     expect(ranges.length).toBeGreaterThanOrEqual(1);
     expect(ranges[0].row).toBe(0);
     expect(slice(text, ranges[0])).toBe("Acme Corp");
+  });
+});
+
+describe("computeMatchRanges — quote-aware anchoring (grounded extraction, T2)", () => {
+  it("quote match takes precedence over value matching when both could anchor", () => {
+    // The bare value "100" could itself match plenty of places in this text;
+    // the quote pins the anchor to the specific verbatim span the model read
+    // it from instead of wherever value-matching would have landed first.
+    const text = "Line 1: qty 100 @ $5 = 100.00 subtotal";
+    const results = { amount: 100 };
+    const quotes = { amount: "100.00" };
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+
+    expect(ranges).toHaveLength(1);
+    expect(slice(text, ranges[0])).toBe("100.00");
+    expect(ranges[0].start).toBe(text.indexOf("100.00"));
+    expect(anchors).toEqual([{ field: "amount", row: 0, anchored: true }]);
+  });
+
+  it("quote anchors a value that value-matching could never find on its own", () => {
+    // "1,320" (the grouped form of 1320) would normally satisfy the
+    // word-boundary guard against "1,320.00" (the char after is "."), but
+    // here it's glued directly to a currency code ("AUD1,320.00") so the
+    // *value*-based candidate fails the boundary check on its leading edge.
+    // The quote is verbatim, so it still anchors via the boundary-bypass
+    // fallback in findQuoteMatch.
+    const text = "Total: AUD1,320.00 due on receipt";
+    const results = { total: 1320 };
+    const quotes = { total: "1,320.00" };
+
+    const valueOnly = computeMatchRanges(text, results);
+    expect(valueOnly.ranges).toHaveLength(0);
+    expect(valueOnly.anchors).toEqual([{ field: "total", row: 0, anchored: false }]);
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    expect(ranges).toHaveLength(1);
+    expect(slice(text, ranges[0])).toBe("1,320.00");
+    expect(anchors).toEqual([{ field: "total", row: 0, anchored: true }]);
+  });
+
+  it("advances a per-quote cursor so duplicate quotes across rows anchor their own occurrence", () => {
+    const text = "Item A: 1,320.00\nItem B: 1,320.00\nItem C: 1,320.00";
+    const results = [{ total: 1320 }, { total: 1320 }, { total: 1320 }];
+    const quotes = [{ total: "1,320.00" }, { total: "1,320.00" }, { total: "1,320.00" }];
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    expect(ranges).toHaveLength(3);
+    const sorted = ranges.slice().sort((a, b) => a.row - b.row);
+    expect(sorted.map((r) => r.start)).toEqual([
+      text.indexOf("1,320.00"),
+      text.indexOf("1,320.00", text.indexOf("1,320.00") + 1),
+      text.lastIndexOf("1,320.00"),
+    ]);
+    expect(anchors.every((a) => a.anchored)).toBe(true);
+  });
+
+  it("falls back to value matching when the quote is null, absent, or not found in the text", () => {
+    const text = "Vendor: Acme Corp — Total: 42 — Item: Widget";
+    const results = { vendor: "Acme Corp", total: 42, extra: "Widget" };
+    const quotes = { vendor: null, total: "nowhere in the text", /* extra: absent */ };
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    const byField = Object.fromEntries(ranges.map((r) => [r.field, r]));
+
+    // null quote -> falls back to value match
+    expect(slice(text, byField.vendor)).toBe("Acme Corp");
+    // quote present but not found in text -> falls back to value match
+    expect(slice(text, byField.total)).toBe("42");
+    // quote key absent entirely -> falls back to value match
+    expect(slice(text, byField.extra)).toBe("Widget");
+
+    expect(anchors.sort((a, b) => a.field.localeCompare(b.field))).toEqual([
+      { field: "extra", row: 0, anchored: true },
+      { field: "total", row: 0, anchored: true },
+      { field: "vendor", row: 0, anchored: true },
+    ]);
+  });
+
+  it("reports anchored: false when neither the quote nor the value can be found", () => {
+    const text = "This document mentions nothing relevant.";
+    const results = { total: 999, vendor: null };
+    const quotes = { total: "not present anywhere" };
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    expect(ranges).toHaveLength(0);
+    // `vendor` is null — no anchor entry at all, matching "null values unchanged".
+    expect(anchors).toEqual([{ field: "total", row: 0, anchored: false }]);
+  });
+
+  it("returns no ranges/anchors when text or results is missing, with or without quotes", () => {
+    expect(computeMatchRanges("", { a: 1 }, { a: "1" })).toEqual({ ranges: [], anchors: [] });
+    expect(computeMatchRanges("some text", null, { a: "1" })).toEqual({ ranges: [], anchors: [] });
   });
 });

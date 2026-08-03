@@ -15,6 +15,24 @@ export interface MatchRange {
   row: number;
 }
 
+/** Per-field/row anchor status — one entry for every field/row whose value is non-null, whether or not a `<mark>` was produced for it. Lets callers (e.g. ResultsDisplay's "not found in source" hint) distinguish "no anchor because the value is absent" from "anchor was attempted but nothing matched verbatim". */
+export interface FieldAnchor {
+  field: string;
+  row: number;
+  anchored: boolean;
+}
+
+export interface MatchComputation {
+  ranges: MatchRange[];
+  anchors: FieldAnchor[];
+}
+
+/** Source quotes for one row, keyed by field name — `null` (or absent) means the engine didn't ground that field. Mirrors `ExtractionOutput.quotes`'s per-row shape (`src/lib/extraction/types.ts`). */
+export type QuoteRow = Record<string, string | null | undefined>;
+
+/** Single-row form (object) or multi-row form (array), matching `ExtractionOutput.quotes` / `ExtractionData`'s own single-vs-array shape. */
+export type Quotes = QuoteRow | QuoteRow[];
+
 /** String forms to search for, in priority order. Numbers also get a thousands-separated form so "1,234.56" in the source text still anchors to the numeric value 1234.56. */
 export function candidateStrings(value: string | number | boolean): string[] {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -85,11 +103,53 @@ export function findFirstMatch(
   return null;
 }
 
-export function computeMatchRanges(text: string, results: ExtractionData | null): MatchRange[] {
-  if (!text || !results) return [];
+/**
+ * Exact quote match: quotes are copied verbatim by the model (see
+ * `QUOTE_INSTRUCTION` in `src/lib/extraction/types.ts`), so unlike
+ * `findFirstMatch` there's no case-insensitive fallback and no candidate
+ * expansion — just `indexOf`. The word-boundary guard is still tried first
+ * (cheap, and correct in the common case), but a plain `indexOf` hit wins
+ * even where the guard would reject it: a full verbatim quote is strong
+ * enough evidence on its own that the boundary heuristic (tuned to stop
+ * short user-entered values like "5" or "IN" from matching mid-word) would
+ * only produce false negatives here, never false positives.
+ */
+function findQuoteMatch(text: string, quote: string, fromIndex: number): { start: number; end: number } | null {
+  const boundaryIdx = findBoundaryIndex(text, quote, text, fromIndex);
+  if (boundaryIdx !== -1) return { start: boundaryIdx, end: boundaryIdx + quote.length };
+  const plainIdx = text.indexOf(quote, fromIndex);
+  if (plainIdx !== -1) return { start: plainIdx, end: plainIdx + quote.length };
+  return null;
+}
+
+/**
+ * Anchors every field/row's value in `text`, quote-aware. Precedence per
+ * field/row (see "Anchoring precedence", `docs/plans/2026-08-03-grounded-extraction.md`):
+ *   (a) exact quote match, if `quotes` supplies one for this field/row —
+ *       verbatim `indexOf`, with a duplicate-quote cursor so repeated quotes
+ *       across rows each anchor their own occurrence (mirrors SF6 below).
+ *   (b) existing value-derived matching (candidate strings, word-boundary
+ *       guard, per-value cursor) — unchanged, and the fallback whenever (a)
+ *       doesn't apply (quote null/absent/not found in the text).
+ *   (c) neither anchors → the field/row is reported `anchored: false` so UI
+ *       callers can render an "unverified" hint (ResultsDisplay) without
+ *       having to re-derive match state themselves.
+ * Returns both the flat `ranges` (for `<mark>` rendering, as before) and the
+ * per-field/row `anchors` (new) — one entry per non-null value, regardless
+ * of whether it anchored.
+ */
+export function computeMatchRanges(text: string, results: ExtractionData | null, quotes?: Quotes): MatchComputation {
+  if (!text || !results) return { ranges: [], anchors: [] };
   const rows = Array.isArray(results) ? results : [results];
+  // Only trust `quotes` when its array-ness matches `results`' — a single
+  // QuoteRow aligns with a single-object `results`, an array aligns
+  // per-index with multi-row `results`. A shape mismatch (contract
+  // violation upstream) falls back to no quotes rather than misaligning
+  // row 0's quotes onto every row.
+  const quoteRows: QuoteRow[] = Array.isArray(quotes) ? quotes : quotes && !Array.isArray(results) ? [quotes] : [];
   const lowerText = text.toLowerCase();
   const ranges: MatchRange[] = [];
+  const anchors: FieldAnchor[] = [];
 
   // Per-value search cursor (SF6): when the same value is shared by more than
   // one row/field (a repeated vendor name, date, currency — the common case
@@ -99,29 +159,55 @@ export function computeMatchRanges(text: string, results: ExtractionData | null)
   // rows 1..N with no mark and a dead crosshair). Keyed on the raw item's
   // type+value, not the matched candidate string, so `100` and `"100"` don't
   // share a cursor.
-  const cursors = new Map<string, number>();
+  const valueCursors = new Map<string, number>();
+  // Same idea, keyed on the quote text itself, so duplicate quotes across
+  // rows (e.g. the same line item total repeated) each claim their own
+  // occurrence too.
+  const quoteCursors = new Map<string, number>();
 
   rows.forEach((row, rowIndex) => {
+    const quoteRow = quoteRows[rowIndex];
     for (const [field, value] of Object.entries(row)) {
       if (value === null || value === undefined) continue;
-      const items = Array.isArray(value) ? value : [value];
-      for (const item of items) {
-        if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean") continue;
-        if (item === "") continue;
+      let anchored = false;
 
-        const cursorKey = `${typeof item}:${item}`;
-        const cursor = cursors.get(cursorKey) ?? 0;
-        let match = findFirstMatch(text, lowerText, item, cursor);
-        // Fewer occurrences in the text than rows that need one — fall back
-        // to the first occurrence rather than leaving this row unanchored.
+      const quote = quoteRow?.[field];
+      if (typeof quote === "string" && quote.length > 0) {
+        const cursor = quoteCursors.get(quote) ?? 0;
+        let match = findQuoteMatch(text, quote, cursor);
         if (!match && cursor > 0) {
-          match = findFirstMatch(text, lowerText, item, 0);
+          match = findQuoteMatch(text, quote, 0);
         }
         if (match) {
-          cursors.set(cursorKey, match.end);
+          quoteCursors.set(quote, match.end);
           ranges.push({ ...match, field, row: rowIndex });
+          anchored = true;
         }
       }
+
+      if (!anchored) {
+        const items = Array.isArray(value) ? value : [value];
+        for (const item of items) {
+          if (typeof item !== "string" && typeof item !== "number" && typeof item !== "boolean") continue;
+          if (item === "") continue;
+
+          const cursorKey = `${typeof item}:${item}`;
+          const cursor = valueCursors.get(cursorKey) ?? 0;
+          let match = findFirstMatch(text, lowerText, item, cursor);
+          // Fewer occurrences in the text than rows that need one — fall back
+          // to the first occurrence rather than leaving this row unanchored.
+          if (!match && cursor > 0) {
+            match = findFirstMatch(text, lowerText, item, 0);
+          }
+          if (match) {
+            valueCursors.set(cursorKey, match.end);
+            ranges.push({ ...match, field, row: rowIndex });
+            anchored = true;
+          }
+        }
+      }
+
+      anchors.push({ field, row: rowIndex, anchored });
     }
   });
 
@@ -137,5 +223,5 @@ export function computeMatchRanges(text: string, results: ExtractionData | null)
       lastEnd = r.end;
     }
   }
-  return nonOverlapping;
+  return { ranges: nonOverlapping, anchors };
 }

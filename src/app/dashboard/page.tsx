@@ -10,6 +10,7 @@ import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
 import type { ModelRec } from "@/lib/model-recommend";
+import type { Quotes } from "@/lib/highlight";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
 
@@ -82,6 +83,7 @@ export default function DashboardPage() {
   const [fields, setFields] = useState<ExtractionField[]>([{ id: "field-1", name: "name", type: "text" }]);
   const [results, setResults] = useState<ExtractionData | null>(null);
   const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
+  const [quotes, setQuotes] = useState<Quotes | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extractedWith, setExtractedWith] = useState<{ provider: string; model: string } | null>(null);
@@ -272,6 +274,7 @@ export default function DashboardPage() {
     setSelectedFile(file);
     setResults(null);
     setExtractedText(undefined);
+    setQuotes(undefined);
     setError(null);
     setExtractedWith(null);
   };
@@ -280,6 +283,7 @@ export default function DashboardPage() {
     setSelectedFile(null);
     setResults(null);
     setExtractedText(undefined);
+    setQuotes(undefined);
     setError(null);
     setExtractedWith(null);
   };
@@ -297,6 +301,7 @@ export default function DashboardPage() {
     setError(null);
     setResults(null);
     setExtractedText(undefined);
+    setQuotes(undefined);
     setExtractedWith(null);
 
     try {
@@ -317,6 +322,7 @@ export default function DashboardPage() {
       } else {
         setResults(data.data ?? null);
         setExtractedText(data.text);
+        setQuotes(data.quotes);
         if (data.provider && data.model) {
           setExtractedWith({ provider: data.provider, model: data.model });
         }
@@ -471,6 +477,7 @@ export default function DashboardPage() {
               onClear={handleClear}
               results={results}
               extractedText={extractedText}
+              quotes={quotes}
             />
           </div>
         </div>
@@ -638,6 +645,8 @@ export default function DashboardPage() {
                     isLoading={isLoading}
                     error={error}
                     onJumpToValue={extractedText ? handleJumpToValue : undefined}
+                    extractedText={extractedText}
+                    quotes={quotes}
                   />
                 </motion.section>
               )}
