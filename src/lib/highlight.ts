@@ -104,19 +104,30 @@ export function findFirstMatch(
 }
 
 /**
+ * Below this length, a quote is too short for the boundary-bypass fallback
+ * below to be trustworthy — see `findQuoteMatch`.
+ */
+const MIN_BYPASS_QUOTE_LENGTH = 3;
+
+/**
  * Exact quote match: quotes are copied verbatim by the model (see
  * `QUOTE_INSTRUCTION` in `src/lib/extraction/types.ts`), so unlike
  * `findFirstMatch` there's no case-insensitive fallback and no candidate
  * expansion — just `indexOf`. The word-boundary guard is still tried first
- * (cheap, and correct in the common case), but a plain `indexOf` hit wins
- * even where the guard would reject it: a full verbatim quote is strong
- * enough evidence on its own that the boundary heuristic (tuned to stop
- * short user-entered values like "5" or "IN" from matching mid-word) would
- * only produce false negatives here, never false positives.
+ * (cheap, and correct in the common case), and a plain `indexOf` hit can win
+ * even where the guard would reject it — but only for quotes at least
+ * `MIN_BYPASS_QUOTE_LENGTH` chars long. A full multi-character verbatim
+ * quote is strong enough evidence on its own that the boundary heuristic
+ * (tuned to stop short user-entered values like "5" or "IN" from matching
+ * mid-word) would only produce false negatives for it. A 1-2 char quote
+ * doesn't carry that same evidentiary weight — "5" bypassing the boundary
+ * guard would happily anchor to the "5" inside "2025" — so short quotes get
+ * no bypass: they anchor only via the boundary-checked path, or not at all.
  */
 function findQuoteMatch(text: string, quote: string, fromIndex: number): { start: number; end: number } | null {
   const boundaryIdx = findBoundaryIndex(text, quote, text, fromIndex);
   if (boundaryIdx !== -1) return { start: boundaryIdx, end: boundaryIdx + quote.length };
+  if (quote.length < MIN_BYPASS_QUOTE_LENGTH) return null;
   const plainIdx = text.indexOf(quote, fromIndex);
   if (plainIdx !== -1) return { start: plainIdx, end: plainIdx + quote.length };
   return null;

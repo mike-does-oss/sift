@@ -175,4 +175,35 @@ describe("computeMatchRanges — quote-aware anchoring (grounded extraction, T2)
     expect(computeMatchRanges("", { a: 1 }, { a: "1" })).toEqual({ ranges: [], anchors: [] });
     expect(computeMatchRanges("some text", null, { a: "1" })).toEqual({ ranges: [], anchors: [] });
   });
+
+  it("does not let a short (<3 char) quote bypass the boundary guard — a bare digit inside a longer number stays unanchored", () => {
+    // "5" only ever appears embedded in "2025" here — the boundary-checked
+    // path correctly rejects it (isAlphanumeric on both sides), and because
+    // the quote is only 1 char, the boundary-bypass fallback that a longer
+    // verbatim quote would get doesn't apply either. Without the minimum
+    // length guard this would have falsely anchored to the "5" in "2025".
+    const text = "Filed in 2025, reference only.";
+    const results = { code: "X" };
+    const quotes = { code: "5" };
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    expect(ranges).toHaveLength(0);
+    expect(anchors).toEqual([{ field: "code", row: 0, anchored: false }]);
+  });
+
+  it("still anchors a short quote when it satisfies the boundary-checked path directly", () => {
+    // Same 1-char quote, but this time it stands alone (punctuation on both
+    // sides), so the boundary-checked path itself succeeds — no bypass
+    // needed, and short quotes are never penalized when they're genuinely
+    // word-bounded.
+    const text = "Grade: 5 out of 5";
+    const results = { grade: "5" };
+    const quotes = { grade: "5" };
+
+    const { ranges, anchors } = computeMatchRanges(text, results, quotes);
+    expect(ranges).toHaveLength(1);
+    expect(slice(text, ranges[0])).toBe("5");
+    expect(ranges[0].start).toBe(text.indexOf("5"));
+    expect(anchors).toEqual([{ field: "grade", row: 0, anchored: true }]);
+  });
 });
