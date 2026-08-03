@@ -20,6 +20,7 @@ export default function DatasetDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [deletingRowId, setDeletingRowId] = useState<string | null>(null);
+  const [confirmingRowId, setConfirmingRowId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -49,6 +50,7 @@ export default function DatasetDetailPage() {
       const { rowCount } = await webSiftApi.deleteRow(id, rowId);
       setRows((prev) => prev.filter((r) => r.id !== rowId));
       setDataset((prev) => (prev ? { ...prev, rowCount } : prev));
+      setConfirmingRowId(null);
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Failed to delete row");
     } finally {
@@ -137,15 +139,35 @@ export default function DatasetDetailPage() {
                       </td>
                     ))}
                     <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => handleDeleteRow(r.id)}
-                        disabled={deletingRowId === r.id}
-                        aria-label="Delete row"
-                        title="Delete row"
-                        className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors disabled:opacity-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {confirmingRowId === r.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleDeleteRow(r.id)}
+                            disabled={deletingRowId === r.id}
+                            className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors disabled:opacity-50"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setConfirmingRowId(null)}
+                            className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setRowError(null);
+                            setConfirmingRowId(r.id);
+                          }}
+                          aria-label="Delete row"
+                          title="Delete row"
+                          className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
