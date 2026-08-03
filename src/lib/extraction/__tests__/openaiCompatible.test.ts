@@ -205,6 +205,47 @@ describe("extractWithOpenAICompatible", () => {
     expect(result).toEqual({ success: true, data: { app_name: "Sift" } });
   });
 
+  it("includes a field's description in the field list line when present", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOpenAICompatible({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number", description: "The subtotal before tax" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain("- total (number): The subtotal before tax");
+  });
+
+  it("omits the colon/description suffix for a field with no description", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOpenAICompatible({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain("- total (number)\n");
+    expect(body.messages[1].content).not.toContain("- total (number):");
+  });
+
   it("returns a friendly error for a pdf source with no extractable text, without calling the endpoint", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
