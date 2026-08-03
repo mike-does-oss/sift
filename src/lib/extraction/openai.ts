@@ -2,7 +2,13 @@ import OpenAI from "openai";
 import { toFile } from "openai/uploads";
 import type { ExtractionData } from "@/types";
 import { buildJsonSchema, unwrapGrounded } from "./schema";
-import { QUOTE_INSTRUCTION, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
+import {
+  QUOTE_INSTRUCTION,
+  VERBATIM_INSTRUCTION,
+  buildExamplesBlock,
+  type ExtractionInput,
+  type ExtractionOutput,
+} from "./types";
 
 export async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput> {
   const apiKey = input.apiKey;
@@ -48,7 +54,7 @@ Rules:
 
 ${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}
 
-Analyze the entire document carefully and extract ${input.extractMultiple ? "ALL matching records" : "the requested data"}.`;
+Analyze the entire document carefully and extract ${input.extractMultiple ? "ALL matching records" : "the requested data"}.${buildExamplesBlock(input.examples)}`;
 
     const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
       { type: "text", text: instructionText },

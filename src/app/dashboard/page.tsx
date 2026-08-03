@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Sparkles, Table2, FolderOpen, Save, Loader2, Anchor } from "lucide-react";
 import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
-import type { ExtractionField, ExtractionData } from "@/types";
+import type { ExtractionField, ExtractionData, TemplateExample } from "@/types";
 import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo } from "@/lib/api";
@@ -38,6 +38,7 @@ interface Template {
   fields: ExtractionField[];
   prompt: string;
   extractMultiple: boolean;
+  examples?: TemplateExample[];
 }
 
 interface DefaultSettings {
@@ -208,6 +209,13 @@ export default function DashboardPage() {
     const [id, model] = providerKey.split("::");
     return [id ?? "", model ?? ""];
   }, [providerKey]);
+
+  // §T3 — examples ride along silently with whatever saved template is
+  // currently loaded (no workspace editor for them this pass; presets never
+  // carry examples). Derived straight from `templates`/`selectedTemplateId`
+  // rather than copied into its own state, so it can never drift out of sync
+  // with the picker (e.g. after switching templates).
+  const selectedTemplateExamples = templates.find((t) => t.id === selectedTemplateId)?.examples;
 
   const selectedProviderInfo = providers.find((p) => p.id === selProviderId);
   const privacyBadge = selectedProviderInfo
@@ -386,6 +394,9 @@ export default function DashboardPage() {
       formData.append("prompt", extractionPrompt);
       formData.append("extractMultiple", extractMultiple.toString());
       if (groundedMode) formData.append("grounded", "true");
+      if (selectedTemplateExamples && selectedTemplateExamples.length > 0) {
+        formData.append("examples", JSON.stringify(selectedTemplateExamples));
+      }
       if (selProviderId) {
         formData.append("provider", selProviderId);
         if (selModel) formData.append("model", selModel);
@@ -641,6 +652,12 @@ export default function DashboardPage() {
                 {saveStatus === "saved" && <span className="text-xs text-[var(--success)]">Saved</span>}
                 {saveStatus === "error" && <span className="text-xs text-[var(--error)]">Couldn&apos;t save template</span>}
               </div>
+              {selectedTemplateExamples && selectedTemplateExamples.length > 0 && (
+                <p className="text-xs text-[var(--text-tertiary)] mt-2 px-1">
+                  {selectedTemplateExamples.length} example{selectedTemplateExamples.length === 1 ? "" : "s"} guiding
+                  this template
+                </p>
+              )}
             </section>
 
             {/* Field configuration */}

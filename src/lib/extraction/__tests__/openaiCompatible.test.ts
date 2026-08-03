@@ -400,6 +400,55 @@ describe("extractWithOpenAICompatible", () => {
   });
 });
 
+describe("extractWithOpenAICompatible — few-shot examples (§T3)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("appends the EXAMPLES block to the user message when examples are present", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOpenAICompatible({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      examples: [{ output: { vendor: "ACME PTY LTD" } }],
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain(
+      '\n\nEXAMPLES of correct output:\n{"vendor":"ACME PTY LTD"}'
+    );
+  });
+
+  it("omits the EXAMPLES block entirely when examples is absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOpenAICompatible({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).not.toContain("EXAMPLES");
+  });
+});
+
 describe("extractWithOpenAICompatible — ungrounded (default, §T2.5)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

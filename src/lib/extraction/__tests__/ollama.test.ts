@@ -320,6 +320,99 @@ describe("extractWithOllama", () => {
   });
 });
 
+describe("extractWithOllama — few-shot examples (§T3)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("appends the EXAMPLES block to the user message when examples are present", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: "{}" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      examples: [{ output: { vendor: "ACME PTY LTD" } }],
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain(
+      '\n\nEXAMPLES of correct output:\n{"vendor":"ACME PTY LTD"}'
+    );
+  });
+
+  it("joins multiple examples with newlines, one JSON object per line", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: "{}" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      examples: [{ output: { vendor: "ACME" } }, { output: { vendor: "WIDGETCO" } }],
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).toContain(
+      'EXAMPLES of correct output:\n{"vendor":"ACME"}\n{"vendor":"WIDGETCO"}'
+    );
+  });
+
+  it("omits the EXAMPLES block entirely when examples is absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: "{}" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).not.toContain("EXAMPLES");
+  });
+
+  it("omits the EXAMPLES block when examples is an empty array", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: "{}" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "vendor", type: "text" }],
+      prompt: "",
+      extractMultiple: false,
+      examples: [],
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[1].content).not.toContain("EXAMPLES");
+  });
+});
+
 describe("extractWithOllama — ungrounded (default, §T2.5)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

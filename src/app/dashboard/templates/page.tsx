@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FileJson, Plus, Pencil, Trash2, Table2, Sparkles, Check } from "lucide-react";
+import { FileJson, Plus, Pencil, Trash2, Table2, Sparkles, Check, Braces, X } from "lucide-react";
 import { FieldConfiguration } from "@/components";
-import type { ExtractionField } from "@/types";
+import type { ExtractionField, TemplateExample } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 
 interface Template {
@@ -12,9 +12,36 @@ interface Template {
   fields: ExtractionField[];
   prompt: string;
   extractMultiple: boolean;
+  examples?: TemplateExample[];
 }
 
 const EMPTY_FIELD = (): ExtractionField => ({ id: `field-${Date.now()}`, name: "", type: "text" });
+
+const MAX_EXAMPLES = 5;
+
+/** A single example entry mid-edit — `text` is the raw JSON the user is typing (the `output` object, unwrapped); `error` is set on blur (or at save time) when it doesn't parse to a plain object, and cleared as soon as the user edits again. */
+interface ExampleDraft {
+  text: string;
+  error: string | null;
+}
+
+function draftFromExample(e: TemplateExample): ExampleDraft {
+  return { text: JSON.stringify(e.output, null, 2), error: null };
+}
+
+/** Parses a draft's raw text into a `TemplateExample["output"]` — must be a JSON object, not an array/string/number/null (mirrors `validateExamples`, src/lib/template-examples.ts). */
+function parseExampleOutput(raw: string): { ok: true; output: Record<string, unknown> } | { ok: false; error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "Invalid JSON" };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, error: 'Must be a JSON object, e.g. {"vendor": "ACME"}' };
+  }
+  return { ok: true, output: parsed as Record<string, unknown> };
+}
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -24,6 +51,7 @@ export default function TemplatesPage() {
   const [prompt, setPrompt] = useState("");
   const [extractMultiple, setExtractMultiple] = useState(false);
   const [fields, setFields] = useState<ExtractionField[]>([EMPTY_FIELD()]);
+  const [exampleDrafts, setExampleDrafts] = useState<ExampleDraft[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -54,6 +82,7 @@ export default function TemplatesPage() {
     setPrompt("");
     setExtractMultiple(false);
     setFields([EMPTY_FIELD()]);
+    setExampleDrafts([]);
     setError(null);
   };
 
@@ -63,10 +92,34 @@ export default function TemplatesPage() {
     setPrompt(t.prompt);
     setExtractMultiple(t.extractMultiple);
     setFields(t.fields);
+    setExampleDrafts((t.examples ?? []).map(draftFromExample));
     setError(null);
   };
 
   const cancelEdit = () => setEditingId(null);
+
+  const addExampleDraft = () => {
+    if (exampleDrafts.length >= MAX_EXAMPLES) return;
+    setExampleDrafts((prev) => [...prev, { text: "", error: null }]);
+  };
+
+  const removeExampleDraft = (index: number) => {
+    setExampleDrafts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateExampleDraftText = (index: number, text: string) => {
+    setExampleDrafts((prev) => prev.map((d, i) => (i === index ? { text, error: null } : d)));
+  };
+
+  const validateExampleDraft = (index: number) => {
+    setExampleDrafts((prev) =>
+      prev.map((d, i) => {
+        if (i !== index || d.text.trim() === "") return d;
+        const result = parseExampleOutput(d.text.trim());
+        return { ...d, error: result.ok ? null : result.error };
+      })
+    );
+  };
 
   const handleSave = async () => {
     const validFields = fields.filter((f) => f.name.trim() !== "");
@@ -74,6 +127,26 @@ export default function TemplatesPage() {
       setError("Name and at least one field are required");
       return;
     }
+
+    // Re-validate every non-empty draft at save time too (not just on blur —
+    // the field the user was last typing in may never have blurred). An
+    // invalid draft is flagged inline and excluded from what gets saved
+    // rather than blocking the rest of the template from saving.
+    const examples: TemplateExample[] = [];
+    let anyInvalid = false;
+    const revalidated = exampleDrafts.map((d) => {
+      const trimmed = d.text.trim();
+      if (trimmed === "") return d;
+      const result = parseExampleOutput(trimmed);
+      if (result.ok) {
+        examples.push({ output: result.output });
+        return { ...d, error: null };
+      }
+      anyInvalid = true;
+      return { ...d, error: result.error };
+    });
+    if (anyInvalid) setExampleDrafts(revalidated);
+
     setIsSaving(true);
     setError(null);
     try {
@@ -83,7 +156,7 @@ export default function TemplatesPage() {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), fields: validFields, prompt, extractMultiple }),
+        body: JSON.stringify({ name: name.trim(), fields: validFields, prompt, extractMultiple, examples }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -215,6 +288,63 @@ export default function TemplatesPage() {
               />
             </div>
           </label>
+
+          <div className="pt-2 border-t border-[var(--border-subtle)] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)]">
+                  <Braces className="w-4 h-4 text-[var(--text-tertiary)]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[var(--text-primary)]">Examples</p>
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    Example output JSON to steer format/style — e.g. uppercase vendor names
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs text-[var(--text-tertiary)] tabular-nums">
+                {exampleDrafts.length}/{MAX_EXAMPLES}
+              </span>
+            </div>
+
+            {exampleDrafts.map((draft, i) => (
+              <div key={i} className="rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] p-2 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <textarea
+                    value={draft.text}
+                    onChange={(e) => updateExampleDraftText(i, e.target.value)}
+                    onBlur={() => validateExampleDraft(i)}
+                    placeholder='{"vendor": "ACME PTY LTD"}'
+                    rows={2}
+                    spellCheck={false}
+                    className={`flex-1 px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:ring-0 focus:outline-none transition-all resize-y ${
+                      draft.error ? "border-[var(--error)]" : "border-transparent focus:border-[var(--accent-muted)]"
+                    }`}
+                    aria-label={`Example ${i + 1} output JSON`}
+                    aria-invalid={draft.error ? true : undefined}
+                  />
+                  <button
+                    onClick={() => removeExampleDraft(i)}
+                    className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all flex-shrink-0"
+                    aria-label={`Remove example ${i + 1}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {draft.error && <p className="text-xs text-[var(--error)]">{draft.error}</p>}
+              </div>
+            ))}
+
+            {exampleDrafts.length < MAX_EXAMPLES && (
+              <button
+                onClick={addExampleDraft}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--accent-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add example
+              </button>
+            )}
+          </div>
 
           {error && <p className="text-sm text-[var(--error)]">{error}</p>}
 

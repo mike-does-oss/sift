@@ -9,6 +9,8 @@ export const templates = sqliteTable("templates", {
   fields: text("fields", { mode: "json" }).notNull(),
   prompt: text("prompt").notNull().default(""),
   extractMultiple: integer("extract_multiple", { mode: "boolean" }).notNull().default(false),
+  // §T3 few-shot examples — nullable, `Array<{ output: Record<string, unknown> }>` (see `src/lib/template-examples.ts`).
+  examples: text("examples", { mode: "json" }),
   createdAt: createdAt(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });

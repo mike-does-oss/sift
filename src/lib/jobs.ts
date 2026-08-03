@@ -5,12 +5,14 @@ import { runExtraction } from "@/lib/extraction";
 import { readDocument } from "@/lib/storage";
 import { parseDocument } from "@/lib/documents";
 import { isScheduleDue } from "@/lib/schedule";
-import type { ExtractionField } from "@/types";
+import type { ExtractionField, TemplateExample } from "@/types";
 
 const MAX_ATTEMPTS = 3;
 const STALE_MS = 10 * 60 * 1000; // keep < any future long-running change; single process makes staleness rare
 
-interface Snapshot { fields: ExtractionField[]; prompt: string; extractMultiple: boolean }
+// §T3: examples are mode-independent — carried through regardless of source
+// (single/batch/schedule) — unlike `grounded`, which jobs/batches never set.
+interface Snapshot { fields: ExtractionField[]; prompt: string; extractMultiple: boolean; examples?: TemplateExample[] }
 
 // Job ids currently inside runOne in this process. Excluded from the claim
 // query so the stale-reclaim arm (meant for orphans from a past process)
@@ -74,6 +76,7 @@ async function runOneInner(jobId: string): Promise<void> {
     const result = await runExtraction({
       source, filename: doc.filename,
       fields: snap.fields, prompt: snap.prompt, extractMultiple: snap.extractMultiple,
+      examples: snap.examples,
     });
     if (!result.success) throw Object.assign(new Error(result.error), { provider: result.provider, model: result.model });
     await db.update(jobs).set({
@@ -122,7 +125,12 @@ async function enqueueInbox(scheduleId: string): Promise<number> {
   if (!schedule) return 0;
   const template = await db.query.templates.findFirst({ where: eq(templates.id, schedule.templateId) });
   if (!template) return 0;
-  const snapshot = { fields: template.fields, prompt: template.prompt, extractMultiple: template.extractMultiple };
+  const snapshot: Snapshot = {
+    fields: template.fields as ExtractionField[],
+    prompt: template.prompt,
+    extractMultiple: template.extractMultiple,
+    examples: (template.examples as TemplateExample[] | null) ?? undefined,
+  };
   // Atomic claim: transaction over sync driver
   const tx = sqlite.transaction(() => {
     const inbox = sqlite.prepare(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { templates, schedules } from "@/db/schema";
+import { validateExamples } from "@/lib/template-examples";
 
 async function find(id: string) {
   return db.query.templates.findFirst({ where: eq(templates.id, id) });
@@ -13,13 +14,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  let body: { name?: string; fields?: unknown[]; prompt?: string; extractMultiple?: boolean };
+  let body: { name?: string; fields?: unknown[]; prompt?: string; extractMultiple?: boolean; examples?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
-  const { name, fields, prompt, extractMultiple } = body;
+  const { name, fields, prompt, extractMultiple, examples: rawExamples } = body;
   const updates: Partial<typeof templates.$inferInsert> = {};
 
   if (name !== undefined) {
@@ -48,6 +49,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "extractMultiple must be a boolean" }, { status: 400 });
     }
     updates.extractMultiple = extractMultiple;
+  }
+
+  if (rawExamples !== undefined) {
+    const examplesResult = validateExamples(rawExamples);
+    if (!examplesResult.ok) {
+      return NextResponse.json({ error: examplesResult.error }, { status: 400 });
+    }
+    updates.examples = examplesResult.examples;
   }
 
   updates.updatedAt = new Date();

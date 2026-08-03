@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Layers, UploadCloud, X, FileText } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
+import type { TemplateExample } from "@/types";
 
 interface Template {
   id: string;
@@ -11,6 +12,7 @@ interface Template {
   fields: unknown[];
   prompt: string;
   extractMultiple: boolean;
+  examples?: TemplateExample[];
 }
 
 interface Batch {
@@ -123,6 +125,7 @@ export default function BatchesPage() {
             fields: selectedTemplate.fields,
             prompt: selectedTemplate.prompt,
             extractMultiple: selectedTemplate.extractMultiple,
+            examples: selectedTemplate.examples,
           },
         }),
       });

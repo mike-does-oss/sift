@@ -145,6 +145,30 @@ describe("extractWithOpenAI", () => {
   });
 });
 
+describe("extractWithOpenAI — few-shot examples (§T3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("appends the EXAMPLES block to the user message when examples are present", async () => {
+    createMock.mockResolvedValue(chatResponse({ total: { value: 100, quote: "$100.00" } }));
+
+    await extractWithOpenAI({ ...baseInput, examples: [{ output: { total: 100 } }] });
+
+    const call = createMock.mock.calls[0][0];
+    expect(call.messages[1].content[0].text).toContain('\n\nEXAMPLES of correct output:\n{"total":100}');
+  });
+
+  it("omits the EXAMPLES block entirely when examples is absent", async () => {
+    createMock.mockResolvedValue(chatResponse({ total: { value: 100, quote: "$100.00" } }));
+
+    await extractWithOpenAI(baseInput);
+
+    const call = createMock.mock.calls[0][0];
+    expect(call.messages[1].content[0].text).not.toContain("EXAMPLES");
+  });
+});
+
 describe("extractWithOpenAI — ungrounded (default, §T2.5)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -3,9 +3,10 @@ import { inArray, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { batches, documents, jobs } from "@/db/schema";
 import { processPendingJobs } from "@/lib/jobs";
+import { validateExamples } from "@/lib/template-examples";
 
 export async function POST(req: NextRequest) {
-  let body: { name?: string; documentIds?: string[]; template?: { fields?: unknown[] } };
+  let body: { name?: string; documentIds?: string[]; template?: { fields?: unknown[]; examples?: unknown } };
   try {
     body = await req.json();
   } catch {
@@ -22,6 +23,14 @@ export async function POST(req: NextRequest) {
   if (!template?.fields?.length) {
     return NextResponse.json({ error: "template.fields required" }, { status: 400 });
   }
+  // §T3: examples ride inside the client-supplied template snapshot — same
+  // validation as the templates API, so a batch can't smuggle in a malformed
+  // examples array that would only surface as an engine-level failure later.
+  const examplesResult = validateExamples(template.examples);
+  if (!examplesResult.ok) {
+    return NextResponse.json({ error: examplesResult.error }, { status: 400 });
+  }
+  const templateSnapshot = { ...template, examples: examplesResult.examples };
 
   const docs = await db.query.documents.findMany({ where: inArray(documents.id, documentIds) });
   if (docs.length !== documentIds.length) {
@@ -30,13 +39,13 @@ export async function POST(req: NextRequest) {
 
   const [batch] = await db.insert(batches).values({
     name: name.trim(),
-    templateSnapshot: template,
+    templateSnapshot,
     totalCount: docs.length,
   }).returning();
 
   await db.insert(jobs).values(docs.map((d) => ({
     documentId: d.id,
-    templateSnapshot: template,
+    templateSnapshot,
     source: "batch" as const,
     batchId: batch.id,
   })));

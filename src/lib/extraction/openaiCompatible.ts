@@ -4,6 +4,7 @@ import {
   PDF_NO_TEXT_ERROR,
   QUOTE_INSTRUCTION,
   VERBATIM_INSTRUCTION,
+  buildExamplesBlock,
   type ExtractionInput,
   type ExtractionOutput,
 } from "./types";
@@ -90,7 +91,7 @@ export async function extractWithOpenAICompatible(
   const system = grounded
     ? `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION} ${QUOTE_INSTRUCTION}`
     : `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION}`;
-  const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})${f.description ? `: ${f.description}` : ""}`).join("\n")}`;
+  const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})${f.description ? `: ${f.description}` : ""}`).join("\n")}${buildExamplesBlock(input.examples)}`;
 
   let user: string | CompatContentPart[];
   if (input.source.kind === "image") {

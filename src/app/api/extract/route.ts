@@ -4,6 +4,7 @@ import { jobs } from "@/db/schema";
 import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
 import { isProviderId } from "@/lib/api";
 import { parseDocument, detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
+import { validateExamples } from "@/lib/template-examples";
 import type { ExtractionField } from "@/types";
 
 // Mirrors /api/upload's caps (src/app/api/upload/route.ts) — applied here too
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
   const prompt = (formData.get("prompt") as string) ?? "";
   const extractMultiple = formData.get("extractMultiple") === "true";
   const grounded = formData.get("grounded") === "true";
+  const examplesJson = formData.get("examples") as string | null;
 
   if (!file) return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
   if (!fieldsJson) return NextResponse.json({ success: false, error: "No fields configuration provided" }, { status: 400 });
@@ -39,6 +41,20 @@ export async function POST(request: NextRequest) {
   if (!Array.isArray(fields) || !fields.length || fields.some((f) => !f.name?.trim())) {
     return NextResponse.json({ success: false, error: "All fields must have a name" }, { status: 400 });
   }
+
+  let rawExamples: unknown;
+  if (examplesJson) {
+    try {
+      rawExamples = JSON.parse(examplesJson);
+    } catch {
+      return NextResponse.json({ success: false, error: "examples must be valid JSON" }, { status: 400 });
+    }
+  }
+  const examplesResult = validateExamples(rawExamples);
+  if (!examplesResult.ok) {
+    return NextResponse.json({ success: false, error: examplesResult.error }, { status: 400 });
+  }
+  const examples = examplesResult.examples;
 
   const providerField = formData.get("provider") as string | null;
   const modelField = formData.get("model") as string | null;
@@ -76,11 +92,11 @@ export async function POST(request: NextRequest) {
 
   let result: Awaited<ReturnType<typeof runExtraction>>;
   try {
-    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple, grounded }, override);
+    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple, grounded, examples }, override);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({
-      templateSnapshot: { fields, prompt, extractMultiple },
+      templateSnapshot: { fields, prompt, extractMultiple, examples },
       status: "failed",
       attempts: 1,
       result: null,
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
   }
 
   await db.insert(jobs).values({
-    templateSnapshot: { fields, prompt, extractMultiple },
+    templateSnapshot: { fields, prompt, extractMultiple, examples },
     status: result.success ? "completed" : "failed",
     attempts: 1,
     result: result.success ? result.data : null,

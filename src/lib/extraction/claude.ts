@@ -1,7 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ExtractionData } from "@/types";
 import { buildJsonSchema, unwrapGrounded } from "./schema";
-import { QUOTE_INSTRUCTION, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
+import {
+  QUOTE_INSTRUCTION,
+  VERBATIM_INSTRUCTION,
+  buildExamplesBlock,
+  type ExtractionInput,
+  type ExtractionOutput,
+} from "./types";
 
 function systemPrompt(extractMultiple: boolean, grounded: boolean): string {
   const base = extractMultiple
@@ -38,7 +44,7 @@ export async function extractWithClaude(input: ExtractionInput): Promise<Extract
     input.extractMultiple ? "ALL records/rows with" : ""
   } the following fields from this document:
 
-${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
+${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}${buildExamplesBlock(input.examples)}`;
 
   const content: Anthropic.Messages.ContentBlockParam[] = [];
   if (input.source.kind === "pdf") {
