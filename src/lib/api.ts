@@ -1,4 +1,4 @@
-import type { ExtractionData } from "@/types";
+import type { ExtractionData, ExtractionField } from "@/types";
 import type { SystemInfo, ModelRec } from "@/lib/model-recommend";
 import type { Quotes } from "@/lib/highlight";
 
@@ -81,6 +81,14 @@ export interface ExtractResponse {
   quotes?: Quotes;
 }
 
+/** Result of `POST /api/scaffold` — a starting fields/prompt/extractMultiple config built from a plain-language description (§T2.6). */
+export interface ScaffoldResponse {
+  fields?: ExtractionField[];
+  prompt?: string;
+  extractMultiple?: boolean;
+  error?: string;
+}
+
 /**
  * The one seam between UI code and the data layer (see playbook §14). The
  * web app implements this over `fetch('/api/...')`; a future desktop shell
@@ -95,6 +103,13 @@ export interface SiftApi {
    * per-request override fields `provider` and `model`.
    */
   extract(formData: FormData): Promise<ExtractResponse>;
+  /**
+   * Meta-extraction (§T2.6): turns a plain-language task description into a
+   * starting `{ fields, prompt, extractMultiple }` config via `POST
+   * /api/scaffold`, dispatched through the same active-provider resolution
+   * as `extract`. Never throws on an engine-level failure — check `.error`.
+   */
+  scaffold(description: string): Promise<ScaffoldResponse>;
   /**
    * Downloads an Ollama model via `POST /api/providers/pull`, invoking
    * `onProgress` once per NDJSON line the server forwards. Resolves once the
@@ -163,6 +178,15 @@ class WebSiftApi implements SiftApi {
   async extract(formData: FormData): Promise<ExtractResponse> {
     const res = await fetch("/api/extract", { method: "POST", body: formData });
     return (await res.json()) as ExtractResponse;
+  }
+
+  async scaffold(description: string): Promise<ScaffoldResponse> {
+    const res = await fetch("/api/scaffold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    });
+    return (await res.json()) as ScaffoldResponse;
   }
 
   async pullModel(

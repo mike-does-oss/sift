@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Sparkles, Table2, FolderOpen, Save, Loader2, Anchor } from "lucide-react";
 import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
 import type { ExtractionField, ExtractionData } from "@/types";
+import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
@@ -14,6 +15,17 @@ import type { Quotes } from "@/lib/highlight";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
 const GROUNDED_STORAGE_KEY = "sift-grounded";
+const DEFAULT_FIELDS: ExtractionField[] = [{ id: "field-1", name: "name", type: "text" }];
+
+/** True when `fields` is still the untouched single starter field — the bar for "replace without confirming" in the scaffold flow (§T2.6). */
+function isDefaultFieldState(fields: ExtractionField[]): boolean {
+  return (
+    fields.length === 1 &&
+    fields[0].name === DEFAULT_FIELDS[0].name &&
+    fields[0].type === DEFAULT_FIELDS[0].type &&
+    !fields[0].description
+  );
+}
 
 type PullUiState =
   | { status: "idle" }
@@ -86,13 +98,25 @@ export default function DashboardPage() {
   // remembered per-browser rather than per-request. Read from localStorage
   // in an effect (not lazy useState init) to avoid an SSR/hydration mismatch.
   const [groundedMode, setGroundedMode] = useState(false);
-  const [fields, setFields] = useState<ExtractionField[]>([{ id: "field-1", name: "name", type: "text" }]);
+  const [fields, setFields] = useState<ExtractionField[]>(DEFAULT_FIELDS);
   const [results, setResults] = useState<ExtractionData | null>(null);
   const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
   const [quotes, setQuotes] = useState<Quotes | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extractedWith, setExtractedWith] = useState<{ provider: string; model: string } | null>(null);
+
+  // Prompt scaffolding (§T2.6) — "Build fields from description", visible only
+  // while grounded mode is on. `pendingScaffold` holds a scaffolded result
+  // awaiting the inline "Replace current fields?" confirm (only shown when
+  // the current fields aren't still the untouched single starter field).
+  const [isScaffolding, setIsScaffolding] = useState(false);
+  const [scaffoldError, setScaffoldError] = useState<string | null>(null);
+  const [pendingScaffold, setPendingScaffold] = useState<{
+    fields: ExtractionField[];
+    prompt: string;
+    extractMultiple: boolean;
+  } | null>(null);
 
   const documentViewRef = useRef<DocumentViewHandle>(null);
 
@@ -287,6 +311,37 @@ export default function DashboardPage() {
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("error");
+    }
+  };
+
+  const applyScaffold = (scaffolded: { fields: ExtractionField[]; prompt: string; extractMultiple: boolean }) => {
+    setFields(scaffolded.fields);
+    setExtractionPrompt(scaffolded.prompt);
+    setExtractMultiple(scaffolded.extractMultiple);
+    setPendingScaffold(null);
+  };
+
+  const handleBuildFromDescription = async () => {
+    if (!extractionPrompt.trim() || isScaffolding) return;
+
+    setIsScaffolding(true);
+    setScaffoldError(null);
+    try {
+      const result: ScaffoldResponse = await webSiftApi.scaffold(extractionPrompt.trim());
+      if (result.error || !result.fields) {
+        setScaffoldError(result.error || "Scaffolding failed");
+        return;
+      }
+      const scaffolded = { fields: result.fields, prompt: result.prompt ?? "", extractMultiple: result.extractMultiple ?? false };
+      if (isDefaultFieldState(fields)) {
+        applyScaffold(scaffolded);
+      } else {
+        setPendingScaffold(scaffolded);
+      }
+    } catch (err) {
+      setScaffoldError(err instanceof Error ? err.message : "Scaffolding failed");
+    } finally {
+      setIsScaffolding(false);
     }
   };
 
@@ -602,6 +657,15 @@ export default function DashboardPage() {
                   onFieldsChange={setFields}
                   extractionPrompt={extractionPrompt}
                   onPromptChange={setExtractionPrompt}
+                  scaffold={{
+                    visible: groundedMode,
+                    isRunning: isScaffolding,
+                    error: scaffoldError,
+                    confirming: pendingScaffold !== null,
+                    onBuild: handleBuildFromDescription,
+                    onConfirmReplace: () => pendingScaffold && applyScaffold(pendingScaffold),
+                    onCancelConfirm: () => setPendingScaffold(null),
+                  }}
                 />
 
                 <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">

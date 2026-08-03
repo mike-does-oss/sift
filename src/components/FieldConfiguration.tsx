@@ -2,14 +2,33 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
-import { Plus, X, GripVertical, Type, Hash, Calendar, ToggleLeft, List, MessageSquarePlus } from "lucide-react";
+import { Plus, X, GripVertical, Type, Hash, Calendar, ToggleLeft, List, MessageSquarePlus, Wand2, Loader2 } from "lucide-react";
 import type { ExtractionField, FieldType } from "@/types";
+
+/**
+ * Prompt-scaffolding affordance (§T2.6) rendered next to the Context
+ * textarea — visible only when the caller's grounded-mode toggle is on
+ * (`visible`). The parent (dashboard page) owns the actual API call,
+ * non-default-fields check, and apply/replace decision; this component only
+ * renders the button/spinner/inline-confirm/error based on the state it's
+ * handed.
+ */
+interface ScaffoldSlot {
+  visible: boolean;
+  isRunning: boolean;
+  error: string | null;
+  confirming: boolean;
+  onBuild: () => void;
+  onConfirmReplace: () => void;
+  onCancelConfirm: () => void;
+}
 
 interface FieldConfigurationProps {
   fields: ExtractionField[];
   onFieldsChange: (fields: ExtractionField[]) => void;
   extractionPrompt: string;
   onPromptChange: (prompt: string) => void;
+  scaffold?: ScaffoldSlot;
 }
 
 const fieldTypes: { value: FieldType; label: string; icon: React.ReactNode }[] = [
@@ -25,6 +44,7 @@ export function FieldConfiguration({
   onFieldsChange,
   extractionPrompt,
   onPromptChange,
+  scaffold,
 }: FieldConfigurationProps) {
   const [isAddingField, setIsAddingField] = useState(false);
   // Field ids whose description input has been explicitly toggled open by
@@ -75,12 +95,34 @@ export function FieldConfiguration({
     <div className="space-y-5">
       {/* Extraction Context */}
       <div>
-        <label
-          htmlFor="extraction-prompt"
-          className="block text-xs font-medium text-[var(--text-secondary)] mb-2 uppercase tracking-wider"
-        >
-          Context
-        </label>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <label
+            htmlFor="extraction-prompt"
+            className="block text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider"
+          >
+            Context
+          </label>
+          {scaffold?.visible && (
+            <button
+              type="button"
+              onClick={scaffold.onBuild}
+              disabled={!extractionPrompt.trim() || scaffold.isRunning}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--accent-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--border-default)] disabled:hover:text-[var(--text-secondary)] disabled:hover:bg-transparent"
+            >
+              {scaffold.isRunning ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Building…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-3.5 h-3.5" />
+                  Build fields from description
+                </>
+              )}
+            </button>
+          )}
+        </div>
         <textarea
           id="extraction-prompt"
           value={extractionPrompt}
@@ -89,6 +131,28 @@ export function FieldConfiguration({
           className="w-full px-3 py-2.5 rounded-lg input-base text-sm resize-none"
           rows={2}
         />
+        {scaffold?.visible && scaffold.confirming && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-muted)]">
+            <span className="text-xs text-[var(--text-secondary)] flex-1">
+              Replace current fields with the scaffolded set?
+            </span>
+            <button
+              onClick={scaffold.onConfirmReplace}
+              className="px-2 py-1 rounded-md text-xs font-medium text-[var(--accent)] hover:bg-[var(--surface-elevated)] transition-colors"
+            >
+              Confirm
+            </button>
+            <button
+              onClick={scaffold.onCancelConfirm}
+              className="px-2 py-1 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {scaffold?.visible && scaffold.error && !scaffold.confirming && (
+          <p className="mt-2 text-xs text-[var(--error)]">{scaffold.error}</p>
+        )}
       </div>
 
       {/* Field Definitions */}
