@@ -36,6 +36,8 @@ export const SCAFFOLD_SYSTEM_PROMPT =
   "You design document-extraction schemas. Given a task description, produce the minimal set of fields " +
   "(snake_case names, correct types, one-line description each that will guide the extraction model), a short " +
   "refined extraction prompt, and whether the task needs one record (false) or one row per repeated item (true). " +
+  "extract_multiple is true ONLY when one document contains many records to extract as rows (e.g. every " +
+  "transaction on a statement); if the task describes one record per document, it must be false. " +
   "No commentary.";
 
 /**
