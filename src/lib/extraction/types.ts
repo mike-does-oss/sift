@@ -11,6 +11,7 @@ export interface ExtractionInput {
   extractMultiple: boolean;
   apiKey?: string;            // BYO key override (Anthropic for claude engine)
   model?: string;             // per-plan model tier override (claude engine)
+  grounded?: boolean;         // opt-in: request per-field source quotes (default false — pre-T1 flat shape)
 }
 
 export type ExtractionOutput =

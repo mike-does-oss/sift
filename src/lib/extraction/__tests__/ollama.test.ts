@@ -126,6 +126,7 @@ describe("extractWithOllama", () => {
       fields: [{ id: "1", name: "app_name", type: "text" }],
       prompt: "",
       extractMultiple: false,
+      grounded: true,
       baseUrl: "http://localhost:11434",
     });
 
@@ -208,6 +209,7 @@ describe("extractWithOllama", () => {
       fields: [{ id: "1", name: "total", type: "number" }],
       prompt: "",
       extractMultiple: false,
+      grounded: true,
       baseUrl: "http://localhost:11434",
     });
 
@@ -252,6 +254,7 @@ describe("extractWithOllama", () => {
       ],
       prompt: "",
       extractMultiple: false,
+      grounded: true,
       baseUrl: "http://localhost:11434",
     });
 
@@ -283,6 +286,7 @@ describe("extractWithOllama", () => {
       fields: [{ id: "1", name: "name", type: "text" }],
       prompt: "",
       extractMultiple: true,
+      grounded: true,
       baseUrl: "http://localhost:11434",
     });
 
@@ -308,9 +312,110 @@ describe("extractWithOllama", () => {
       fields: [{ id: "1", name: "total", type: "number" }],
       prompt: "",
       extractMultiple: false,
+      grounded: true,
       baseUrl: "http://localhost:11434",
     });
 
     expect(result).toEqual({ success: true, data: { total: 100 }, quotes: { total: null } });
+  });
+});
+
+describe("extractWithOllama — ungrounded (default, §T2.5)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Exact system prompt Ollama sent pre-T1 (commit 56055aa) — the
+  // byte-identical target for an ungrounded (default) request.
+  const PRE_T1_SYSTEM =
+    "You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. Copy values exactly as written in the document; do not translate, reformat, or normalize unless a field description says otherwise.";
+
+  it("requests the flat pre-T1 schema and system prompt when grounded is omitted", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: '{"total":100}' } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.format.properties.total).toEqual({
+      type: ["number", "null"],
+      description: "The total as a numeric value",
+    });
+    expect(body.messages[0].content).toBe(PRE_T1_SYSTEM);
+    expect(body.messages[0].content).not.toContain("quote");
+  });
+
+  it("requests the flat schema and system prompt when grounded: false is explicit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: '{"total":100}' } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      grounded: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[0].content).toBe(PRE_T1_SYSTEM);
+  });
+
+  it("returns the flat value directly with no quotes key (single record)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ message: { content: '{"total":100}' } }) })
+    );
+
+    const result = await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    expect(result).toEqual({ success: true, data: { total: 100 } });
+    expect(result).not.toHaveProperty("quotes");
+  });
+
+  it("returns the flat items array directly with no quotes key (multi-row)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          message: { content: JSON.stringify({ items: [{ name: "Widget" }, { name: "Gadget" }] }) },
+        }),
+      })
+    );
+
+    const result = await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "name", type: "text" }],
+      prompt: "",
+      extractMultiple: true,
+      baseUrl: "http://localhost:11434",
+    });
+
+    expect(result).toEqual({ success: true, data: [{ name: "Widget" }, { name: "Gadget" }] });
+    expect(result).not.toHaveProperty("quotes");
   });
 });

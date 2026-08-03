@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
   const fieldsJson = formData.get("fields") as string | null;
   const prompt = (formData.get("prompt") as string) ?? "";
   const extractMultiple = formData.get("extractMultiple") === "true";
+  const grounded = formData.get("grounded") === "true";
 
   if (!file) return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 });
   if (!fieldsJson) return NextResponse.json({ success: false, error: "No fields configuration provided" }, { status: 400 });
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
 
   let result: Awaited<ReturnType<typeof runExtraction>>;
   try {
-    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple }, override);
+    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple, grounded }, override);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({

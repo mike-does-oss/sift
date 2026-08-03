@@ -3,7 +3,7 @@ import type { ExtractionData } from "@/types";
 import { buildJsonSchema, unwrapGrounded } from "./schema";
 import { QUOTE_INSTRUCTION, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
 
-function systemPrompt(extractMultiple: boolean): string {
+function systemPrompt(extractMultiple: boolean, grounded: boolean): string {
   const base = extractMultiple
     ? `You are a precise data extraction assistant. Extract ALL matching records/rows from the provided document and return them as structured JSON.
 
@@ -24,7 +24,7 @@ Rules:
 - For numbers, return numeric values without currency symbols or units
 - For arrays/lists, return an array of strings
 - Be precise and accurate - do not make up information`;
-  return `${base}\n- ${VERBATIM_INSTRUCTION}\n- ${QUOTE_INSTRUCTION}`;
+  return grounded ? `${base}\n- ${VERBATIM_INSTRUCTION}\n- ${QUOTE_INSTRUCTION}` : `${base}\n- ${VERBATIM_INSTRUCTION}`;
 }
 
 export async function extractWithClaude(input: ExtractionInput): Promise<ExtractionOutput> {
@@ -32,7 +32,8 @@ export async function extractWithClaude(input: ExtractionInput): Promise<Extract
   if (!apiKey) return { success: false, error: "Anthropic API key not set — add it in Settings" };
   const client = new Anthropic({ apiKey });
 
-  const schema = buildJsonSchema(input.fields, input.extractMultiple, { grounded: true });
+  const grounded = input.grounded ?? false;
+  const schema = buildJsonSchema(input.fields, input.extractMultiple, { grounded });
   const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${
     input.extractMultiple ? "ALL records/rows with" : ""
   } the following fields from this document:
@@ -54,7 +55,7 @@ ${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
     const response = await client.messages.create({
       model: input.model ?? "claude-sonnet-5",
       max_tokens: 16000,
-      system: systemPrompt(input.extractMultiple),
+      system: systemPrompt(input.extractMultiple, grounded),
       output_config: { format: { type: "json_schema", schema } },
       messages: [{ role: "user", content }],
     });
@@ -69,6 +70,9 @@ ${input.fields.map((f) => `- ${f.name} (${f.type})`).join("\n")}`;
     const text = response.content.find((b) => b.type === "text")?.text;
     if (!text) return { success: false, error: "No response from model" };
     const parsed = JSON.parse(text);
+    if (!grounded) {
+      return { success: true, data: (input.extractMultiple ? parsed.items : parsed) as ExtractionData };
+    }
     const { data, quotes } = unwrapGrounded(parsed, input.extractMultiple);
     return { success: true, data: data as ExtractionData, quotes };
   } catch (err) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Sparkles, Table2, FolderOpen, Save, Loader2 } from "lucide-react";
+import { Sparkles, Table2, FolderOpen, Save, Loader2, Anchor } from "lucide-react";
 import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
 import type { ExtractionField, ExtractionData } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
@@ -13,6 +13,7 @@ import type { ModelRec } from "@/lib/model-recommend";
 import type { Quotes } from "@/lib/highlight";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
+const GROUNDED_STORAGE_KEY = "sift-grounded";
 
 type PullUiState =
   | { status: "idle" }
@@ -80,6 +81,11 @@ export default function DashboardPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extractionPrompt, setExtractionPrompt] = useState("");
   const [extractMultiple, setExtractMultiple] = useState(false);
+  // Opt-in (§T2.5): quote-grounded extraction is a richer output shape that
+  // smaller local models may follow less strictly, so it defaults off and is
+  // remembered per-browser rather than per-request. Read from localStorage
+  // in an effect (not lazy useState init) to avoid an SSR/hydration mismatch.
+  const [groundedMode, setGroundedMode] = useState(false);
   const [fields, setFields] = useState<ExtractionField[]>([{ id: "field-1", name: "name", type: "text" }]);
   const [results, setResults] = useState<ExtractionData | null>(null);
   const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
@@ -123,6 +129,20 @@ export default function DashboardPage() {
       await fetchTemplates();
     })();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    // One-time sync from localStorage (external system) on mount, after the
+    // server-rendered (always-off) markup has hydrated — avoids an
+    // SSR/client markup mismatch that a render-time read would cause (same
+    // pattern as Sidebar's theme sync).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGroundedMode(window.localStorage.getItem(GROUNDED_STORAGE_KEY) === "true");
+  }, []);
+
+  const handleToggleGrounded = (checked: boolean) => {
+    setGroundedMode(checked);
+    window.localStorage.setItem(GROUNDED_STORAGE_KEY, checked ? "true" : "false");
+  };
 
   useEffect(() => {
     (async () => {
@@ -310,6 +330,7 @@ export default function DashboardPage() {
       formData.append("fields", JSON.stringify(validFields));
       formData.append("prompt", extractionPrompt);
       formData.append("extractMultiple", extractMultiple.toString());
+      if (groundedMode) formData.append("grounded", "true");
       if (selProviderId) {
         formData.append("provider", selProviderId);
         if (selModel) formData.append("model", selModel);
@@ -608,6 +629,40 @@ export default function DashboardPage() {
                         type="checkbox"
                         checked={extractMultiple}
                         onChange={(e) => setExtractMultiple(e.target.checked)}
+                        className="sr-only"
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] group-hover:border-[var(--accent-muted)] transition-colors">
+                        <Anchor className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">Grounded mode</p>
+                        <p className="text-xs text-[var(--text-tertiary)]">
+                          Anchor every value to an exact source quote. Richer output shape — smaller local models may
+                          follow it less strictly.
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                        groundedMode ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
+                          groundedMode ? "left-6" : "left-1"
+                        }`}
+                      />
+                      <input
+                        type="checkbox"
+                        checked={groundedMode}
+                        onChange={(e) => handleToggleGrounded(e.target.checked)}
                         className="sr-only"
                       />
                     </div>

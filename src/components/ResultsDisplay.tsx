@@ -233,8 +233,13 @@ export function ResultsDisplay({
   // computed when an extracted-text view exists at all (same availability
   // rule `onJumpToValue`'s presence already encodes for the crosshair) —
   // `extractedText` is undefined for images, so this stays a no-op there.
+  // Gated on `quotes` being present at all (not just non-empty): the
+  // "unverified" hint is a grounded-mode concept (§T2.5 — ungrounded runs
+  // never send `quotes`), so a plain value-based non-match (e.g. a
+  // normalized date the model reformatted) must not read as "unverified"
+  // for a request that never claimed source-grounding in the first place.
   const anchoredMap = useMemo(() => {
-    if (!extractedText || !results) return null;
+    if (!extractedText || !results || quotes === undefined) return null;
     const { anchors } = computeMatchRanges(extractedText, results, quotes);
     const map = new Map<string, boolean>();
     anchors.forEach((a) => map.set(`${a.row}:${a.field}`, a.anchored));

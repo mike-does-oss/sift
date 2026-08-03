@@ -66,6 +66,17 @@ describe("runExtraction — no override", () => {
     expect(result.provider).toBe("anthropic");
     expect(result.model).toBe("claude-sonnet-5");
   });
+
+  it("passes `grounded` straight through to the engine when the caller sets it (§T2.5)", async () => {
+    const result = await runExtraction({ ...baseInput, grounded: true });
+    expect(extractWithOllamaMock.mock.calls[0][0]).toMatchObject({ grounded: true });
+    expect(result.provider).toBe("ollama");
+  });
+
+  it("leaves `grounded` unset when the caller never sets it — jobs/batches never ground (§T2.5)", async () => {
+    await runExtraction(baseInput);
+    expect(extractWithOllamaMock.mock.calls[0][0].grounded).toBeUndefined();
+  });
 });
 
 describe("runExtraction — override", () => {

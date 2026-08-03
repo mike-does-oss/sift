@@ -13,7 +13,8 @@ export async function extractWithOpenAI(input: ExtractionInput): Promise<Extract
 
   try {
     // Build the JSON schema for structured output
-    const jsonSchema = buildJsonSchema(input.fields, input.extractMultiple, { grounded: true });
+    const grounded = input.grounded ?? false;
+    const jsonSchema = buildJsonSchema(input.fields, input.extractMultiple, { grounded });
 
     // Build the system prompt
     const systemPrompt = (input.extractMultiple
@@ -36,7 +37,7 @@ Rules:
 - For dates, use ISO 8601 format (YYYY-MM-DD)
 - For numbers, return numeric values without currency symbols or units
 - For arrays/lists, return an array of strings
-- Be precise and accurate - do not make up information`) + `\n- ${VERBATIM_INSTRUCTION}\n- ${QUOTE_INSTRUCTION}`;
+- Be precise and accurate - do not make up information`) + (grounded ? `\n- ${VERBATIM_INSTRUCTION}\n- ${QUOTE_INSTRUCTION}` : `\n- ${VERBATIM_INSTRUCTION}`);
 
     // Build the user message with file reference
     const extractionInstruction = input.extractMultiple
@@ -98,6 +99,12 @@ Analyze the entire document carefully and extract ${input.extractMultiple ? "ALL
     }
 
     const extractedData = JSON.parse(content);
+
+    if (!grounded) {
+      // If extractMultiple, unwrap the items array
+      const data = input.extractMultiple ? extractedData.items : extractedData;
+      return { success: true, data };
+    }
 
     // Unwrap the grounded {value, quote} shape into plain values + quotes
     // (multi: unwraps the items array too).
