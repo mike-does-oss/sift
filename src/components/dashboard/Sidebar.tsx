@@ -8,6 +8,7 @@ import {
   Layers,
   CalendarClock,
   FileJson,
+  Database,
   History,
   Settings,
   Moon,
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/batches", label: "Batches", icon: Layers },
   { href: "/dashboard/schedules", label: "Schedules", icon: CalendarClock },
   { href: "/dashboard/templates", label: "Templates", icon: FileJson },
+  { href: "/dashboard/datasets", label: "Datasets", icon: Database },
   { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;

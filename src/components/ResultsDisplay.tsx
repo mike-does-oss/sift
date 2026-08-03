@@ -5,6 +5,7 @@ import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair } fro
 import { useState } from "react";
 import type { ExtractionField, ExtractionData, ExtractionResult } from "@/types";
 import { toCsv, downloadText } from "@/lib/export";
+import { SaveToDatasetPanel } from "./SaveToDatasetPanel";
 
 type FieldValue = string | number | boolean | string[] | null;
 
@@ -306,106 +307,13 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
     return null;
   }
 
-  // Multiple rows — extractMultiple mode, editable cells.
-  if (isArray && resultsArray.length > 1) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[var(--success-subtle)] flex items-center justify-center">
-              <Check className="w-4 h-4 text-[var(--success)]" strokeWidth={2.5} />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)]">Complete</h3>
-              <p className="text-xs text-[var(--text-tertiary)]">{resultsArray.length} rows extracted</p>
-            </div>
-          </div>
-          <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-inset)]">
-                <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-tertiary)] w-10">#</th>
-                {fields.map((field) => (
-                  <th key={field.id} className="data px-3 py-2 text-left text-xs font-medium text-[var(--text-tertiary)]">
-                    {field.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {editedArray.map((row, rowIndex) => (
-                <tr
-                  key={rowIndex}
-                  className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
-                >
-                  <td className="px-4 py-2.5 text-[var(--text-tertiary)] tabular-nums">{rowIndex + 1}</td>
-                  {fields.map((field) => {
-                    const original = resultsArray[rowIndex]?.[field.name] ?? null;
-                    const current = row[field.name] ?? null;
-                    const isEdited = !valuesEqual(current, original);
-                    return (
-                      <td key={field.id} className="px-2 py-2 min-w-[9rem]">
-                        <div className="group/cell flex items-start gap-1">
-                          <div className="flex-1 min-w-0">
-                            <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
-                          </div>
-                          <div className="flex-shrink-0 flex flex-col items-center gap-0.5 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity">
-                            {onJumpToValue && (
-                              <button
-                                onClick={() => onJumpToValue(field.name, rowIndex)}
-                                aria-label={`Jump to ${field.name} in document`}
-                                title="Jump to highlight in document"
-                                className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
-                              >
-                                <Crosshair className="w-3 h-3" />
-                              </button>
-                            )}
-                            {isEdited && (
-                              <button
-                                onClick={() => resetField(rowIndex, field.name)}
-                                aria-label={`Reset ${field.name} to extracted value`}
-                                title="Reset to extracted value"
-                                className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {isEdited && (
-                          <span className="mt-0.5 inline-block text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent-tint)] text-[var(--accent)]">
-                            edited
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <details className="border-t border-[var(--border-subtle)] group">
-          <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors select-none">
-            <span className="ml-1">View JSON</span>
-          </summary>
-          <div className="px-4 pb-4">
-            <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
-              {JSON.stringify(edited, null, 2)}
-            </pre>
-          </div>
-        </details>
-      </motion.div>
-    );
-  }
-
-  // Single result — key/value rows, editable.
-  const originalSingle = resultsArray[0];
-  const editedSingle = editedArray[0] ?? originalSingle;
+  // Single and multi-row (extractMultiple) results render through the same
+  // table: columns = fields, rows = records — single mode is just a one-row
+  // table. The `#` index column only earns its keep once there's more than
+  // one row to count.
+  const rowCount = editedArray.length;
+  const showIndexColumn = rowCount > 1;
+  const fieldKeys = fields.map((f) => f.name);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
@@ -417,59 +325,90 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
           <div>
             <h3 className="text-sm font-medium text-[var(--text-primary)]">Complete</h3>
             <p className="text-xs text-[var(--text-tertiary)]">
-              {fields.length} field{fields.length !== 1 ? "s" : ""} extracted
+              {rowCount > 1
+                ? `${rowCount} rows extracted`
+                : `${fields.length} field${fields.length !== 1 ? "s" : ""} extracted`}
             </p>
           </div>
         </div>
         <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
       </div>
 
-      <div className="divide-y divide-[var(--border-subtle)]">
-        {fields.map((field) => {
-          const original = originalSingle[field.name] ?? null;
-          const current = editedSingle[field.name] ?? null;
-          const isEdited = !valuesEqual(current, original);
-          return (
-            <div key={field.id} className="flex items-start gap-4 px-4 py-3 hover:bg-[var(--surface-overlay)]/30 transition-colors">
-              <div className="w-28 flex-shrink-0 pt-1.5">
-                <span className="data text-xs font-medium text-[var(--text-secondary)]">{field.name}</span>
-                <span className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wider mt-0.5">
-                  {field.type}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <EditableValue value={current} onCommit={(v) => updateField(0, field.name, v)} />
-              </div>
-              <div className="flex-shrink-0 flex items-center gap-1 pt-1">
-                {isEdited && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent-tint)] text-[var(--accent)]">
-                    edited
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-inset)]">
+              {showIndexColumn && (
+                <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-tertiary)] w-10">#</th>
+              )}
+              {fields.map((field) => (
+                <th key={field.id} className="px-3 py-2 text-left text-xs font-medium text-[var(--text-tertiary)]">
+                  <span className="data block">{field.name}</span>
+                  <span className="block text-[9px] uppercase tracking-wider text-[var(--text-tertiary)]/70 mt-0.5">
+                    {field.type}
                   </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {editedArray.map((row, rowIndex) => (
+              <tr
+                key={rowIndex}
+                className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
+              >
+                {showIndexColumn && (
+                  <td className="px-4 py-2.5 text-[var(--text-tertiary)] tabular-nums">{rowIndex + 1}</td>
                 )}
-                {onJumpToValue && (
-                  <button
-                    onClick={() => onJumpToValue(field.name, 0)}
-                    aria-label={`Jump to ${field.name} in document`}
-                    title="Jump to highlight in document"
-                    className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
-                  >
-                    <Crosshair className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {isEdited && (
-                  <button
-                    onClick={() => resetField(0, field.name)}
-                    aria-label={`Reset ${field.name} to extracted value`}
-                    title="Reset to extracted value"
-                    className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                {fields.map((field) => {
+                  const original = resultsArray[rowIndex]?.[field.name] ?? null;
+                  const current = row[field.name] ?? null;
+                  const isEdited = !valuesEqual(current, original);
+                  return (
+                    <td key={field.id} className="px-2 py-2 min-w-[9rem]">
+                      <div className="group/cell flex items-start gap-1">
+                        <div className="flex-1 min-w-0">
+                          <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
+                        </div>
+                        <div className="flex-shrink-0 flex flex-col items-center gap-0.5 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity">
+                          {onJumpToValue && (
+                            <button
+                              onClick={() => onJumpToValue(field.name, rowIndex)}
+                              aria-label={`Jump to ${field.name} in document`}
+                              title="Jump to highlight in document"
+                              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+                            >
+                              <Crosshair className="w-3 h-3" />
+                            </button>
+                          )}
+                          {isEdited && (
+                            <button
+                              onClick={() => resetField(rowIndex, field.name)}
+                              aria-label={`Reset ${field.name} to extracted value`}
+                              title="Reset to extracted value"
+                              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {isEdited && (
+                        <span className="mt-0.5 inline-block text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent-tint)] text-[var(--accent)]">
+                          edited
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
+        <SaveToDatasetPanel fieldKeys={fieldKeys} rows={editedArray} />
       </div>
 
       <details className="border-t border-[var(--border-subtle)] group">
@@ -477,8 +416,8 @@ export function ResultsDisplay({ results, fields, isLoading, error, onJumpToValu
           <span className="ml-1">View JSON</span>
         </summary>
         <div className="px-4 pb-4">
-          <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)]">
-            {JSON.stringify(editedSingle, null, 2)}
+          <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+            {JSON.stringify(edited, null, 2)}
           </pre>
         </div>
       </details>

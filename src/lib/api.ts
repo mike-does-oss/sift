@@ -109,6 +109,7 @@ export interface SiftApi {
   ): Promise<{ added: number; rowCount: number }>;
   getDataset(id: string): Promise<{ dataset: DatasetSummary; rows: DatasetRow[] }>;
   deleteDataset(id: string): Promise<void>;
+  deleteRow(datasetId: string, rowId: string): Promise<{ rowCount: number }>;
 }
 
 interface OllamaPullLine {
@@ -277,6 +278,16 @@ class WebSiftApi implements SiftApi {
     if (!res.ok) {
       throw new Error(await errorMessage(res, `Failed to delete dataset (${res.status})`));
     }
+  }
+
+  async deleteRow(datasetId: string, rowId: string): Promise<{ rowCount: number }> {
+    const res = await fetch(`/api/datasets/${datasetId}/rows?rowId=${encodeURIComponent(rowId)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to delete row (${res.status})`));
+    }
+    return (await res.json()) as { rowCount: number };
   }
 }
 

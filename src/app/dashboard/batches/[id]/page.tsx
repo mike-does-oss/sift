@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, FileWarning } from "lucide-react";
+import { ArrowLeft, Download, FileWarning, Database } from "lucide-react";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
+import { SaveToDatasetPanel } from "@/components";
 
 interface Job {
   id: string;
@@ -26,6 +27,18 @@ interface Batch {
   completedCount: number;
   failedCount: number;
   createdAt: string;
+  /** `{ fields, prompt, extractMultiple }` at the time the batch was created — see `templates`/`jobs` in the schema comment. Loosely typed here since only `fields[].name` is used (see `fieldKeysFromSnapshot`). */
+  templateSnapshot: unknown;
+}
+
+/** Same key derivation `jobsToRows` implicitly relies on (result object keys == template field names) — read directly from the batch's `templateSnapshot.fields`, defensively, since it's untyped JSON from the DB. */
+function fieldKeysFromSnapshot(snapshot: unknown): string[] {
+  if (typeof snapshot !== "object" || snapshot === null || !("fields" in snapshot)) return [];
+  const fields = (snapshot as { fields?: unknown }).fields;
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .map((f) => (typeof f === "object" && f !== null && "name" in f ? (f as { name?: unknown }).name : undefined))
+    .filter((name): name is string => typeof name === "string" && name.trim() !== "");
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -54,6 +67,7 @@ export default function BatchDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showSavePanel, setShowSavePanel] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -152,6 +166,15 @@ export default function BatchDetailPage() {
     downloadText(`${batch.name}.json`, JSON.stringify(results, null, 2), "application/json");
   };
 
+  // Same completed-job filtering `handleDownloadCsv` uses, flattened through
+  // the same `jobsToRows` helper — the dataset's headers are the template's
+  // field keys, not whatever extra columns jobsToRows adds (e.g. `_document`);
+  // the save route projects each row onto the target dataset's headers server-side.
+  const fieldKeys = fieldKeysFromSnapshot(batch.templateSnapshot);
+  const datasetRows = jobsToRows(
+    jobs.filter((j) => j.job.status === "completed").map((j) => ({ result: j.job.result, filename: j.filename }))
+  );
+
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-6">
       <Link
@@ -186,9 +209,29 @@ export default function BatchDetailPage() {
               <Download className="w-3.5 h-3.5" />
               JSON
             </button>
+            {fieldKeys.length > 0 && datasetRows.length > 0 && (
+              <button
+                onClick={() => setShowSavePanel((prev) => !prev)}
+                aria-expanded={showSavePanel}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  showSavePanel
+                    ? "border-[var(--accent-muted)] text-[var(--accent)] bg-[var(--accent-subtle)]"
+                    : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)]"
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                Save to dataset
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {showSavePanel && fieldKeys.length > 0 && (
+        <div className="card-elevated rounded-xl p-4">
+          <SaveToDatasetPanel fieldKeys={fieldKeys} rows={datasetRows} />
+        </div>
+      )}
 
       <div className="h-1.5 w-full rounded-full bg-[var(--surface-overlay)] overflow-hidden">
         <div
