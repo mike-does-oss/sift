@@ -1,5 +1,12 @@
-import { buildJsonSchema } from "./schema";
-import { PDF_NO_TEXT_ERROR, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
+import type { ExtractionData } from "@/types";
+import { buildJsonSchema, unwrapGrounded } from "./schema";
+import {
+  PDF_NO_TEXT_ERROR,
+  QUOTE_INSTRUCTION,
+  VERBATIM_INSTRUCTION,
+  type ExtractionInput,
+  type ExtractionOutput,
+} from "./types";
 
 export async function ollamaChat(
   baseUrl: string, model: string, schema: object, system: string, user: string, images?: string[]
@@ -43,8 +50,8 @@ export async function extractWithOllama(
   if (input.source.kind === "pdf" && !input.source.text.trim()) {
     return { success: false, error: PDF_NO_TEXT_ERROR };
   }
-  const schema = buildJsonSchema(input.fields, input.extractMultiple);
-  const system = `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION}`;
+  const schema = buildJsonSchema(input.fields, input.extractMultiple, { grounded: true });
+  const system = `You are a precise data extraction assistant. Extract the requested fields from the document and return JSON matching the schema. Use null for missing values. Dates in ISO 8601 (YYYY-MM-DD). Numbers without currency symbols. ${VERBATIM_INSTRUCTION} ${QUOTE_INSTRUCTION}`;
   const instruction = `${input.prompt ? `Context: ${input.prompt}\n\n` : ""}Extract ${input.extractMultiple ? "ALL records with" : ""} these fields:\n${input.fields.map((f) => `- ${f.name} (${f.type})${f.description ? `: ${f.description}` : ""}`).join("\n")}`;
 
   let user: string;
@@ -57,9 +64,7 @@ export async function extractWithOllama(
   }
 
   const out = await ollamaChat(input.baseUrl, input.model ?? "gemma3:4b", schema, system, user, images);
-  if (out.success && input.extractMultiple) {
-    const d = out.data as Record<string, unknown>;
-    return { success: true, data: (Array.isArray(d) ? d : (d.items as never)) ?? d };
-  }
-  return out;
+  if (!out.success) return out;
+  const { data, quotes } = unwrapGrounded(out.data, input.extractMultiple);
+  return { success: true, data: data as ExtractionData, quotes };
 }

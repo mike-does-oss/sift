@@ -116,7 +116,7 @@ describe("extractWithOllama", () => {
   it("sends an image source as the ollama images array (multimodal request shape)", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ message: { content: '{"app_name":"Sift"}' } }),
+      json: async () => ({ message: { content: '{"app_name":{"value":"Sift","quote":"Sift"}}' } }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -133,7 +133,7 @@ describe("extractWithOllama", () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.messages[1].images).toEqual(["aGVsbG8="]);
     expect(body.messages[1].content).not.toContain("DOCUMENT TEXT");
-    expect(result).toEqual({ success: true, data: { app_name: "Sift" } });
+    expect(result).toEqual({ success: true, data: { app_name: "Sift" }, quotes: { app_name: "Sift" } });
   });
 
   it("includes a field's description in the field list line when present", async () => {
@@ -193,5 +193,124 @@ describe("extractWithOllama", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.success).toBe(false);
     expect((result as { success: false; error: string }).error).toContain("No selectable text found");
+  });
+
+  it("requests the grounded schema (each field wrapped as {value, quote}) and states the quote instruction", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: '{"total":{"value":100,"quote":"$100.00"}}' } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.format.properties.total).toEqual({
+      type: "object",
+      properties: {
+        value: { type: ["number", "null"], description: "The total as a numeric value" },
+        quote: {
+          type: ["string", "null"],
+          description: "Exact text from the document this value was taken from, verbatim; null if not directly present.",
+        },
+      },
+      required: ["value", "quote"],
+      additionalProperties: false,
+    });
+    expect(body.messages[0].content).toContain("also return `quote`");
+  });
+
+  it("unwraps a grounded response into data + quotes (single record)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          message: {
+            content: JSON.stringify({
+              total: { value: 100, quote: "$100.00" },
+              purchase_order: { value: null, quote: null },
+            }),
+          },
+        }),
+      })
+    );
+
+    const result = await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [
+        { id: "1", name: "total", type: "number" },
+        { id: "2", name: "purchase_order", type: "text" },
+      ],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: { total: 100, purchase_order: null },
+      quotes: { total: "$100.00", purchase_order: null },
+    });
+  });
+
+  it("unwraps a grounded multi-row response into aligned data + quotes arrays", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          message: {
+            content: JSON.stringify({
+              items: [{ name: { value: "Widget", quote: "widget" } }, { name: { value: "Gadget", quote: "gadget" } }],
+            }),
+          },
+        }),
+      })
+    );
+
+    const result = await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "name", type: "text" }],
+      prompt: "",
+      extractMultiple: true,
+      baseUrl: "http://localhost:11434",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: [{ name: "Widget" }, { name: "Gadget" }],
+      quotes: [{ name: "widget" }, { name: "gadget" }],
+    });
+  });
+
+  it("treats a flat (non-grounded) value from the model defensively — value kept, quote null", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: { content: '{"total":100}' } }),
+      })
+    );
+
+    const result = await extractWithOllama({
+      source: { kind: "text", text: "doc text" },
+      filename: "doc.txt",
+      fields: [{ id: "1", name: "total", type: "number" }],
+      prompt: "",
+      extractMultiple: false,
+      baseUrl: "http://localhost:11434",
+    });
+
+    expect(result).toEqual({ success: true, data: { total: 100 }, quotes: { total: null } });
   });
 });

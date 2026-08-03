@@ -114,5 +114,12 @@ export async function POST(request: NextRequest) {
   // (used to anchor result values in the source even when the engine itself
   // read the PDF natively via vision). Additive: existing clients ignore it.
   const text = source.kind === "image" ? undefined : source.text;
-  return NextResponse.json({ success: true, data: result.data, provider: result.provider, model: result.model, text });
+  return NextResponse.json({
+    success: true,
+    data: result.data,
+    provider: result.provider,
+    model: result.model,
+    text,
+    ...(result.quotes !== undefined ? { quotes: result.quotes } : {}),
+  });
 }

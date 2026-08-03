@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
-import { buildJsonSchema } from "./schema";
-import { VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
+import type { ExtractionData } from "@/types";
+import { buildJsonSchema, unwrapGrounded } from "./schema";
+import { QUOTE_INSTRUCTION, VERBATIM_INSTRUCTION, type ExtractionInput, type ExtractionOutput } from "./types";
 
 export async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput> {
   const apiKey = input.apiKey;
@@ -12,7 +13,7 @@ export async function extractWithOpenAI(input: ExtractionInput): Promise<Extract
 
   try {
     // Build the JSON schema for structured output
-    const jsonSchema = buildJsonSchema(input.fields, input.extractMultiple);
+    const jsonSchema = buildJsonSchema(input.fields, input.extractMultiple, { grounded: true });
 
     // Build the system prompt
     const systemPrompt = (input.extractMultiple
@@ -35,7 +36,7 @@ Rules:
 - For dates, use ISO 8601 format (YYYY-MM-DD)
 - For numbers, return numeric values without currency symbols or units
 - For arrays/lists, return an array of strings
-- Be precise and accurate - do not make up information`) + `\n- ${VERBATIM_INSTRUCTION}`;
+- Be precise and accurate - do not make up information`) + `\n- ${VERBATIM_INSTRUCTION}\n- ${QUOTE_INSTRUCTION}`;
 
     // Build the user message with file reference
     const extractionInstruction = input.extractMultiple
@@ -98,10 +99,11 @@ Analyze the entire document carefully and extract ${input.extractMultiple ? "ALL
 
     const extractedData = JSON.parse(content);
 
-    // If extractMultiple, unwrap the items array
-    const data = input.extractMultiple ? extractedData.items : extractedData;
+    // Unwrap the grounded {value, quote} shape into plain values + quotes
+    // (multi: unwraps the items array too).
+    const { data, quotes } = unwrapGrounded(extractedData, input.extractMultiple);
 
-    return { success: true, data };
+    return { success: true, data: data as ExtractionData, quotes };
   } catch (error) {
     if (error instanceof OpenAI.APIError) {
       return { success: false, error: `OpenAI API error: ${error.message}` };
