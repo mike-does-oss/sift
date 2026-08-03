@@ -36,6 +36,27 @@ export interface PullProgress {
   total?: number;
 }
 
+/** Summary shape returned by dataset list/create/fetch endpoints. */
+export interface DatasetSummary {
+  id: string;
+  name: string;
+  headers: string[];
+  rowCount: number;
+  createdAt: string;
+}
+
+export interface DatasetRow {
+  id: string;
+  row: Record<string, unknown>;
+  addedAt: string;
+}
+
+export interface CreateDatasetInput {
+  name: string;
+  headers: string[];
+  rows?: Record<string, unknown>[];
+}
+
 export interface ExtractResponse {
   success: boolean;
   data?: ExtractionData;
@@ -78,6 +99,16 @@ export interface SiftApi {
    * machine" list in Settings and the workspace empty-local affordance.
    */
   getSystemInfo(): Promise<{ system: SystemInfo; recommendations: ModelRec[] }>;
+  /** Datasets — the local, durable results store (`/api/datasets`). */
+  listDatasets(): Promise<DatasetSummary[]>;
+  createDataset(input: CreateDatasetInput): Promise<DatasetSummary>;
+  appendRows(
+    datasetId: string,
+    rows: Record<string, unknown>[],
+    sourceJobId?: string
+  ): Promise<{ added: number; rowCount: number }>;
+  getDataset(id: string): Promise<{ dataset: DatasetSummary; rows: DatasetRow[] }>;
+  deleteDataset(id: string): Promise<void>;
 }
 
 interface OllamaPullLine {
@@ -96,6 +127,17 @@ function parsePullLine(line: string): OllamaPullLine | null {
   } catch {
     return null; // ignore malformed lines rather than failing the whole download
   }
+}
+
+/** Extracts a route's `{ error }` JSON body, falling back to a generic message. */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data?.error) return data.error as string;
+  } catch {
+    // no JSON error body — fall back to the generic message
+  }
+  return fallback;
 }
 
 class WebSiftApi implements SiftApi {
@@ -182,6 +224,59 @@ class WebSiftApi implements SiftApi {
       throw new Error(`Failed to load system info (${res.status})`);
     }
     return (await res.json()) as { system: SystemInfo; recommendations: ModelRec[] };
+  }
+
+  async listDatasets(): Promise<DatasetSummary[]> {
+    const res = await fetch("/api/datasets");
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to load datasets (${res.status})`));
+    }
+    const body = await res.json();
+    return body.datasets as DatasetSummary[];
+  }
+
+  async createDataset(input: CreateDatasetInput): Promise<DatasetSummary> {
+    const res = await fetch("/api/datasets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to create dataset (${res.status})`));
+    }
+    const body = await res.json();
+    return body.dataset as DatasetSummary;
+  }
+
+  async appendRows(
+    datasetId: string,
+    rows: Record<string, unknown>[],
+    sourceJobId?: string
+  ): Promise<{ added: number; rowCount: number }> {
+    const res = await fetch(`/api/datasets/${datasetId}/rows`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows, sourceJobId }),
+    });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to append rows (${res.status})`));
+    }
+    return (await res.json()) as { added: number; rowCount: number };
+  }
+
+  async getDataset(id: string): Promise<{ dataset: DatasetSummary; rows: DatasetRow[] }> {
+    const res = await fetch(`/api/datasets/${id}`);
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to load dataset (${res.status})`));
+    }
+    return (await res.json()) as { dataset: DatasetSummary; rows: DatasetRow[] };
+  }
+
+  async deleteDataset(id: string): Promise<void> {
+    const res = await fetch(`/api/datasets/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, `Failed to delete dataset (${res.status})`));
+    }
   }
 }
 

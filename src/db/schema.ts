@@ -68,8 +68,25 @@ export const settings = sqliteTable("settings", {
   value: text("value").notNull(),
 });
 
+export const datasets = sqliteTable("datasets", {
+  id: id(),
+  name: text("name").notNull(),
+  headers: text("headers", { mode: "json" }).notNull(),
+  createdAt: createdAt(),
+});
+
+export const datasetRows = sqliteTable("dataset_rows", {
+  id: id(),
+  datasetId: text("dataset_id").notNull(),
+  row: text("row", { mode: "json" }).notNull(),
+  sourceJobId: text("source_job_id"),
+  addedAt: integer("added_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+}, (t) => [index("dataset_rows_dataset_id_idx").on(t.datasetId)]);
+
 export type DbTemplate = typeof templates.$inferSelect;
 export type DbDocument = typeof documents.$inferSelect;
 export type DbBatch = typeof batches.$inferSelect;
 export type DbJob = typeof jobs.$inferSelect;
 export type DbSchedule = typeof schedules.$inferSelect;
+export type DbDataset = typeof datasets.$inferSelect;
+export type DbDatasetRow = typeof datasetRows.$inferSelect;
