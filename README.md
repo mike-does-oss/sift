@@ -57,7 +57,12 @@ PDF, email (`.eml`), images (PNG/JPEG/WEBP, via vision models), and plain text (
 ## Features
 
 - Two-pane workspace: document on the left, fields and results on the right — extracted values are highlighted where they appear in the source text
+- Grounded mode (opt-in): every value comes with the exact source quote it was lifted from — highlights anchor precisely, and values the model couldn't ground are flagged for review
+- Build fields from a plain-language description: describe the task, and the model scaffolds the field definitions, types, and prompt for you (grounded mode)
+- Per-template few-shot examples that guide the extraction model
+- Per-field descriptions the model reads as extraction guidance
 - Review and edit every value before export; exports use your edits
+- Datasets: append matching extraction results into a durable local table and export one merged CSV
 - Per-extraction provider/model picker with an always-on 🔒 Local / ☁ Cloud badge
 - 9 preset templates (invoices, receipts, bank statements, pay stubs, purchase orders, utility bills, résumés, contracts)
 - Batches and recurring schedules with document inboxes and Run now
