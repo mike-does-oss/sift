@@ -492,20 +492,41 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
   // on a *new* extraction (results reference change) — not on edits, which
   // never change row count or which page you're looking at.
   const [page, setPage] = useState(1);
-  const [prevResults, setPrevResults] = useState<ExtractionData | null>(results);
-  if (results !== prevResults) {
-    setPrevResults(results);
-    setEdited(results);
-    setPage(1);
-  }
 
   // Expand-to-modal (§13, "expand-to-modal" task) — the app's first overlay.
   // `edited`/`page` above are the only state the table depends on, and both
   // already live here in ResultsDisplay, so the modal doesn't need any
   // import/export of edit state on open/close: it's the same state the
   // inline card reads, just rendered through a second `<ResultsTable>`
-  // instance (see the return below) while `expanded` is true.
+  // instance (see the return below) while `expanded` is true. Declared
+  // above the `prevResults` reset block below, which also closes the modal
+  // on a new extraction — needs `setExpanded` in scope.
   const [expanded, setExpanded] = useState(false);
+
+  const [prevResults, setPrevResults] = useState<ExtractionData | null>(results);
+  if (results !== prevResults) {
+    setPrevResults(results);
+    setEdited(results);
+    setPage(1);
+    // A new extraction starting (or finishing) replaces `results` out from
+    // under the modal — most visibly, starting one sets `results` to `null`
+    // while `isLoading` flips true, which makes ResultsDisplay hit the
+    // early `isLoading` return below and stop rendering the modal's JSX
+    // entirely, orphaning `expanded=true` and, with it, the body-scroll
+    // lock the modal-open effect set (its cleanup never runs because the
+    // effect that owns it stops being reconciled once this component
+    // renders that early-return branch instead — no JSX means no effects).
+    // Closing here, at the same render-time reset that already resyncs
+    // `edited`/`page` for the new extraction, is what makes the body-lock
+    // effect (keyed on `expanded`) actually re-run and restore
+    // `document.body.style.overflow` before that can happen. Deliberately
+    // NOT routed through `closeModal()` below: that also refocuses the
+    // expand button, which is meaningless (and, mid-loading, may not even
+    // be mounted) when the modal is closing because the data underneath it
+    // changed, not because the user asked to close it.
+    setExpanded(false);
+  }
+
   const expandButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   // Users who've asked the OS to minimize motion get an instant open/close
