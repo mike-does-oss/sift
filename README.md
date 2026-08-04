@@ -52,7 +52,7 @@ In local (Ollama) mode, documents never leave your machine. With a cloud provide
 
 ## Formats
 
-PDF, email (`.eml`), images (PNG/JPEG/WEBP, via vision models), and plain text (`.txt`/`.md`/`.csv`).
+PDF, Word (`.docx`), PowerPoint (`.pptx`), email (`.eml`), images (PNG/JPEG/WEBP, via vision models), and plain text (`.txt`/`.md`/`.csv`).
 
 ## Features
 

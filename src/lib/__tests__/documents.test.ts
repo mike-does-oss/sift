@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import JSZip from "jszip";
 import { parseDocument, detectExtension } from "../documents";
 
 // Minimal hand-built one-page PDF ("Hello Sift" as extractable text). pdf.js
@@ -47,6 +48,72 @@ function buildWebpFixture(): Buffer {
   const size = Buffer.from([0x00, 0x00, 0x00, 0x00]);
   const webp = Buffer.from("WEBP");
   return Buffer.concat([riff, size, webp, Buffer.from("fake-webp-body")]);
+}
+
+// Minimal real .docx (Office Open XML / ZIP) — just enough for mammoth's
+// extractRawText to find one paragraph. Built in-memory with jszip so no
+// binary fixture is committed to the repo.
+async function buildDocxFixture(paragraphText: string): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+  );
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${paragraphText ? `<w:p><w:r><w:t>${paragraphText}</w:t></w:r></w:p>` : ""}</w:body>
+</w:document>`
+  );
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+// Minimal real .pptx — two slides, each with a couple of text runs across
+// paragraphs, enough to exercise slide ordering and run/paragraph joining.
+async function buildPptxFixture(slides: string[][]): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+  );
+  slides.forEach((paragraphs, i) => {
+    const slideXml = paragraphs
+      .map((text) => `<a:p><a:r><a:t>${text}</a:t></a:r></a:p>`)
+      .join("");
+    zip.file(
+      `ppt/slides/slide${i + 1}.xml`,
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>${slideXml}</p:spTree></p:cSld>
+</p:sld>`
+    );
+  });
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+// A well-formed but empty zip — no docx/pptx-specific parts inside, and
+// no reliable extension either. Used to prove "zip magic, unknown/unmapped
+// extension" is rejected as unsupported rather than guessed at.
+async function buildPlainZipFixture(): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file("readme.txt", "just a regular zip, not office xml");
+  return zip.generateAsync({ type: "nodebuffer" });
 }
 
 const PLAIN_EML = `From: Alice <alice@example.com>
@@ -159,15 +226,60 @@ describe("parseDocument — plain text formats", () => {
   });
 });
 
+describe("parseDocument — .docx", () => {
+  it("extracts a paragraph's text via mammoth", async () => {
+    const buf = await buildDocxFixture("Hello from a real docx fixture");
+    const result = await parseDocument(buf, "resume.docx");
+    expect(result).toEqual({ kind: "text", text: "Hello from a real docx fixture" });
+  });
+
+  it("returns empty text for a docx with no body content", async () => {
+    const buf = await buildDocxFixture("");
+    const result = await parseDocument(buf, "empty.docx");
+    expect(result).toEqual({ kind: "text", text: "" });
+  });
+});
+
+describe("parseDocument — .pptx", () => {
+  it("extracts slide text in order, with slide markers, runs space-joined and paragraphs newline-joined", async () => {
+    const buf = await buildPptxFixture([
+      ["First slide run one", "first slide run two"],
+      ["Second slide only run"],
+    ]);
+    const result = await parseDocument(buf, "deck.pptx");
+    expect(result.kind).toBe("text");
+    if (result.kind !== "text") throw new Error("expected text");
+    expect(result.text).toBe(
+      "--- Slide 1 ---\nFirst slide run one\nfirst slide run two\n\n--- Slide 2 ---\nSecond slide only run"
+    );
+  });
+
+  it("orders slides numerically (slide2 before slide10), not lexicographically", async () => {
+    const slides = Array.from({ length: 11 }, (_, i) => [`Text for slide ${i + 1}`]);
+    const buf = await buildPptxFixture(slides);
+    const result = await parseDocument(buf, "big-deck.pptx");
+    if (result.kind !== "text") throw new Error("expected text");
+    const markerIndexes = [...result.text.matchAll(/--- Slide (\d+) ---/g)].map((m) => Number(m[1]));
+    expect(markerIndexes).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(result.text).toContain("Text for slide 1");
+    expect(result.text).toContain("Text for slide 10");
+  });
+});
+
 describe("parseDocument — unknown types", () => {
   it("throws a friendly error for unrecognized magic bytes and extension", async () => {
     const buf = Buffer.from([0x00, 0x11, 0x22, 0x33, 0x44]);
-    await expect(parseDocument(buf, "mystery.xyz")).rejects.toThrow(/pdf|eml|txt|md|csv|png|jpg|webp/i);
+    await expect(parseDocument(buf, "mystery.xyz")).rejects.toThrow(/pdf|docx|pptx|eml|txt|md|csv|png|jpg|webp/i);
   });
 
-  it("throws for a .docx file (unsupported format, no magic match)", async () => {
+  it("throws for a corrupted docx (zip magic present, but not a real zip)", async () => {
     const buf = Buffer.from("PK\x03\x04 fake docx bytes");
     await expect(parseDocument(buf, "resume.docx")).rejects.toThrow();
+  });
+
+  it("rejects a well-formed zip with an extension that isn't .docx/.pptx as unsupported", async () => {
+    const buf = await buildPlainZipFixture();
+    await expect(parseDocument(buf, "archive.zip")).rejects.toThrow(/unsupported file type/i);
   });
 });
 
@@ -193,5 +305,17 @@ describe("detectExtension", () => {
 
   it("throws a friendly error for unsupported types", () => {
     expect(() => detectExtension(Buffer.from([0x00, 0x11]), "mystery.xyz")).toThrow(/Unsupported file type/);
+  });
+
+  it("detects docx and pptx from zip magic plus extension", async () => {
+    const docxBuf = await buildDocxFixture("hi");
+    const pptxBuf = await buildPptxFixture([["hi"]]);
+    expect(detectExtension(docxBuf, "resume.docx")).toBe("docx");
+    expect(detectExtension(pptxBuf, "deck.pptx")).toBe("pptx");
+  });
+
+  it("throws a friendly error for a well-formed zip with an unmapped extension", async () => {
+    const buf = await buildPlainZipFixture();
+    expect(() => detectExtension(buf, "archive.zip")).toThrow(/Unsupported file type/);
   });
 });

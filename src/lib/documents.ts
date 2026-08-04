@@ -1,5 +1,7 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import { simpleParser, type AddressObject } from "mailparser";
+import mammoth from "mammoth";
+import JSZip from "jszip";
 
 // Shared truncation cap for every text-shaped ParsedDocument (PDF text
 // layer, .eml, and .txt/.md/.csv) — without it, an oversized text-only
@@ -20,7 +22,7 @@ const TEXT_EXTENSIONS = new Set(["txt", "md", "csv"]);
 export const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 
 export const UNSUPPORTED_TYPE_ERROR =
-  "Unsupported file type. Sift accepts PDF, EML, TXT, MD, CSV, PNG, JPG, and WEBP files.";
+  "Unsupported file type. Sift accepts PDF, DOCX, PPTX, EML, TXT, MD, CSV, PNG, JPG, and WEBP files.";
 
 function extOf(filename: string): string {
   const dot = filename.lastIndexOf(".");
@@ -54,6 +56,20 @@ function isWebp(buf: Buffer): boolean {
     buf.length >= 12 &&
     buf.subarray(0, 4).toString("latin1") === "RIFF" &&
     buf.subarray(8, 12).toString("latin1") === "WEBP"
+  );
+}
+
+// .docx and .pptx are both ZIP containers (Office Open XML) — the local file
+// header magic is shared, so content alone can't tell them apart. Extension
+// discriminates between them (see parseDocument/detectExtension); a zip with
+// neither extension is rejected as unsupported rather than guessed at.
+function isZip(buf: Buffer): boolean {
+  return (
+    buf.length >= 4 &&
+    buf[0] === 0x50 &&
+    buf[1] === 0x4b &&
+    buf[2] === 0x03 &&
+    buf[3] === 0x04
   );
 }
 
@@ -106,11 +122,66 @@ async function parseEml(buf: Buffer): Promise<{ kind: "text"; text: string }> {
   return { kind: "text", text: capText(`${header}\n\n${body}`.trimEnd()) };
 }
 
+async function parseDocx(buf: Buffer): Promise<{ kind: "text"; text: string }> {
+  const { value } = await mammoth.extractRawText({ buffer: buf });
+  return { kind: "text", text: capText(value.trim()) };
+}
+
+const XML_ENTITIES: Record<string, string> = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&apos;": "'",
+  "&amp;": "&",
+};
+
+function decodeXmlEntities(s: string): string {
+  return s.replace(/&lt;|&gt;|&quot;|&apos;|&amp;/g, (m) => XML_ENTITIES[m]);
+}
+
+const SLIDE_PATH_RE = /^ppt\/slides\/slide(\d+)\.xml$/;
+const PARAGRAPH_RE = /<a:p[ >][\s\S]*?<\/a:p>/g;
+const TEXT_RUN_RE = /<a:t[ >]?[^>]*>([\s\S]*?)<\/a:t>/g;
+
+/**
+ * Minimal PPTX text extraction (v1): no heavyweight office suite, just
+ * unzip + regex over the slide XML. Slides only — notesSlides are skipped
+ * (often noise). Order comes from a natural sort of the slideN.xml file
+ * names, not the (more correct but more involved) presentation.xml slide
+ * ID list — good enough for a first cut.
+ */
+async function parsePptx(buf: Buffer): Promise<{ kind: "text"; text: string }> {
+  const zip = await JSZip.loadAsync(buf);
+  const slideNames = Object.keys(zip.files)
+    .filter((name) => SLIDE_PATH_RE.test(name))
+    .sort((a, b) => {
+      const na = parseInt(a.match(SLIDE_PATH_RE)![1], 10);
+      const nb = parseInt(b.match(SLIDE_PATH_RE)![1], 10);
+      return na - nb;
+    });
+
+  const slideTexts: string[] = [];
+  for (let i = 0; i < slideNames.length; i++) {
+    const xml = await zip.files[slideNames[i]].async("text");
+    const paragraphs = xml.match(PARAGRAPH_RE) ?? [];
+    const paraTexts = paragraphs
+      .map((p) => {
+        const runs = [...p.matchAll(TEXT_RUN_RE)].map((m) => decodeXmlEntities(m[1]));
+        return runs.join(" ").trim();
+      })
+      .filter((t) => t.length > 0);
+    slideTexts.push(`--- Slide ${i + 1} ---\n${paraTexts.join("\n")}`);
+  }
+  return { kind: "text", text: capText(slideTexts.join("\n\n").trim()) };
+}
+
 /**
  * Detects the document kind and parses it into a shape the extraction
  * engines can consume. Detection is magic-bytes-first (content wins over a
  * misleading extension); extension is only consulted as a fallback for
- * formats that have no reliable signature (.eml/.txt/.md/.csv).
+ * formats that have no reliable signature (.eml/.txt/.md/.csv), or to
+ * discriminate within a signature shared by multiple formats (.docx/.pptx
+ * are both ZIP containers).
  */
 export async function parseDocument(buf: Buffer, filename: string): Promise<ParsedDocument> {
   if (isPdf(buf)) {
@@ -122,6 +193,11 @@ export async function parseDocument(buf: Buffer, filename: string): Promise<Pars
   if (isWebp(buf)) return { kind: "image", base64: buf.toString("base64"), mediaType: "image/webp" };
 
   const ext = extOf(filename);
+  if (isZip(buf)) {
+    if (ext === "docx") return parseDocx(buf);
+    if (ext === "pptx") return parsePptx(buf);
+    throw new Error(UNSUPPORTED_TYPE_ERROR);
+  }
   if (ext === "eml") return parseEml(buf);
   if (TEXT_EXTENSIONS.has(ext)) return { kind: "text", text: capText(buf.toString("utf-8")) };
 
@@ -144,6 +220,10 @@ export function detectExtension(buf: Buffer, filename: string): string {
   if (isWebp(buf)) return "webp";
 
   const ext = extOf(filename);
+  if (isZip(buf)) {
+    if (ext === "docx" || ext === "pptx") return ext;
+    throw new Error(UNSUPPORTED_TYPE_ERROR);
+  }
   if (ext === "eml") return "eml";
   if (TEXT_EXTENSIONS.has(ext)) return ext;
 

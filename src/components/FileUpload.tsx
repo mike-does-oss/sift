@@ -114,7 +114,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
           >
             <input
               type="file"
-              accept=".pdf,.eml,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,message/rfc822,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp"
+              accept=".pdf,.docx,.pptx,.eml,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,message/rfc822,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp"
               onChange={handleFileInput}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
@@ -141,7 +141,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               or{" "}
               <span className="text-[var(--accent)] font-medium">browse files</span>
             </p>
-            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">PDF, email, image, or text</p>
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">PDF, Word, PowerPoint, email, image, or text</p>
           </motion.label>
         )}
       </AnimatePresence>
