@@ -236,16 +236,20 @@ export function FieldConfiguration({
                   </div>
 
                   {isDescriptionVisible(field) && (
-                    <div className="px-2 pb-2">
+                    <div className="flex px-2 pb-1.5 -mt-0.5">
+                      {/* spacers mirror the drag handle (left) and the two icon
+                          buttons (right) so the input aligns with name + type */}
+                      <div className="w-[30px] mr-2 shrink-0" aria-hidden />
                       <input
                         type="text"
                         value={field.description ?? ""}
                         onChange={(e) =>
                           updateField(field.id, { description: e.target.value === "" ? undefined : e.target.value })
                         }
-                        placeholder='Describe what to extract — the model reads this (e.g. "Total after tax, without currency symbol")'
-                        className="w-full px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border border-transparent text-xs text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-muted)] focus:ring-0 focus:outline-none transition-all"
+                        placeholder="Guidance the model reads — e.g. 'Total after tax, without currency symbol'"
+                        className="flex-1 px-2.5 py-1 rounded-md bg-transparent border border-transparent text-xs text-[var(--text-secondary)] placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-subtle)] focus:border-[var(--accent-muted)] focus:bg-[var(--surface-elevated)] focus:ring-0 focus:outline-none transition-all"
                       />
+                      <div className="w-[68px] shrink-0" aria-hidden />
                     </div>
                   )}
                 </div>
