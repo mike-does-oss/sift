@@ -427,7 +427,14 @@ export function ResultsDisplay({
                       title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
                     >
                       <div
-                        className={`${isEdited ? "pr-6" : "pr-1"} ${
+                        // Reserved clearance must be ≥ the overlay's actual
+                        // footprint in the persistent (edited, unfocused)
+                        // state: dot (12px) + crosshair button (16px) + reset
+                        // button (16px) + two 2px gaps (4px) ≈ 48px, plus the
+                        // overlay's own `right-1` offset (4px) ≈ 52px from
+                        // the cell's right edge — pr-6 (24px) under-reserved
+                        // this and let the icons cover the value's tail.
+                        className={`${isEdited ? "pr-14" : "pr-1"} ${
                           unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
                         }`}
                       >

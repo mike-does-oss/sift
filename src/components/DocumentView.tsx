@@ -165,13 +165,24 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
         };
         // A jump while the pane is collapsed must not silently no-op — expand
         // it first, then (also switching to the extracted-text view if
-        // needed) wait a couple of frames for the resulting layout/DOM
-        // changes to settle before measuring/scrolling to the mark.
+        // needed) wait for things to settle before measuring/scrolling to
+        // the mark.
         const needsExpand = collapsed;
         const needsViewSwitch = Boolean(extractedText) && view !== "extracted";
         if (needsExpand) onCollapsedChange(false);
         if (needsViewSwitch) setView("extracted");
-        if (needsExpand || needsViewSwitch) {
+        if (needsExpand) {
+          // Force-expanding animates the pane wrapper's width over 200ms
+          // (`transition-[width] duration-200` in page.tsx, which this
+          // component doesn't own a ref to). The extracted-text container
+          // re-wraps as the pane widens, so the mark's position keeps
+          // shifting throughout that animation — a couple of rAFs (enough
+          // for the DOM/view-switch itself to commit) is nowhere near enough
+          // for the width transition to settle, and scrolling mid-transition
+          // computes an offset against a pane that's still nearly collapsed.
+          // Wait past the transition instead.
+          setTimeout(activate, 250);
+        } else if (needsViewSwitch) {
           requestAnimationFrame(() => requestAnimationFrame(activate));
         } else {
           activate();
