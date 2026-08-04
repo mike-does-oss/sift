@@ -490,6 +490,14 @@ html.dark .field-tint {
   background: rgba(23, 20, 15, 0.45);
 }
 
+/* Completion popup backdrop (task-done-popup brief) — the same warm
+   near-black as .modal-backdrop, deliberately lighter (20% vs 45%): this is
+   a transient, self-dismissing confirmation over live results, not a true
+   modal, so the table underneath must stay legible through it. */
+.popup-backdrop {
+  background: rgba(23, 20, 15, 0.2);
+}
+
 /* The document "sheet": text documents render as a white page floating on
    the inset gray backdrop (mirrors how PDF pages present), rather than
    text sitting flat on gray. Dark mode swaps paper-white for the elevated

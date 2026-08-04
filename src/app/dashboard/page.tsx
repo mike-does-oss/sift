@@ -9,8 +9,10 @@ import {
   ResultsDisplay,
   DocumentView,
   SaveToDatasetPanel,
+  CompletionPopup,
   type DocumentViewHandle,
   type ResultsDisplayHandle,
+  type CompletionPopupInfo,
 } from "@/components";
 import type { ExtractionField, ExtractionData, ExtractionResult, TemplateExample } from "@/types";
 import type { ScaffoldResponse } from "@/lib/api";
@@ -131,6 +133,10 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extractedWith, setExtractedWith] = useState<{ provider: string; model: string } | null>(null);
+  // Task-done-popup brief: a fresh object on every successful extraction
+  // (re-arming CompletionPopup's auto-dismiss timer even for a back-to-back
+  // extraction with identical field/row counts); `null` renders nothing.
+  const [completion, setCompletion] = useState<CompletionPopupInfo | null>(null);
 
   // Prompt scaffolding (§T2.6) — "Build fields from description", visible only
   // while grounded mode is on. `pendingScaffold` holds a scaffolded result
@@ -408,6 +414,7 @@ export default function DashboardPage() {
     setQuotes(undefined);
     setError(null);
     setExtractedWith(null);
+    setCompletion(null);
   };
 
   const handleClear = () => {
@@ -417,6 +424,7 @@ export default function DashboardPage() {
     setQuotes(undefined);
     setError(null);
     setExtractedWith(null);
+    setCompletion(null);
   };
 
   const handleExtract = async () => {
@@ -434,6 +442,7 @@ export default function DashboardPage() {
     setExtractedText(undefined);
     setQuotes(undefined);
     setExtractedWith(null);
+    setCompletion(null);
 
     try {
       const formData = new FormData();
@@ -461,6 +470,21 @@ export default function DashboardPage() {
         if (data.provider && data.model) {
           setExtractedWith({ provider: data.provider, model: data.model });
         }
+        // Auto-switch to the extracted-text view so highlights appear
+        // immediately (task-done-popup brief §1) — only when there's
+        // something to switch to; doesn't force-expand a collapsed pane.
+        if (data.text) {
+          documentViewRef.current?.showExtractedView();
+        }
+        setCompletion({
+          fieldsCount: validFields.length,
+          rowCount: Array.isArray(data.data) ? data.data.length : data.data ? 1 : 0,
+          isMulti: extractMultiple,
+          providerLabel: data.provider
+            ? (providers.find((p) => p.id === data.provider)?.label ?? data.provider)
+            : "",
+          model: data.model ?? "",
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
@@ -892,6 +916,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <CompletionPopup info={completion} onDismiss={() => setCompletion(null)} />
     </div>
   );
 }

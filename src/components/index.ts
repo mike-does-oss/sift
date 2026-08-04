@@ -5,5 +5,7 @@ export type { ResultsDisplayHandle } from "./ResultsDisplay";
 export { PDFPreview } from "./PDFPreview";
 export { DocumentView } from "./DocumentView";
 export type { DocumentViewHandle } from "./DocumentView";
+export { CompletionPopup } from "./CompletionPopup";
+export type { CompletionPopupInfo } from "./CompletionPopup";
 export { SaveToDatasetPanel } from "./SaveToDatasetPanel";
 export { PaginationBar } from "./PaginationBar";

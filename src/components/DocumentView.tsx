@@ -22,6 +22,17 @@ import { prefersReducedMotion } from "@/lib/motion";
 export interface DocumentViewHandle {
   /** Scrolls the first matching `<mark>` for this field/row into view and flashes it (playbook §13 signature). No-op if the value wasn't anchored (never appeared verbatim in the text). */
   scrollToMark: (fieldName: string, rowIndex?: number) => void;
+  /**
+   * Switches the pane to the "Extracted text" view so highlights are visible
+   * the moment an extraction finishes (task-done-popup brief, §1). Only sets
+   * the view state — no scrolling, and deliberately no expand-if-collapsed:
+   * unlike `scrollToMark` (a user-initiated jump that must be visible right
+   * now), this fires automatically on every successful extraction, so it
+   * must not override a collapsed pane the user chose to keep collapsed.
+   * The view is still switched underneath so it's already correct whenever
+   * they do expand it.
+   */
+  showExtractedView: () => void;
 }
 
 interface DocumentViewProps {
@@ -214,6 +225,9 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
   useImperativeHandle(
     ref,
     () => ({
+      showExtractedView() {
+        setView("extracted");
+      },
       scrollToMark(fieldName: string, rowIndex = 0) {
         const activate = () => {
           const container = extractedContainerRef.current;
