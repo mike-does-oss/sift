@@ -482,10 +482,31 @@ html.dark .field-tint {
 }
 
 /* Expand-to-modal backdrop (§13, "expand-to-modal" task) — the app's first
-   true overlay. Tinted with the theme's own `--ink` (via color-mix, so no
-   new rgb-triplet var is needed) rather than a flat black scrim, so it stays
-   in the §13 palette instead of reading like a generic dialog library
-   default. */
+   true overlay. A theme-invariant dark scrim: in dark mode `--ink` is
+   near-white, which read as a frosted light veil instead of dimming —
+   so this deliberately does NOT derive from the ink token. The warm
+   near-black matches the light theme's ink family. */
 .modal-backdrop {
-  background: color-mix(in srgb, var(--ink) 40%, transparent);
+  background: rgba(23, 20, 15, 0.45);
+}
+
+/* The document "sheet": text documents render as a white page floating on
+   the inset gray backdrop (mirrors how PDF pages present), rather than
+   text sitting flat on gray. Dark mode swaps paper-white for the elevated
+   surface with a deeper shadow. */
+.doc-sheet {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow:
+    0 1px 3px rgba(23, 23, 26, 0.08),
+    0 8px 24px rgba(23, 23, 26, 0.06);
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 2.75rem;
+}
+html.dark .doc-sheet {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    0 8px 24px rgba(0, 0, 0, 0.3);
 }

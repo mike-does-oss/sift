@@ -363,9 +363,11 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
               onClick={handleMarkClick}
               className="h-full overflow-auto p-6 bg-[var(--surface-inset)]"
             >
-              <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
-                {segments}
-              </pre>
+              <div className="doc-sheet">
+                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                  {segments}
+                </pre>
+              </div>
             </div>
           ) : kind === "pdf" ? (
             <PDFPreview file={file} />
@@ -378,9 +380,11 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
             </div>
           ) : (
             <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
-              <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
-                {rawText}
-              </pre>
+              <div className="doc-sheet">
+                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                  {rawText}
+                </pre>
+              </div>
             </div>
           )}
         </div>
