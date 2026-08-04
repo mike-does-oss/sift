@@ -30,3 +30,14 @@ mac:
     - zip
   identity: null
   category: public.app-category.productivity
+win:
+  target:
+    - nsis
+nsis:
+  # true one-click installer: no wizard, installs and launches
+  oneClick: true
+  deleteAppDataOnUninstall: false
+linux:
+  target:
+    - AppImage
+  category: Office

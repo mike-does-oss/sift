@@ -1,0 +1,44 @@
+name: Build desktop apps
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # arm64
+            artifacts: |
+              dist-desktop/*.dmg
+              dist-desktop/*-mac.zip
+          - os: windows-latest
+            artifacts: dist-desktop/*.exe
+          - os: ubuntu-latest
+            artifacts: dist-desktop/*.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:build
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sift-${{ matrix.os }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifacts }}

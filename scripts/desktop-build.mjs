@@ -25,7 +25,8 @@ function step(label, fn) {
 }
 
 function run(cmd, args) {
-  execFileSync(cmd, args, { cwd: root, stdio: "inherit" });
+  // npx is npx.cmd on Windows; shell:true lets the platform resolve it.
+  execFileSync(cmd, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
 }
 
 async function findFilesNamed(dir, name) {
@@ -100,7 +101,9 @@ async function main() {
     });
   });
 
-  step("electron-builder", () => run("npx", ["electron-builder", "--mac", "--publish", "never"]));
+  const platformFlag =
+    process.platform === "darwin" ? "--mac" : process.platform === "win32" ? "--win" : "--linux";
+  step("electron-builder", () => run("npx", ["electron-builder", platformFlag, "--publish", "never"]));
 
   console.log("\ndesktop:build complete.");
 }
