@@ -103,13 +103,25 @@ function EditableValue({
     onCommit(text);
   };
 
+  // Dense/instrument-style cell styling (§13, "denser results table" task):
+  // borderless-until-interaction so the table reads as a tight grid rather
+  // than a stack of boxed inputs — no persistent input background competing
+  // with the row's own hover background, border only appears on hover/focus
+  // (or permanently, for the invalid state, which must stay legible either way).
+  const fieldClasses = (extra: string) =>
+    `data w-full rounded-md text-[13px] leading-tight text-[var(--text-primary)] border bg-transparent transition-colors focus:outline-none ${
+      invalid
+        ? "border-[var(--error)]"
+        : "border-transparent hover:border-[var(--border-subtle)] focus:border-[var(--accent-muted)] focus:bg-[var(--surface-elevated)]"
+    } ${extra}`;
+
   // Booleans are constrained to true/false — no free text, so no invalid state is reachable.
   if (isBooleanVal) {
     return (
       <select
         value={value ? "true" : "false"}
         onChange={(e) => onCommit(e.target.value === "true")}
-        className="data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors"
+        className={fieldClasses("px-1.5 py-1")}
       >
         <option value="true">true</option>
         <option value="false">false</option>
@@ -126,9 +138,7 @@ function EditableValue({
           onBlur={(e) => commit(e.target.value)}
           spellCheck={false}
           rows={Math.min(Math.max(draft.split("\n").length, 2), 6)}
-          className={`data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors resize-y ${
-            invalid ? "border-[var(--error)]" : "border-[var(--border-subtle)]"
-          }`}
+          className={fieldClasses("px-1.5 py-1 resize-y")}
         />
         {invalid && <p className="text-[10px] text-[var(--error)] mt-0.5">Invalid JSON — not saved yet</p>}
       </div>
@@ -144,9 +154,7 @@ function EditableValue({
         onBlur={(e) => commit(e.target.value)}
         spellCheck={false}
         inputMode={isNumberVal ? "decimal" : undefined}
-        className={`data w-full px-2 py-1.5 rounded-md bg-[var(--surface-inset)] border text-sm text-[var(--text-primary)] focus:border-[var(--accent-muted)] focus:outline-none transition-colors ${
-          invalid ? "border-[var(--error)]" : "border-[var(--border-subtle)]"
-        }`}
+        className={fieldClasses("px-1.5 py-1")}
       />
       {invalid && <p className="text-[10px] text-[var(--error)] mt-0.5">Invalid number — not saved yet</p>}
     </div>
@@ -377,14 +385,17 @@ export function ResultsDisplay({
           <thead>
             <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-inset)]">
               {showIndexColumn && (
-                <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-tertiary)] w-10">#</th>
+                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)] w-8">
+                  #
+                </th>
               )}
               {fields.map((field) => (
-                <th key={field.id} className="px-3 py-2 text-left text-xs font-medium text-[var(--text-tertiary)]">
-                  <span className="data block">{field.name}</span>
-                  <span className="block text-[9px] uppercase tracking-wider text-[var(--text-tertiary)]/70 mt-0.5">
-                    {field.type}
-                  </span>
+                <th key={field.id} className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+                  {/* Type sub-label rides inline after the name on one line
+                      (was a second stacked line) — reclaims header height for
+                      the "instrument" density this table targets (§13). */}
+                  <span className="data text-[var(--text-secondary)]">{field.name}</span>
+                  <span className="text-[var(--text-tertiary)]/70"> · {field.type}</span>
                 </th>
               ))}
             </tr>
@@ -396,7 +407,7 @@ export function ResultsDisplay({
                 className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
               >
                 {showIndexColumn && (
-                  <td className="px-4 py-2.5 text-[var(--text-tertiary)] tabular-nums">{rowIndex + 1}</td>
+                  <td className="px-2 py-1 text-[13px] text-[var(--text-tertiary)] tabular-nums align-top">{rowIndex + 1}</td>
                 )}
                 {fields.map((field) => {
                   const original = resultsArray[rowIndex]?.[field.name] ?? null;
@@ -412,45 +423,58 @@ export function ResultsDisplay({
                   return (
                     <td
                       key={field.id}
-                      className="px-2 py-2 min-w-[9rem]"
+                      className="relative group/cell px-2 py-1 min-w-[9rem] align-top"
                       title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
                     >
-                      <div className="group/cell flex items-start gap-1">
-                        <div
-                          className={`flex-1 min-w-0 ${
-                            unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
-                          }`}
-                        >
-                          <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
-                        </div>
-                        <div className="flex-shrink-0 flex flex-col items-center gap-0.5 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity">
-                          {onJumpToValue && (
-                            <button
-                              onClick={() => onJumpToValue(field.name, rowIndex)}
-                              aria-label={`Jump to ${field.name} in document`}
-                              title="Jump to highlight in document"
-                              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
-                            >
-                              <Crosshair className="w-3 h-3" />
-                            </button>
-                          )}
-                          {isEdited && (
-                            <button
-                              onClick={() => resetField(rowIndex, field.name)}
-                              aria-label={`Reset ${field.name} to extracted value`}
-                              title="Reset to extracted value"
-                              className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
+                      <div
+                        className={`${isEdited ? "pr-6" : "pr-1"} ${
+                          unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
+                        }`}
+                      >
+                        <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
                       </div>
-                      {isEdited && (
-                        <span className="mt-0.5 inline-block text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent-tint)] text-[var(--accent)]">
-                          edited
-                        </span>
-                      )}
+                      {/* Edited indicator + reset + crosshair: compact,
+                          icon-sized, and overlaid (not laid out in flow) so
+                          they never permanently reserve column width — the
+                          value area only makes room for them once the cell is
+                          actually edited (the one case where they stay
+                          visible); otherwise they float over the value's
+                          trailing edge on hover/focus. */}
+                      <div
+                        className={`absolute top-1 right-1 flex items-center gap-0.5 transition-opacity ${
+                          isEdited ? "opacity-100" : "opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100"
+                        }`}
+                      >
+                        {isEdited && (
+                          <span
+                            title={`${field.name} edited from the extracted value`}
+                            className="flex items-center justify-center w-3 h-3"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                            <span className="sr-only">Edited</span>
+                          </span>
+                        )}
+                        {onJumpToValue && (
+                          <button
+                            onClick={() => onJumpToValue(field.name, rowIndex)}
+                            aria-label={`Jump to ${field.name} in document`}
+                            title="Jump to highlight in document"
+                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+                          >
+                            <Crosshair className="w-3 h-3" />
+                          </button>
+                        )}
+                        {isEdited && (
+                          <button
+                            onClick={() => resetField(rowIndex, field.name)}
+                            aria-label={`Reset ${field.name} to extracted value`}
+                            title="Reset to extracted value"
+                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   );
                 })}

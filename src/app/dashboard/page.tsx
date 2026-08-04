@@ -15,6 +15,7 @@ import type { Quotes } from "@/lib/highlight";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
 const GROUNDED_STORAGE_KEY = "sift-grounded";
+const DOC_COLLAPSED_STORAGE_KEY = "sift-doc-collapsed";
 const DEFAULT_FIELDS: ExtractionField[] = [{ id: "field-1", name: "name", type: "text" }];
 
 /** True when `fields` is still the untouched single starter field — the bar for "replace without confirming" in the scaffold flow (§T2.6). */
@@ -99,6 +100,10 @@ export default function DashboardPage() {
   // remembered per-browser rather than per-request. Read from localStorage
   // in an effect (not lazy useState init) to avoid an SSR/hydration mismatch.
   const [groundedMode, setGroundedMode] = useState(false);
+  // Document pane collapse (playbook §13 task): default expanded, synced
+  // from localStorage post-mount — same pattern as groundedMode above, so
+  // the server-rendered (always-expanded) markup never mismatches on hydrate.
+  const [docCollapsed, setDocCollapsed] = useState(false);
   const [fields, setFields] = useState<ExtractionField[]>(DEFAULT_FIELDS);
   const [results, setResults] = useState<ExtractionData | null>(null);
   const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
@@ -162,11 +167,17 @@ export default function DashboardPage() {
     // pattern as Sidebar's theme sync).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGroundedMode(window.localStorage.getItem(GROUNDED_STORAGE_KEY) === "true");
+    setDocCollapsed(window.localStorage.getItem(DOC_COLLAPSED_STORAGE_KEY) === "true");
   }, []);
 
   const handleToggleGrounded = (checked: boolean) => {
     setGroundedMode(checked);
     window.localStorage.setItem(GROUNDED_STORAGE_KEY, checked ? "true" : "false");
+  };
+
+  const handleSetDocCollapsed = (collapsed: boolean) => {
+    setDocCollapsed(collapsed);
+    window.localStorage.setItem(DOC_COLLAPSED_STORAGE_KEY, collapsed ? "true" : "false");
   };
 
   useEffect(() => {
@@ -448,6 +459,11 @@ export default function DashboardPage() {
     ? (providers.find((p) => p.id === extractedWith.provider)?.label ?? extractedWith.provider)
     : null;
 
+  // Collapsing an empty pane is meaningless (brief §1): only shrink the
+  // left pane / grow the right one once a document is actually loaded, even
+  // if a collapsed preference is already persisted from a previous session.
+  const leftPaneCollapsed = docCollapsed && Boolean(selectedFile);
+
   return (
     <div className="lg:flex lg:h-screen lg:flex-col">
       {/* Action bar — provider/model picker, privacy badge, Run extraction */}
@@ -566,7 +582,11 @@ export default function DashboardPage() {
 
       {/* Two-pane workspace: document left, fields + results right */}
       <div className="lg:flex-1 lg:flex lg:min-h-0">
-        <div className="lg:w-1/2 border-b lg:border-b-0 lg:border-r border-[var(--border-subtle)] bg-[var(--surface-inset)] lg:h-full lg:overflow-y-auto">
+        <div
+          className={`${
+            leftPaneCollapsed ? "lg:w-11" : "lg:w-1/2"
+          } lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-[var(--border-subtle)] bg-[var(--surface-inset)] lg:h-full lg:overflow-y-auto transition-[width] duration-200`}
+        >
           <div className="h-[70vh] lg:h-full">
             <DocumentView
               ref={documentViewRef}
@@ -576,11 +596,13 @@ export default function DashboardPage() {
               results={results}
               extractedText={extractedText}
               quotes={quotes}
+              collapsed={docCollapsed}
+              onCollapsedChange={handleSetDocCollapsed}
             />
           </div>
         </div>
 
-        <div className="lg:w-1/2 lg:h-full lg:overflow-y-auto">
+        <div className={`${leftPaneCollapsed ? "lg:flex-1" : "lg:w-1/2"} lg:h-full lg:overflow-y-auto`}>
           <div className="p-6 space-y-6">
             {/* Templates */}
             <section>

@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FileText, Image as ImageIcon, X } from "lucide-react";
+import { FileText, Image as ImageIcon, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { PDFPreview } from "./PDFPreview";
 import type { ExtractionData } from "@/types";
@@ -30,6 +30,17 @@ interface DocumentViewProps {
   extractedText?: string;
   /** Per-field/row source quotes from a grounded extraction — undefined when the engine/response didn't ground. Quote matches take precedence over value matching (see `computeMatchRanges`). */
   quotes?: Quotes;
+  /**
+   * Collapsed rail state — lives in the parent (DashboardPage) because it
+   * also drives the two-pane width split, not just this component's own
+   * markup. Only takes visual effect at the `lg` breakpoint (desktop
+   * two-pane layout); on narrow/stacked viewports the pane always renders
+   * in full, matching the "collapse control hidden — stacking already
+   * handles space" rule.
+   */
+  collapsed: boolean;
+  /** Explicit setter (not a toggle) — scrollToMark needs to force-expand without accidentally collapsing an already-expanded pane. */
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
 type ClientKind = "pdf" | "image" | "text";
@@ -81,7 +92,7 @@ function prefersReducedMotion(): boolean {
  * verbatim-matching result value with a `<mark>` (the product's signature).
  */
 export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(function DocumentView(
-  { file, onFileSelect, onClear, results, extractedText, quotes },
+  { file, onFileSelect, onClear, results, extractedText, quotes, collapsed, onCollapsedChange },
   ref
 ) {
   const [view, setView] = useState<"document" | "extracted">("document");
@@ -152,15 +163,22 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
           void el.offsetWidth;
           el.classList.add("flash");
         };
-        if (extractedText && view !== "extracted") {
-          setView("extracted");
+        // A jump while the pane is collapsed must not silently no-op — expand
+        // it first, then (also switching to the extracted-text view if
+        // needed) wait a couple of frames for the resulting layout/DOM
+        // changes to settle before measuring/scrolling to the mark.
+        const needsExpand = collapsed;
+        const needsViewSwitch = Boolean(extractedText) && view !== "extracted";
+        if (needsExpand) onCollapsedChange(false);
+        if (needsViewSwitch) setView("extracted");
+        if (needsExpand || needsViewSwitch) {
           requestAnimationFrame(() => requestAnimationFrame(activate));
         } else {
           activate();
         }
       },
     }),
-    [extractedText, view]
+    [extractedText, view, collapsed, onCollapsedChange]
   );
 
   if (!file) {
@@ -173,78 +191,112 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/50">
-        {kind === "image" ? (
-          <ImageIcon className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" strokeWidth={1.75} />
-        ) : (
-          <FileText className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" strokeWidth={1.75} />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate text-[var(--text-primary)]">{file.name}</p>
-          <p className="text-[11px] text-[var(--text-tertiary)]">{formatFileSize(file.size)}</p>
+      {/* Collapsed rail — desktop only (`lg:`); on narrow/stacked viewports
+          the collapse control is hidden entirely, so this stays hidden and
+          the full pane below (via its sibling `lg:hidden`) renders instead. */}
+      {collapsed && (
+        <div className="hidden lg:flex h-full w-full flex-col items-center gap-3 py-3">
+          <button
+            onClick={() => onCollapsedChange(false)}
+            aria-label="Expand document pane"
+            title="Expand"
+            className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+          >
+            <PanelLeftOpen className="w-4 h-4" strokeWidth={1.75} />
+          </button>
+          <span title={file.name} className="flex-shrink-0">
+            {kind === "image" ? (
+              <ImageIcon className="w-4 h-4 text-[var(--text-tertiary)]" strokeWidth={1.75} />
+            ) : (
+              <FileText className="w-4 h-4 text-[var(--text-tertiary)]" strokeWidth={1.75} />
+            )}
+          </span>
+        </div>
+      )}
+
+      <div className={`h-full flex flex-col min-h-0 ${collapsed ? "lg:hidden" : ""}`}>
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/50">
+          {kind === "image" ? (
+            <ImageIcon className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" strokeWidth={1.75} />
+          ) : (
+            <FileText className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" strokeWidth={1.75} />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate text-[var(--text-primary)]">{file.name}</p>
+            <p className="text-[11px] text-[var(--text-tertiary)]">{formatFileSize(file.size)}</p>
+          </div>
+
+          {extractedText && (
+            <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setView("document")}
+                aria-pressed={view === "document"}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  view === "document"
+                    ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Document
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("extracted")}
+                aria-pressed={view === "extracted"}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  view === "extracted"
+                    ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Extracted text
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => onCollapsedChange(true)}
+            aria-label="Collapse document pane"
+            title="Collapse document pane"
+            className="hidden lg:inline-flex flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+          >
+            <PanelLeftClose className="w-4 h-4" strokeWidth={1.75} />
+          </button>
+
+          <button
+            onClick={onClear}
+            className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
+            aria-label="Remove file"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {extractedText && (
-          <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setView("document")}
-              aria-pressed={view === "document"}
-              className={`px-2.5 py-1 rounded-md transition-colors ${
-                view === "document"
-                  ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Document
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("extracted")}
-              aria-pressed={view === "extracted"}
-              className={`px-2.5 py-1 rounded-md transition-colors ${
-                view === "extracted"
-                  ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Extracted text
-            </button>
-          </div>
-        )}
-
-        <button
-          onClick={onClear}
-          className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
-          aria-label="Remove file"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-hidden">
-        {view === "extracted" && extractedText ? (
-          <div ref={extractedContainerRef} className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
-            <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
-              {segments}
-            </pre>
-          </div>
-        ) : kind === "pdf" ? (
-          <PDFPreview file={file} />
-        ) : kind === "image" ? (
-          <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)] flex items-start justify-center">
-            {imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- local blob: URL, next/image can't optimize it
-              <img src={imageUrl} alt={file.name} className="max-w-full h-auto rounded-sm shadow-lg" />
-            )}
-          </div>
-        ) : (
-          <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
-            <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
-              {rawText}
-            </pre>
-          </div>
-        )}
+        <div className="flex-1 overflow-hidden">
+          {view === "extracted" && extractedText ? (
+            <div ref={extractedContainerRef} className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
+              <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                {segments}
+              </pre>
+            </div>
+          ) : kind === "pdf" ? (
+            <PDFPreview file={file} />
+          ) : kind === "image" ? (
+            <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)] flex items-start justify-center">
+              {imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- local blob: URL, next/image can't optimize it
+                <img src={imageUrl} alt={file.name} className="max-w-full h-auto rounded-sm shadow-lg" />
+              )}
+            </div>
+          ) : (
+            <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
+              <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                {rawText}
+              </pre>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
