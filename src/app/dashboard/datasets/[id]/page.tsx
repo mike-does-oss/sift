@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import { webSiftApi, type DatasetSummary, type DatasetRow } from "@/lib/api";
+import { PAGE_SIZE, clampPage, pageSlice } from "@/lib/pagination";
+import { PaginationBar } from "@/components";
 
 function stringifyCell(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -21,6 +23,15 @@ export default function DatasetDetailPage() {
   const [rowError, setRowError] = useState<string | null>(null);
   const [deletingRowId, setDeletingRowId] = useState<string | null>(null);
   const [confirmingRowId, setConfirmingRowId] = useState<string | null>(null);
+  // §13 pagination — read-only table, so no edit/anchor concerns like
+  // ResultsDisplay's; the one thing to get right is that per-row delete
+  // always targets the right row regardless of which page it's showing on.
+  // That falls out for free here since delete is keyed by `r.id` (server
+  // row id), never by array/page index — `page` only ever drives which
+  // slice of `rows` is rendered. Not persisted back into state when a
+  // delete shrinks it out of range; `clampPage` below recomputes a valid
+  // page from the raw `page` + current `rows.length` on every render.
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +93,10 @@ export default function DatasetDetailPage() {
     );
   }
 
+  const currentPage = clampPage(page, rows.length, PAGE_SIZE);
+  const { startIndex, endIndex } = pageSlice(currentPage, rows.length, PAGE_SIZE);
+  const pageRows = rows.slice(startIndex, endIndex);
+
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6">
       <Link
@@ -128,7 +143,7 @@ export default function DatasetDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {pageRows.map((r) => (
                   <tr
                     key={r.id}
                     className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
@@ -174,6 +189,14 @@ export default function DatasetDetailPage() {
               </tbody>
             </table>
           </div>
+          {rows.length > PAGE_SIZE && (
+            <PaginationBar
+              page={currentPage}
+              rowCount={rows.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={(next) => setPage(clampPage(next, rows.length, PAGE_SIZE))}
+            />
+          )}
         </div>
       )}
     </div>

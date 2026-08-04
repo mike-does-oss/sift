@@ -8,7 +8,8 @@ import { toCsv, downloadText } from "@/lib/export";
 import { computeMatchRanges, type Quotes } from "@/lib/highlight";
 import { fieldColorVars } from "@/lib/fieldColors";
 import { prefersReducedMotion } from "@/lib/motion";
-import { SaveToDatasetPanel } from "./SaveToDatasetPanel";
+import { PAGE_SIZE, clampPage, pageForRow, pageSlice } from "@/lib/pagination";
+import { PaginationBar } from "./PaginationBar";
 
 export interface ResultsDisplayHandle {
   /** Reverse of DocumentView's scrollToMark — scrolls the matching cell into view and briefly flashes it. Called when a document mark is clicked. No-op if the field/row isn't currently rendered (e.g. a stale row after edits). */
@@ -38,6 +39,17 @@ interface ResultsDisplayProps {
   hoveredField?: string | null;
   /** Reports hover in/out of a results cell, by field name (`null` on leave) — the other half of the two-way link with DocumentView's marks. Only called while highlighting is live (see `highlightsLive` below); a plain table with no document pane has nothing to link to. */
   onHoverField?: (field: string | null) => void;
+  /**
+   * Fires after every edit (and reset-to-extracted) with the full, current
+   * edited working copy — ALL rows, not just the visible page. The
+   * save-to-dataset panel lives outside this component now (§13, "separate
+   * save-to-dataset from results") but still needs live edited values, so
+   * the parent mirrors this into its own state and hands it down as that
+   * panel's `rows` prop. Not called on mount or on a new-extraction reset
+   * (results reference change) — the parent already has the fresh `results`
+   * itself at that point and can derive the reset rows without a round trip.
+   */
+  onEditedRowsChange?: (rows: ExtractionResult[]) => void;
 }
 
 function valuesEqual(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
@@ -220,7 +232,18 @@ function ExportBar({
 }
 
 export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayProps>(function ResultsDisplay(
-  { results, fields, isLoading, error, onJumpToValue, extractedText, quotes, hoveredField = null, onHoverField },
+  {
+    results,
+    fields,
+    isLoading,
+    error,
+    onJumpToValue,
+    extractedText,
+    quotes,
+    hoveredField = null,
+    onHoverField,
+    onEditedRowsChange,
+  },
   ref
 ) {
   const [copied, setCopied] = useState(false);
@@ -237,41 +260,69 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
   // parent re-renders, so in-progress edits survive those. Adjusted during
   // render (not in an effect) per https://react.dev/learn/you-might-not-need-an-effect.
   const [edited, setEdited] = useState<ExtractionData | null>(results);
+  // Current page (1-indexed, §13 pagination). Reset to 1 alongside `edited`
+  // on a *new* extraction (results reference change) — not on edits, which
+  // never change row count or which page you're looking at.
+  const [page, setPage] = useState(1);
   const [prevResults, setPrevResults] = useState<ExtractionData | null>(results);
   if (results !== prevResults) {
     setPrevResults(results);
     setEdited(results);
+    setPage(1);
   }
+
+  const isArray = Array.isArray(results);
+  const resultsArray: ExtractionResult[] = isArray ? results : results ? [results] : [];
+  const editedArray: ExtractionResult[] = Array.isArray(edited) ? edited : edited ? [edited] : [];
+  const rowCount = editedArray.length;
+  // Rendering only ever slices `editedArray` for display — every lookup
+  // keyed on a row (edits, originals, anchors, flash target, data-row
+  // attributes) uses the ABSOLUTE index computed from this, never a
+  // page-local one. See the correctness note on `onEditedRowsChange` and the
+  // pagination task brief for why this matters.
+  const currentPage = clampPage(page, rowCount, PAGE_SIZE);
 
   useImperativeHandle(
     ref,
     () => ({
       flashCell(fieldName: string, rowIndex: number) {
-        const container = tableContainerRef.current;
-        let el: HTMLElement | null = null;
-        try {
-          el =
-            container?.querySelector<HTMLElement>(
-              `td[data-field="${CSS.escape(fieldName)}"][data-row="${rowIndex}"]`
-            ) ?? null;
-        } catch {
-          el = null;
+        const activate = () => {
+          const container = tableContainerRef.current;
+          let el: HTMLElement | null = null;
+          try {
+            el =
+              container?.querySelector<HTMLElement>(
+                `td[data-field="${CSS.escape(fieldName)}"][data-row="${rowIndex}"]`
+              ) ?? null;
+          } catch {
+            el = null;
+          }
+          el?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+          flashTokenRef.current += 1;
+          setFlashTarget({ field: fieldName, row: rowIndex, token: flashTokenRef.current });
+          // Clear on a timer (rather than relying on onAnimationEnd) so the
+          // overlay unmounts even under prefers-reduced-motion, where the CSS
+          // animation is disabled and no animation-end event ever fires.
+          setTimeout(() => setFlashTarget((prev) => (prev?.token === flashTokenRef.current ? null : prev)), 950);
+        };
+        // The target row may be on another page — if so, switch pages first
+        // and let the table re-render before measuring/scrolling to the
+        // cell, same idea as DocumentView's scrollToMark settling past its
+        // own state-driven content swap (view switch) before activating.
+        // This is a plain content swap (no width/layout transition to wait
+        // out), so a couple of rAFs — enough for React to commit and paint
+        // the new page's rows — is enough to settle on.
+        const targetPage = clampPage(pageForRow(rowIndex, PAGE_SIZE), rowCount, PAGE_SIZE);
+        if (targetPage !== currentPage) {
+          setPage(targetPage);
+          requestAnimationFrame(() => requestAnimationFrame(activate));
+        } else {
+          activate();
         }
-        el?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
-        flashTokenRef.current += 1;
-        setFlashTarget({ field: fieldName, row: rowIndex, token: flashTokenRef.current });
-        // Clear on a timer (rather than relying on onAnimationEnd) so the
-        // overlay unmounts even under prefers-reduced-motion, where the CSS
-        // animation is disabled and no animation-end event ever fires.
-        setTimeout(() => setFlashTarget((prev) => (prev?.token === flashTokenRef.current ? null : prev)), 950);
       },
     }),
-    []
+    [currentPage, rowCount]
   );
-
-  const isArray = Array.isArray(results);
-  const resultsArray: ExtractionResult[] = isArray ? results : results ? [results] : [];
-  const editedArray: ExtractionResult[] = Array.isArray(edited) ? edited : edited ? [edited] : [];
 
   // Colors/swatches/hover-linking only make sense once there's a document
   // pane with live marks to link to — same availability rule `onJumpToValue`
@@ -299,29 +350,35 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
     return map;
   }, [extractedText, results, quotes]);
 
+  // `rowIndex` here (and everywhere it's threaded through — EditableValue's
+  // onCommit, resetField, data-row attributes, flash targeting) is always
+  // the ABSOLUTE index into `edited`/`results`, never a page-local one:
+  // pagination only slices at render time (see `pageRows` below), so an
+  // edit made on page 3 lands on the right row whichever page is showing
+  // when it's made or later viewed. `next` is computed from `edited` (this
+  // render's snapshot, read directly rather than via a `setEdited` updater
+  // function) so the plain `onEditedRowsChange` call below — which pushes
+  // the full edited set up to the parent for save-to-dataset — can sit
+  // alongside it as an ordinary side effect of this event handler, not
+  // something happening inside a should-be-pure state updater.
   const updateField = (rowIndex: number, fieldName: string, value: FieldValue) => {
-    setEdited((prev) => {
-      if (!prev) return prev;
-      if (Array.isArray(prev)) {
-        const next = prev.slice();
-        next[rowIndex] = { ...next[rowIndex], [fieldName]: value };
-        return next;
-      }
-      return { ...prev, [fieldName]: value };
-    });
+    if (!edited) return;
+    const next: ExtractionData = Array.isArray(edited)
+      ? edited.map((row, i) => (i === rowIndex ? { ...row, [fieldName]: value } : row))
+      : { ...edited, [fieldName]: value };
+    setEdited(next);
+    onEditedRowsChange?.(Array.isArray(next) ? next : [next]);
   };
 
   const resetField = (rowIndex: number, fieldName: string) => {
-    setEdited((prev) => {
-      if (!prev || !results) return prev;
-      const original = Array.isArray(results) ? results[rowIndex] : results;
-      if (Array.isArray(prev)) {
-        const next = prev.slice();
-        next[rowIndex] = { ...next[rowIndex], [fieldName]: original?.[fieldName] ?? null };
-        return next;
-      }
-      return { ...prev, [fieldName]: original?.[fieldName] ?? null };
-    });
+    if (!edited || !results) return;
+    const original = Array.isArray(results) ? results[rowIndex] : results;
+    const resetValue = original?.[fieldName] ?? null;
+    const next: ExtractionData = Array.isArray(edited)
+      ? edited.map((row, i) => (i === rowIndex ? { ...row, [fieldName]: resetValue } : row))
+      : { ...edited, [fieldName]: resetValue };
+    setEdited(next);
+    onEditedRowsChange?.(Array.isArray(next) ? next : [next]);
   };
 
   const handleCopy = () => {
@@ -402,9 +459,14 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
   // table: columns = fields, rows = records — single mode is just a one-row
   // table. The `#` index column only earns its keep once there's more than
   // one row to count.
-  const rowCount = editedArray.length;
   const showIndexColumn = rowCount > 1;
-  const fieldKeys = fields.map((f) => f.name);
+  // Page size 25, pager only when there's more than one page (§13). Slicing
+  // happens here, at render, and nowhere else — every other consumer of row
+  // data (exports, the View JSON pane, anchors/marks upstream in
+  // DocumentView, onEditedRowsChange) works off the full `editedArray`/
+  // `results`, never `pageRows`.
+  const { startIndex, endIndex } = pageSlice(currentPage, rowCount, PAGE_SIZE);
+  const pageRows = editedArray.slice(startIndex, endIndex);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
@@ -456,11 +518,13 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
             </tr>
           </thead>
           <tbody>
-            {editedArray.map((row, rowIndex) => (
-              <tr
-                key={rowIndex}
-                className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
-              >
+            {pageRows.map((row, i) => {
+              const rowIndex = startIndex + i;
+              return (
+                <tr
+                  key={rowIndex}
+                  className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
+                >
                 {showIndexColumn && (
                   <td className="px-2 py-1 text-[13px] text-[var(--text-tertiary)] tabular-nums align-top">{rowIndex + 1}</td>
                 )}
@@ -562,14 +626,20 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      <div className="px-4 py-3 border-t border-[var(--border-subtle)]">
-        <SaveToDatasetPanel fieldKeys={fieldKeys} rows={editedArray} />
-      </div>
+      {rowCount > PAGE_SIZE && (
+        <PaginationBar
+          page={currentPage}
+          rowCount={rowCount}
+          pageSize={PAGE_SIZE}
+          onPageChange={(next) => setPage(clampPage(next, rowCount, PAGE_SIZE))}
+        />
+      )}
 
       <details className="border-t border-[var(--border-subtle)] group">
         <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors select-none">

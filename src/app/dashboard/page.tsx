@@ -8,10 +8,11 @@ import {
   FieldConfiguration,
   ResultsDisplay,
   DocumentView,
+  SaveToDatasetPanel,
   type DocumentViewHandle,
   type ResultsDisplayHandle,
 } from "@/components";
-import type { ExtractionField, ExtractionData, TemplateExample } from "@/types";
+import type { ExtractionField, ExtractionData, ExtractionResult, TemplateExample } from "@/types";
 import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo, type ProviderOverride, type ProviderId } from "@/lib/api";
@@ -112,6 +113,19 @@ export default function DashboardPage() {
   const [docCollapsed, setDocCollapsed] = useState(false);
   const [fields, setFields] = useState<ExtractionField[]>(DEFAULT_FIELDS);
   const [results, setResults] = useState<ExtractionData | null>(null);
+  // Mirrors ResultsDisplay's internal "edited" working copy (ALL rows, not
+  // just its currently visible page) for the sibling "Save to dataset" card
+  // below the results table (§13, "separate save-to-dataset from results").
+  // Reset here (render-time, keyed on `results`' own reference change) in
+  // lockstep with ResultsDisplay's own reset of its `edited` state on a new
+  // extraction; kept live thereafter via `onEditedRowsChange`, called from
+  // ResultsDisplay's edit/reset event handlers.
+  const [datasetRows, setDatasetRows] = useState<ExtractionResult[]>([]);
+  const [prevResultsForDataset, setPrevResultsForDataset] = useState<ExtractionData | null>(results);
+  if (results !== prevResultsForDataset) {
+    setPrevResultsForDataset(results);
+    setDatasetRows(Array.isArray(results) ? results : results ? [results] : []);
+  }
   const [extractedText, setExtractedText] = useState<string | undefined>(undefined);
   const [quotes, setQuotes] = useState<Quotes | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
@@ -845,10 +859,25 @@ export default function DashboardPage() {
                     quotes={quotes}
                     hoveredField={hoveredField}
                     onHoverField={setHoveredField}
+                    onEditedRowsChange={setDatasetRows}
                   />
                 </motion.section>
               )}
             </AnimatePresence>
+
+            {/* Save to dataset — its own sibling card below results (§13,
+                "separate save-to-dataset from results"): same visibility
+                condition results itself uses (there's something to save). */}
+            {results && !isLoading && !error && datasetRows.length > 0 && (
+              <section>
+                <h2 className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+                  Save to dataset
+                </h2>
+                <div className="card-elevated rounded-xl p-4">
+                  <SaveToDatasetPanel fieldKeys={activeFields.map((f) => f.name)} rows={datasetRows} />
+                </div>
+              </section>
+            )}
 
             {!results && !isLoading && !error && (
               <p className="text-xs text-[var(--text-tertiary)] px-1">
