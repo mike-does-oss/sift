@@ -1,8 +1,18 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair } from "lucide-react";
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair, Maximize2, X } from "lucide-react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
 import type { ExtractionField, ExtractionData, ExtractionResult } from "@/types";
 import { toCsv, downloadText } from "@/lib/export";
 import { computeMatchRanges, type Quotes } from "@/lib/highlight";
@@ -50,6 +60,15 @@ interface ResultsDisplayProps {
    * itself at that point and can derive the reset rows without a round trip.
    */
   onEditedRowsChange?: (rows: ExtractionResult[]) => void;
+  /**
+   * Pre-formatted "Extracted with <provider> · <model>" line — the parent
+   * (dashboard page) already computes this from its own provider list for
+   * the caption above this component; passed through only so the expand
+   * modal's header (§13, "expand-to-modal" task) can show the same line
+   * without this component needing to know about providers itself.
+   * Undefined renders no line, same as the parent's own caption.
+   */
+  providerModelLabel?: string;
 }
 
 function valuesEqual(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
@@ -184,7 +203,7 @@ function EditableValue({
   );
 }
 
-/** Copy JSON / download CSV / download JSON — always export the EDITED values (see `edited` in ResultsDisplay). */
+/** Copy JSON / download CSV / download JSON — always export the EDITED values (see `edited` in ResultsDisplay). Reused verbatim in the expand modal's header (§13, "expand-to-modal" task) so both surfaces export identically. */
 function ExportBar({
   copied,
   onCopy,
@@ -231,6 +250,214 @@ function ExportBar({
   );
 }
 
+interface ResultsTableProps {
+  fields: ExtractionField[];
+  showIndexColumn: boolean;
+  /** Full original extraction (unsliced) — used to diff each cell against for the "edited" dot/reset affordance. */
+  resultsArray: ExtractionResult[];
+  /** Only the current page's rows (already sliced by the caller). */
+  pageRows: ExtractionResult[];
+  /** Absolute row index of `pageRows[0]` — every per-row lookup below adds `i` to this, never uses the page-local index alone. */
+  startIndex: number;
+  anchoredMap: Map<string, boolean> | null;
+  hoveredField: string | null;
+  /** Undefined disables hover linking entirely (the expand modal instance — its document pane isn't visible, so there's nothing to link to). */
+  onHoverField?: (field: string | null) => void;
+  /** Undefined disables the jump-to-document crosshair (same modal-instance reasoning as `onHoverField`) — `highlightsLive` below is derived from this alone, so passing undefined also turns off swatches/column tinting. */
+  onJumpToValue?: (fieldName: string, rowIndex: number) => void;
+  updateField: (rowIndex: number, fieldName: string, value: FieldValue) => void;
+  resetField: (rowIndex: number, fieldName: string) => void;
+  flashTarget: { field: string; row: number; token: number } | null;
+  /** Only the inline card instance wires this up (flashCell's querySelector scopes to it); the modal instance doesn't need one since its marks-in-document trigger can't fire while the modal covers the document pane. */
+  containerRef?: RefObject<HTMLDivElement | null>;
+  /** Tailwind classes controlling the scroll container's height — a fixed `max-h-*` for the inline card, `flex-1 min-h-0` to fill the modal panel's remaining height. */
+  scrollAreaClassName: string;
+}
+
+/**
+ * The actual `<table>` — column headers, sticky on scroll, plus the editable
+ * cell grid. Factored out of `ResultsDisplay` so the expand-to-modal task
+ * (§13) can mount it a second time inside the modal: same props shape, same
+ * `edited`/`page` state from the parent closure, so an edit made in either
+ * instance is immediately visible in the other (they're rendering the same
+ * data, not a copy) — see the modal-open effect below for why edit state
+ * doesn't need any special persistence across open/close.
+ */
+function ResultsTable({
+  fields,
+  showIndexColumn,
+  resultsArray,
+  pageRows,
+  startIndex,
+  anchoredMap,
+  hoveredField,
+  onHoverField,
+  onJumpToValue,
+  updateField,
+  resetField,
+  flashTarget,
+  containerRef,
+  scrollAreaClassName,
+}: ResultsTableProps) {
+  // Colors/swatches/hover-linking only make sense once there's a document
+  // pane with live marks to link to — same availability rule `onJumpToValue`
+  // already encoded before this was factored out. The modal instance passes
+  // `onJumpToValue={undefined}`, so it renders a plain (uncolored) table.
+  const highlightsLive = Boolean(onJumpToValue);
+
+  return (
+    <div
+      className={`overflow-x-auto overflow-y-auto ${scrollAreaClassName}`}
+      ref={containerRef}
+    >
+      <table className="w-full text-sm">
+        <thead>
+          <tr>
+            {showIndexColumn && (
+              <th
+                className="sticky top-0 z-10 bg-[var(--surface-inset)] border-b border-[var(--border-subtle)] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)] w-8"
+              >
+                #
+              </th>
+            )}
+            {fields.map((field, fieldIndex) => (
+              <th
+                key={field.id}
+                // Type moved from an inline "· TYPE" suffix to a tooltip
+                // (§13, "cleaner table headers" task) — the header now reads
+                // as just the field name, type is a hover affordance.
+                title={field.type}
+                className="sticky top-0 z-10 bg-[var(--surface-inset)] border-b border-[var(--border-subtle)] px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]"
+              >
+                {highlightsLive && (
+                  <span
+                    aria-hidden="true"
+                    className="field-swatch inline-block w-2 h-2 rounded-[2px] mr-1.5 align-middle"
+                    style={fieldColorVars(fieldIndex) as CSSProperties}
+                  />
+                )}
+                <span className="data text-[var(--text-secondary)]">{field.name}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {pageRows.map((row, i) => {
+            const rowIndex = startIndex + i;
+            return (
+              <tr
+                key={rowIndex}
+                className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
+              >
+                {showIndexColumn && (
+                  <td className="px-2 py-1 text-[13px] text-[var(--text-tertiary)] tabular-nums align-top">{rowIndex + 1}</td>
+                )}
+                {fields.map((field, fieldIndex) => {
+                  const original = resultsArray[rowIndex]?.[field.name] ?? null;
+                  const current = row[field.name] ?? null;
+                  const isEdited = !valuesEqual(current, original);
+                  // Non-null value, but neither its quote nor the value
+                  // itself was found verbatim in the document text — a
+                  // light trust signal, not a validation error (the value
+                  // may still be correct; it just can't be verified against
+                  // the source the way anchored cells can).
+                  const unanchored =
+                    anchoredMap !== null && original !== null && anchoredMap.get(`${rowIndex}:${field.name}`) === false;
+                  // Column tint (two-way hover linking, LangExtract-style):
+                  // this cell's field is the one currently hovered — either
+                  // a mark in the document or another cell in this same
+                  // column — so give it the field's own tinted background.
+                  // Only lit up while highlighting is actually live.
+                  const isHoveredColumn = highlightsLive && hoveredField === field.name;
+                  const isFlashing = flashTarget?.field === field.name && flashTarget.row === rowIndex;
+                  return (
+                    <td
+                      key={field.id}
+                      data-field={field.name}
+                      data-row={rowIndex}
+                      style={highlightsLive ? (fieldColorVars(fieldIndex) as CSSProperties) : undefined}
+                      onMouseEnter={() => {
+                        if (highlightsLive) onHoverField?.(field.name);
+                      }}
+                      onMouseLeave={() => {
+                        if (highlightsLive) onHoverField?.(null);
+                      }}
+                      className={`relative group/cell px-2 py-1 min-w-[9rem] align-top transition-colors ${
+                        isHoveredColumn ? "field-tint" : ""
+                      }`}
+                      title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
+                    >
+                      {isFlashing && flashTarget && (
+                        <span key={flashTarget.token} aria-hidden="true" className="cell-flash-overlay" />
+                      )}
+                      <div
+                        // Reserved clearance must be ≥ the overlay's actual
+                        // footprint in the persistent (edited, unfocused)
+                        // state: dot (12px) + crosshair button (16px) + reset
+                        // button (16px) + two 2px gaps (4px) ≈ 48px, plus the
+                        // overlay's own `right-1` offset (4px) ≈ 52px from
+                        // the cell's right edge — pr-6 (24px) under-reserved
+                        // this and let the icons cover the value's tail.
+                        className={`${isEdited ? "pr-14" : "pr-1"} ${
+                          unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
+                        }`}
+                      >
+                        <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
+                      </div>
+                      {/* Edited indicator + reset + crosshair: compact,
+                          icon-sized, and overlaid (not laid out in flow) so
+                          they never permanently reserve column width — the
+                          value area only makes room for them once the cell is
+                          actually edited (the one case where they stay
+                          visible); otherwise they float over the value's
+                          trailing edge on hover/focus. */}
+                      <div
+                        className={`absolute top-1 right-1 flex items-center gap-0.5 transition-opacity ${
+                          isEdited ? "opacity-100" : "opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100"
+                        }`}
+                      >
+                        {isEdited && (
+                          <span
+                            title={`${field.name} edited from the extracted value`}
+                            className="flex items-center justify-center w-3 h-3"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                            <span className="sr-only">Edited</span>
+                          </span>
+                        )}
+                        {onJumpToValue && (
+                          <button
+                            onClick={() => onJumpToValue(field.name, rowIndex)}
+                            aria-label={`Jump to ${field.name} in document`}
+                            title="Jump to highlight in document"
+                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+                          >
+                            <Crosshair className="w-3 h-3" />
+                          </button>
+                        )}
+                        {isEdited && (
+                          <button
+                            onClick={() => resetField(rowIndex, field.name)}
+                            aria-label={`Reset ${field.name} to extracted value`}
+                            title="Reset to extracted value"
+                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayProps>(function ResultsDisplay(
   {
     results,
@@ -243,6 +470,7 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
     hoveredField = null,
     onHoverField,
     onEditedRowsChange,
+    providerModelLabel,
   },
   ref
 ) {
@@ -270,6 +498,65 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
     setEdited(results);
     setPage(1);
   }
+
+  // Expand-to-modal (§13, "expand-to-modal" task) — the app's first overlay.
+  // `edited`/`page` above are the only state the table depends on, and both
+  // already live here in ResultsDisplay, so the modal doesn't need any
+  // import/export of edit state on open/close: it's the same state the
+  // inline card reads, just rendered through a second `<ResultsTable>`
+  // instance (see the return below) while `expanded` is true.
+  const [expanded, setExpanded] = useState(false);
+  const expandButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // Users who've asked the OS to minimize motion get an instant open/close
+  // instead of the fade+scale — same convention as flashCell's scroll
+  // behavior above, just applied to framer variants instead of a native DOM
+  // API. Read once per render (cheap media-query check); the modal itself
+  // only mounts while `expanded`, so this doesn't need to be reactive to a
+  // mid-session OS setting change.
+  const reduceMotion = prefersReducedMotion();
+
+  const closeModal = useCallback(() => {
+    setExpanded(false);
+    // Restore focus to the button that opened the modal — without this,
+    // focus would silently drop to <body> and keyboard users lose their
+    // place.
+    expandButtonRef.current?.focus();
+  }, []);
+
+  // Focus the close button whenever the modal opens, so keyboard/screen
+  // reader users land inside the dialog rather than on whatever the
+  // now-hidden expand button happens to be.
+  useEffect(() => {
+    if (expanded) {
+      closeButtonRef.current?.focus();
+    }
+  }, [expanded]);
+
+  // Escape closes the modal — listener added only while open, removed on
+  // close/unmount, matching the resize-listener pattern elsewhere
+  // (PDFPreview) rather than a permanently-mounted global handler.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeModal();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expanded, closeModal]);
+
+  // Lock body scroll while the modal is open — this is a true overlay (not
+  // an inline expand), so the page behind it shouldn't scroll along with it.
+  // Restored on close (state flips back) AND on unmount (e.g. navigating
+  // away with the modal still open), since both run this effect's cleanup.
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [expanded]);
 
   const isArray = Array.isArray(results);
   const resultsArray: ExtractionResult[] = isArray ? results : results ? [results] : [];
@@ -323,12 +610,6 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
     }),
     [currentPage, rowCount]
   );
-
-  // Colors/swatches/hover-linking only make sense once there's a document
-  // pane with live marks to link to — same availability rule `onJumpToValue`
-  // already encodes (undefined for images / no extracted text). A plain
-  // table with no document pane renders exactly as it did before this task.
-  const highlightsLive = Boolean(onJumpToValue);
 
   // "Not found in source" hint (grounded extraction, T2): keyed off the
   // original extracted values/quotes, not the edited working copy — the
@@ -468,189 +749,164 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
   const { startIndex, endIndex } = pageSlice(currentPage, rowCount, PAGE_SIZE);
   const pageRows = editedArray.slice(startIndex, endIndex);
 
+  const handlePageChange = (next: number) => setPage(clampPage(next, rowCount, PAGE_SIZE));
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[var(--success-subtle)] flex items-center justify-center">
-            <Check className="w-4 h-4 text-[var(--success)]" strokeWidth={2.5} />
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[var(--success-subtle)] flex items-center justify-center">
+              <Check className="w-4 h-4 text-[var(--success)]" strokeWidth={2.5} />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-[var(--text-primary)]">Complete</h3>
+              <p className="text-xs text-[var(--text-tertiary)]">
+                {rowCount > 1
+                  ? `${rowCount} rows extracted`
+                  : `${fields.length} field${fields.length !== 1 ? "s" : ""} extracted`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-[var(--text-primary)]">Complete</h3>
-            <p className="text-xs text-[var(--text-tertiary)]">
-              {rowCount > 1
-                ? `${rowCount} rows extracted`
-                : `${fields.length} field${fields.length !== 1 ? "s" : ""} extracted`}
-            </p>
+          <div className="flex items-center gap-1">
+            <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
+            <motion.button
+              ref={expandButtonRef}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setExpanded(true)}
+              aria-label="Expand table"
+              title="Expand table"
+              className="flex items-center justify-center w-8 h-8 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </motion.button>
           </div>
         </div>
-        <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
-      </div>
 
-      <div className="overflow-x-auto" ref={tableContainerRef}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-inset)]">
-              {showIndexColumn && (
-                <th className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)] w-8">
-                  #
-                </th>
-              )}
-              {fields.map((field, fieldIndex) => (
-                <th key={field.id} className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
-                  {/* Type sub-label rides inline after the name on one line
-                      (was a second stacked line) — reclaims header height for
-                      the "instrument" density this table targets (§13). Color
-                      swatch (LangExtract-style field↔mark identity) only
-                      appears once there are live marks to identify — see
-                      `highlightsLive`. */}
-                  {highlightsLive && (
-                    <span
-                      aria-hidden="true"
-                      className="field-swatch inline-block w-2 h-2 rounded-[2px] mr-1.5 align-middle"
-                      style={fieldColorVars(fieldIndex) as CSSProperties}
-                    />
-                  )}
-                  <span className="data text-[var(--text-secondary)]">{field.name}</span>
-                  <span className="text-[var(--text-tertiary)]/70"> · {field.type}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row, i) => {
-              const rowIndex = startIndex + i;
-              return (
-                <tr
-                  key={rowIndex}
-                  className="border-b border-[var(--border-subtle)] last:border-b-0 hover:bg-[var(--surface-overlay)]/30 transition-colors align-top"
-                >
-                {showIndexColumn && (
-                  <td className="px-2 py-1 text-[13px] text-[var(--text-tertiary)] tabular-nums align-top">{rowIndex + 1}</td>
-                )}
-                {fields.map((field, fieldIndex) => {
-                  const original = resultsArray[rowIndex]?.[field.name] ?? null;
-                  const current = row[field.name] ?? null;
-                  const isEdited = !valuesEqual(current, original);
-                  // Non-null value, but neither its quote nor the value
-                  // itself was found verbatim in the document text — a
-                  // light trust signal, not a validation error (the value
-                  // may still be correct; it just can't be verified against
-                  // the source the way anchored cells can).
-                  const unanchored =
-                    anchoredMap !== null && original !== null && anchoredMap.get(`${rowIndex}:${field.name}`) === false;
-                  // Column tint (two-way hover linking, LangExtract-style):
-                  // this cell's field is the one currently hovered — either
-                  // a mark in the document or another cell in this same
-                  // column — so give it the field's own tinted background.
-                  // Only lit up while highlighting is actually live.
-                  const isHoveredColumn = highlightsLive && hoveredField === field.name;
-                  const isFlashing = flashTarget?.field === field.name && flashTarget.row === rowIndex;
-                  return (
-                    <td
-                      key={field.id}
-                      data-field={field.name}
-                      data-row={rowIndex}
-                      style={highlightsLive ? (fieldColorVars(fieldIndex) as CSSProperties) : undefined}
-                      onMouseEnter={() => {
-                        if (highlightsLive) onHoverField?.(field.name);
-                      }}
-                      onMouseLeave={() => {
-                        if (highlightsLive) onHoverField?.(null);
-                      }}
-                      className={`relative group/cell px-2 py-1 min-w-[9rem] align-top transition-colors ${
-                        isHoveredColumn ? "field-tint" : ""
-                      }`}
-                      title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
-                    >
-                      {isFlashing && flashTarget && (
-                        <span key={flashTarget.token} aria-hidden="true" className="cell-flash-overlay" />
-                      )}
-                      <div
-                        // Reserved clearance must be ≥ the overlay's actual
-                        // footprint in the persistent (edited, unfocused)
-                        // state: dot (12px) + crosshair button (16px) + reset
-                        // button (16px) + two 2px gaps (4px) ≈ 48px, plus the
-                        // overlay's own `right-1` offset (4px) ≈ 52px from
-                        // the cell's right edge — pr-6 (24px) under-reserved
-                        // this and let the icons cover the value's tail.
-                        className={`${isEdited ? "pr-14" : "pr-1"} ${
-                          unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
-                        }`}
-                      >
-                        <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
-                      </div>
-                      {/* Edited indicator + reset + crosshair: compact,
-                          icon-sized, and overlaid (not laid out in flow) so
-                          they never permanently reserve column width — the
-                          value area only makes room for them once the cell is
-                          actually edited (the one case where they stay
-                          visible); otherwise they float over the value's
-                          trailing edge on hover/focus. */}
-                      <div
-                        className={`absolute top-1 right-1 flex items-center gap-0.5 transition-opacity ${
-                          isEdited ? "opacity-100" : "opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100"
-                        }`}
-                      >
-                        {isEdited && (
-                          <span
-                            title={`${field.name} edited from the extracted value`}
-                            className="flex items-center justify-center w-3 h-3"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-                            <span className="sr-only">Edited</span>
-                          </span>
-                        )}
-                        {onJumpToValue && (
-                          <button
-                            onClick={() => onJumpToValue(field.name, rowIndex)}
-                            aria-label={`Jump to ${field.name} in document`}
-                            title="Jump to highlight in document"
-                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
-                          >
-                            <Crosshair className="w-3 h-3" />
-                          </button>
-                        )}
-                        {isEdited && (
-                          <button
-                            onClick={() => resetField(rowIndex, field.name)}
-                            aria-label={`Reset ${field.name} to extracted value`}
-                            title="Reset to extracted value"
-                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {rowCount > PAGE_SIZE && (
-        <PaginationBar
-          page={currentPage}
-          rowCount={rowCount}
-          pageSize={PAGE_SIZE}
-          onPageChange={(next) => setPage(clampPage(next, rowCount, PAGE_SIZE))}
+        <ResultsTable
+          fields={fields}
+          showIndexColumn={showIndexColumn}
+          resultsArray={resultsArray}
+          pageRows={pageRows}
+          startIndex={startIndex}
+          anchoredMap={anchoredMap}
+          hoveredField={hoveredField}
+          onHoverField={onHoverField}
+          onJumpToValue={onJumpToValue}
+          updateField={updateField}
+          resetField={resetField}
+          flashTarget={flashTarget}
+          containerRef={tableContainerRef}
+          scrollAreaClassName="max-h-[420px]"
         />
-      )}
 
-      <details className="border-t border-[var(--border-subtle)] group">
-        <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors select-none">
-          <span className="ml-1">View JSON</span>
-        </summary>
-        <div className="px-4 pb-4">
-          <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
-            {JSON.stringify(edited, null, 2)}
-          </pre>
-        </div>
-      </details>
-    </motion.div>
+        {rowCount > PAGE_SIZE && (
+          <PaginationBar page={currentPage} rowCount={rowCount} pageSize={PAGE_SIZE} onPageChange={handlePageChange} />
+        )}
+
+        <details className="border-t border-[var(--border-subtle)] group">
+          <summary className="px-4 py-3 cursor-pointer text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors select-none">
+            <span className="ml-1">View JSON</span>
+          </summary>
+          <div className="px-4 pb-4">
+            <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+              {JSON.stringify(edited, null, 2)}
+            </pre>
+          </div>
+        </details>
+      </motion.div>
+
+      {/* Expand-to-modal (§13) — the app's first overlay, so it deliberately
+          stays quiet: an ink-tinted blurred scrim (not a flat black one) and
+          a plain §13 card for the panel, no drop-shadow/border treatments
+          beyond what card-elevated already gives every other surface. */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            className="fixed inset-0 z-50"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.15 }}
+            onClick={closeModal}
+          >
+            <div className="absolute inset-0 modal-backdrop backdrop-blur-sm" aria-hidden="true" />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="results-modal-title"
+              initial={reduceMotion ? false : { opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+              transition={reduceMotion ? { duration: 0 } : { duration: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute inset-4 md:inset-10 card-elevated rounded-2xl flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-subtle)] shrink-0">
+                <div className="min-w-0">
+                  <h2 id="results-modal-title" className="text-sm font-medium text-[var(--text-primary)]">
+                    Results
+                  </h2>
+                  {providerModelLabel && (
+                    <p className="text-xs text-[var(--text-tertiary)] mt-0.5 truncate">{providerModelLabel}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <ExportBar
+                    copied={copied}
+                    onCopy={handleCopy}
+                    onDownloadJson={handleDownload}
+                    onDownloadCsv={handleDownloadCSV}
+                  />
+                  <button
+                    ref={closeButtonRef}
+                    onClick={closeModal}
+                    aria-label="Close expanded results"
+                    title="Close"
+                    className="flex items-center justify-center w-8 h-8 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors ml-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Same table, same `edited`/`page` state as the inline card
+                  above — a second `<ResultsTable>` instance, not a copy of
+                  the data, so edits made here are already visible inline the
+                  moment this modal closes (and vice versa). Jump-to-value
+                  and hover linking are disabled here (undefined) since the
+                  document pane they'd link to isn't visible behind this
+                  overlay — see `ResultsTable`'s prop docs. */}
+              <ResultsTable
+                fields={fields}
+                showIndexColumn={showIndexColumn}
+                resultsArray={resultsArray}
+                pageRows={pageRows}
+                startIndex={startIndex}
+                anchoredMap={anchoredMap}
+                hoveredField={null}
+                onHoverField={undefined}
+                onJumpToValue={undefined}
+                updateField={updateField}
+                resetField={resetField}
+                flashTarget={null}
+                scrollAreaClassName="flex-1 min-h-0"
+              />
+
+              {rowCount > PAGE_SIZE && (
+                <PaginationBar
+                  page={currentPage}
+                  rowCount={rowCount}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={handlePageChange}
+                  className="shrink-0"
+                />
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 });

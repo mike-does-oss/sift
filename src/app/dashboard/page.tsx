@@ -860,6 +860,11 @@ export default function DashboardPage() {
                     hoveredField={hoveredField}
                     onHoverField={setHoveredField}
                     onEditedRowsChange={setDatasetRows}
+                    providerModelLabel={
+                      extractedWith && !isLoading && !error
+                        ? `Extracted with ${extractedWithLabel} · ${extractedWith.model}`
+                        : undefined
+                    }
                   />
                 </motion.section>
               )}

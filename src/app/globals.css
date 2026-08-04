@@ -480,3 +480,12 @@ html.dark .field-tint {
     opacity: 0;
   }
 }
+
+/* Expand-to-modal backdrop (§13, "expand-to-modal" task) — the app's first
+   true overlay. Tinted with the theme's own `--ink` (via color-mix, so no
+   new rgb-triplet var is needed) rather than a flat black scrim, so it stays
+   in the §13 palette instead of reading like a generic dialog library
+   default. */
+.modal-backdrop {
+  background: color-mix(in srgb, var(--ink) 40%, transparent);
+}
