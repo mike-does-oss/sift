@@ -502,6 +502,9 @@ html.dark .field-tint {
     0 1px 3px rgba(23, 23, 26, 0.08),
     0 8px 24px rgba(23, 23, 26, 0.06);
   max-width: 46rem;
+  /* Fill the pane vertically even for short documents — a content-hugging
+     sheet reads as a torn half-page rather than a page. */
+  min-height: 100%;
   margin: 0 auto;
   padding: 2.5rem 2.75rem;
 }
