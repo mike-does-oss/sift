@@ -316,6 +316,22 @@ export default function SettingsPage() {
     }
   };
 
+  // Gives clicking a default-provider card a visible consequence beyond the
+  // selection border: it jumps you straight to that provider's configuration
+  // section below, which also happens to be `id`-matched to `Provider`
+  // values (see the `<section id="...">` on each config card further down).
+  const scrollToProviderSection = (value: Provider) => {
+    const el = document.getElementById(value);
+    if (!el) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  };
+
+  const handleSelectProvider = (value: Provider) => {
+    setProvider(value);
+    scrollToProviderSection(value);
+  };
+
   const runTest = async (
     testProvider: Provider,
     setState: (s: TestState) => void
@@ -407,9 +423,14 @@ export default function SettingsPage() {
 
       {/* Provider selection */}
       <section className="card-elevated rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Provider
-        </h2>
+        <div>
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+            Default Provider
+          </h2>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1">
+            Used for every extraction unless you pick another in the workspace.
+          </p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {PROVIDERS.map((p) => {
             const Icon = p.icon;
@@ -417,7 +438,7 @@ export default function SettingsPage() {
             return (
               <button
                 key={p.value}
-                onClick={() => setProvider(p.value)}
+                onClick={() => handleSelectProvider(p.value)}
                 className={`text-left rounded-xl border p-4 transition-all ${
                   isSelected
                     ? "border-[var(--accent-muted)] bg-[var(--accent-subtle)]"
@@ -433,6 +454,15 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium text-[var(--text-primary)]">
                     {p.label}
                   </span>
+                  {isSelected && (
+                    // Same recipe as the "Recommended" badge (rounded-full, accent text,
+                    // 10px uppercase) — filled with --surface instead of --accent-subtle
+                    // so the chip still reads against a card whose own background is
+                    // already --accent-subtle once selected.
+                    <span className="px-1.5 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--accent-muted)] text-[10px] font-medium text-[var(--accent)] uppercase tracking-wide">
+                      Default
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-[var(--text-tertiary)]">{p.description}</p>
               </button>
@@ -442,7 +472,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Ollama */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section id="ollama" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
             <HardDrive className="w-4 h-4 text-[var(--text-tertiary)]" />
@@ -601,7 +631,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Anthropic */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section id="anthropic" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
             <Sparkles className="w-4 h-4 text-[var(--text-tertiary)]" />
@@ -680,7 +710,7 @@ export default function SettingsPage() {
       </section>
 
       {/* OpenAI */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section id="openai" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
             <Cloud className="w-4 h-4 text-[var(--text-tertiary)]" />
@@ -757,7 +787,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Gemini */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section id="gemini" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
             <Zap className="w-4 h-4 text-[var(--text-tertiary)]" />
@@ -834,7 +864,7 @@ export default function SettingsPage() {
       </section>
 
       {/* OpenAI-compatible */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section id="openai-compatible" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
             <Plug className="w-4 h-4 text-[var(--text-tertiary)]" />
