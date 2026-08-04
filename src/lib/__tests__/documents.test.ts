@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
-import { parseDocument, detectExtension } from "../documents";
+import { parseDocument, detectExtension, assertZipNotTooComplex, ZIP_TOO_COMPLEX_ERROR } from "../documents";
 
 // Minimal hand-built one-page PDF ("Hello Sift" as extractable text). pdf.js
 // (via unpdf) tolerates this despite not being byte-perfect.
@@ -113,6 +113,32 @@ async function buildPptxFixture(slides: string[][]): Promise<Buffer> {
 async function buildPlainZipFixture(): Promise<Buffer> {
   const zip = new JSZip();
   zip.file("readme.txt", "just a regular zip, not office xml");
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+// Lower-level pptx builder that takes raw <p:spTree> body XML per slide,
+// for fixtures that need control over paragraph/run structure that
+// buildPptxFixture can't express — specifically multiple <a:r>/<a:t> runs
+// within a single <a:p>, which is the shape that hid the TEXT_RUN_RE
+// regression (buildPptxFixture only ever emits one run per paragraph).
+async function buildPptxFromSlideBodies(slideBodies: string[]): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+</Types>`
+  );
+  slideBodies.forEach((body, i) => {
+    zip.file(
+      `ppt/slides/slide${i + 1}.xml`,
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>${body}</p:spTree></p:cSld>
+</p:sld>`
+    );
+  });
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
@@ -266,6 +292,56 @@ describe("parseDocument — .pptx", () => {
   });
 });
 
+// Regression coverage for the TEXT_RUN_RE bug flagged in review: a paragraph
+// with 2+ <a:r>/<a:t> runs is the normal case in real decks (any mid-sentence
+// formatting change, autocorrect split, or run adjacent to a hyperlink run
+// produces one), not an edge case — and every buildPptxFixture paragraph
+// above has exactly one run, so none of it exercises this path. These
+// fixtures fail against the old `<a:t[ >]?[^>]*>` regex (it drops the first
+// run's text and splices raw XML into the capture) and pass against the
+// fixed `<a:t(?:\s[^>]*)?>`.
+describe("parseDocument — .pptx multi-run paragraphs (regression)", () => {
+  it("joins two runs in one paragraph without dropping text or leaking XML markup, when both <a:t> tags are bare", async () => {
+    // Mirrors the exact shape from review: a bold lead-in run followed by a
+    // plain run, both with bare (attribute-less) <a:t> tags — the case the
+    // old regex mishandled by backtracking across the first run's closing
+    // tag into the second run's opening tag.
+    const paragraph =
+      '<a:p><a:r><a:rPr b="1"/><a:t>Revenue:</a:t></a:r><a:r><a:rPr lang="en-US"/><a:t>$4.2M this quarter</a:t></a:r></a:p>';
+    const buf = await buildPptxFromSlideBodies([paragraph]);
+    const result = await parseDocument(buf, "deck.pptx");
+    if (result.kind !== "text") throw new Error("expected text");
+    expect(result.text).toBe("--- Slide 1 ---\nRevenue: $4.2M this quarter");
+    expect(result.text).not.toContain("<a:r>");
+    expect(result.text).not.toContain("a:rPr");
+    expect(result.text).not.toContain("</a:t");
+  });
+
+  it("handles three runs with a mix of bare and attributed <a:t> tags", async () => {
+    const paragraph =
+      "<a:p>" +
+      "<a:r><a:t>Hello</a:t></a:r>" +
+      '<a:r><a:rPr lang="en-US" dirty="0"/><a:t>brave</a:t></a:r>' +
+      '<a:r><a:t xml:space="preserve">world</a:t></a:r>' +
+      "</a:p>";
+    const buf = await buildPptxFromSlideBodies([paragraph]);
+    const result = await parseDocument(buf, "deck.pptx");
+    if (result.kind !== "text") throw new Error("expected text");
+    expect(result.text).toBe("--- Slide 1 ---\nHello brave world");
+  });
+});
+
+describe("parseDocument — .pptx entity decoding", () => {
+  it("decodes numeric character references (decimal and hex) alongside named entities", async () => {
+    const paragraph =
+      "<a:p><a:r><a:t>Caf&#233; &amp; Ni&#241;o said &#8220;hi&#8221; &#x2014; &#x2019;twas fun</a:t></a:r></a:p>";
+    const buf = await buildPptxFromSlideBodies([paragraph]);
+    const result = await parseDocument(buf, "deck.pptx");
+    if (result.kind !== "text") throw new Error("expected text");
+    expect(result.text).toBe("--- Slide 1 ---\nCafé & Niño said “hi” — ’twas fun");
+  });
+});
+
 describe("parseDocument — unknown types", () => {
   it("throws a friendly error for unrecognized magic bytes and extension", async () => {
     const buf = Buffer.from([0x00, 0x11, 0x22, 0x33, 0x44]);
@@ -317,5 +393,48 @@ describe("detectExtension", () => {
   it("throws a friendly error for a well-formed zip with an unmapped extension", async () => {
     const buf = await buildPlainZipFixture();
     expect(() => detectExtension(buf, "archive.zip")).toThrow(/Unsupported file type/);
+  });
+});
+
+// assertZipNotTooComplex sums a jszip entry field (`_data.uncompressedSize`)
+// that reflects the zip's central directory, not real inflated bytes —
+// exercising the 64MB-cap boundary with a real fixture would mean actually
+// compressing 64MB+ of content in-test. Since the guard is a pure function
+// over `zip.files`, it's tested directly against shape-compatible fakes
+// instead (per review guidance), which also lets each case pin an exact
+// declared size rather than depending on how well a given payload compresses.
+describe("assertZipNotTooComplex", () => {
+  function fakeZip(entries: Array<{ dir?: boolean; uncompressedSize?: number }>): JSZip {
+    const files: Record<string, unknown> = {};
+    entries.forEach((e, i) => {
+      files[`entry-${i}`] = {
+        dir: e.dir ?? false,
+        _data: e.uncompressedSize === undefined ? undefined : { uncompressedSize: e.uncompressedSize },
+      };
+    });
+    return { files } as unknown as JSZip;
+  }
+
+  it("allows a zip whose total declared uncompressed size is under the 64MB cap", () => {
+    const zip = fakeZip([{ uncompressedSize: 10 * 1024 * 1024 }, { uncompressedSize: 20 * 1024 * 1024 }]);
+    expect(() => assertZipNotTooComplex(zip)).not.toThrow();
+  });
+
+  it("rejects a zip whose total declared uncompressed size exceeds the 64MB cap", () => {
+    const zip = fakeZip([{ uncompressedSize: 40 * 1024 * 1024 }, { uncompressedSize: 30 * 1024 * 1024 }]);
+    expect(() => assertZipNotTooComplex(zip)).toThrow(ZIP_TOO_COMPLEX_ERROR);
+  });
+
+  it("excludes directory entries from the size total", () => {
+    const zip = fakeZip([
+      { dir: true, uncompressedSize: 1_000_000_000 },
+      { uncompressedSize: 1024 },
+    ]);
+    expect(() => assertZipNotTooComplex(zip)).not.toThrow();
+  });
+
+  it("fails closed: an entry with no readable declared size is treated as unbounded", () => {
+    const zip = fakeZip([{ uncompressedSize: undefined }]);
+    expect(() => assertZipNotTooComplex(zip)).toThrow(ZIP_TOO_COMPLEX_ERROR);
   });
 });

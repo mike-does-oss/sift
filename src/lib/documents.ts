@@ -73,6 +73,59 @@ function isZip(buf: Buffer): boolean {
   );
 }
 
+// Safety cap on total *uncompressed* content of a .docx/.pptx before any of
+// it is inflated. DEFLATE's practical worst-case ratio (~1000:1) means a
+// modest upload (well under the 32MB upload cap) can carry an entry that
+// decompresses to gigabytes — enough to exceed the V8 heap and crash the
+// process with an uncatchable OOM abort, unlike every other error path here
+// (corrupt zip, wrong format, empty text), which fail cleanly into a caught
+// Error.
+const MAX_UNCOMPRESSED_ZIP_BYTES = 64 * 1024 * 1024;
+
+export const ZIP_TOO_COMPLEX_ERROR = "File is too complex to process.";
+
+interface JSZipInternalData {
+  uncompressedSize?: number;
+}
+
+/**
+ * jszip doesn't publicly expose a pre-inflation size for an entry, but
+ * `_data.uncompressedSize` is a stable internal field (jszip 3.x) populated
+ * by `loadAsync`'s central-directory parse — before anything is inflated
+ * (verified empirically: available within ~1ms of `loadAsync` resolving,
+ * even for an entry that would decompress to 20MB+). Treated defensively:
+ * an entry whose size we can't read is assumed unbounded rather than
+ * silently trusted, so a malformed/unusual entry can't slip past the guard.
+ */
+function uncompressedSizeOf(file: JSZip.JSZipObject): number {
+  const internal = (file as unknown as { _data?: JSZipInternalData })._data;
+  return typeof internal?.uncompressedSize === "number" ? internal.uncompressedSize : Infinity;
+}
+
+/**
+ * Rejects a zip (.docx/.pptx) whose total declared uncompressed size
+ * exceeds the safety cap, computed entirely from the central directory —
+ * no entry is inflated to compute this. Exported so it's unit-testable
+ * directly against a shape-compatible fake `JSZip` without needing to
+ * actually build/compress a 64MB+ fixture.
+ */
+export function assertZipNotTooComplex(zip: JSZip): void {
+  let total = 0;
+  for (const file of Object.values(zip.files)) {
+    if (file.dir) continue;
+    total += uncompressedSizeOf(file);
+  }
+  if (total > MAX_UNCOMPRESSED_ZIP_BYTES) {
+    throw new Error(ZIP_TOO_COMPLEX_ERROR);
+  }
+}
+
+async function loadZipSafely(buf: Buffer): Promise<JSZip> {
+  const zip = await JSZip.loadAsync(buf);
+  assertZipNotTooComplex(zip);
+  return zip;
+}
+
 /**
  * Extracts selectable text from a PDF via unpdf/pdf.js. Used to build the
  * `pdf` ParsedDocument's `text` field — feeds the text-only engines (ollama,
@@ -123,6 +176,9 @@ async function parseEml(buf: Buffer): Promise<{ kind: "text"; text: string }> {
 }
 
 async function parseDocx(buf: Buffer): Promise<{ kind: "text"; text: string }> {
+  // Guard before handing off to mammoth (which parses the zip itself
+  // internally) — see assertZipNotTooComplex.
+  await loadZipSafely(buf);
   const { value } = await mammoth.extractRawText({ buffer: buf });
   return { kind: "text", text: capText(value.trim()) };
 }
@@ -135,13 +191,31 @@ const XML_ENTITIES: Record<string, string> = {
   "&amp;": "&",
 };
 
+// Named entities plus numeric character references (decimal &#39; and hex
+// &#x2019;) — PowerPoint's autocorrect/"Insert Symbol" commonly emit curly
+// quotes, em-dashes, etc. as numeric refs rather than the predefined set.
+const NAMED_OR_NUMERIC_ENTITY_RE = /&lt;|&gt;|&quot;|&apos;|&amp;|&#(\d+);|&#x([0-9a-fA-F]+);/g;
+
 function decodeXmlEntities(s: string): string {
-  return s.replace(/&lt;|&gt;|&quot;|&apos;|&amp;/g, (m) => XML_ENTITIES[m]);
+  return s.replace(NAMED_OR_NUMERIC_ENTITY_RE, (m, dec, hex) => {
+    if (dec !== undefined) return String.fromCodePoint(parseInt(dec, 10));
+    if (hex !== undefined) return String.fromCodePoint(parseInt(hex, 16));
+    return XML_ENTITIES[m];
+  });
 }
 
 const SLIDE_PATH_RE = /^ppt\/slides\/slide(\d+)\.xml$/;
 const PARAGRAPH_RE = /<a:p[ >][\s\S]*?<\/a:p>/g;
-const TEXT_RUN_RE = /<a:t[ >]?[^>]*>([\s\S]*?)<\/a:t>/g;
+// Requires whitespace before any attribute block (`<a:t xml:space="...">`)
+// rather than making the boundary optional-then-greedy. The looser form
+// this replaced (`<a:t[ >]?[^>]*>`) let the regex engine backtrack across a
+// paragraph's *second* `<a:t>` tag whenever the first run was a bare
+// `<a:t>` with no attributes — silently dropping that run's text and
+// splicing raw XML (closing/opening run tags) into the capture group. Any
+// PowerPoint paragraph with 2+ runs (formatting change, autocorrect split,
+// adjacent hyperlink run) triggers the old bug; see
+// src/lib/__tests__/documents.test.ts for a regression fixture.
+const TEXT_RUN_RE = /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g;
 
 /**
  * Minimal PPTX text extraction (v1): no heavyweight office suite, just
@@ -151,7 +225,7 @@ const TEXT_RUN_RE = /<a:t[ >]?[^>]*>([\s\S]*?)<\/a:t>/g;
  * ID list — good enough for a first cut.
  */
 async function parsePptx(buf: Buffer): Promise<{ kind: "text"; text: string }> {
-  const zip = await JSZip.loadAsync(buf);
+  const zip = await loadZipSafely(buf);
   const slideNames = Object.keys(zip.files)
     .filter((name) => SLIDE_PATH_RE.test(name))
     .sort((a, b) => {
