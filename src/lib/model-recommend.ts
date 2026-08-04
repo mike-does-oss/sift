@@ -146,3 +146,27 @@ export function recommendModels(sys: SystemInfo): ModelRec[] {
 
   return recs.map((rec) => (rec.model === "gemma3:12b" || rec.model === "gemma3:27b" ? withGpuCaveat(rec, sys) : rec));
 }
+
+/**
+ * Normalizes an Ollama model tag for installed-state comparisons. `/api/tags`
+ * sometimes lists a pulled model with an explicit `:latest` suffix even when
+ * the recommendation table above (and most user-typed input) omits it —
+ * `gemma3:4b` and `gemma3:4b:latest` name the same installed model. Strips a
+ * single trailing `:latest`; otherwise returns the trimmed tag unchanged.
+ */
+export function normalizeModelTag(tag: string): string {
+  const trimmed = tag.trim();
+  const suffix = ":latest";
+  return trimmed.endsWith(suffix) ? trimmed.slice(0, -suffix.length) : trimmed;
+}
+
+/**
+ * True if `tag` names a model already present in `installed` (the tag list
+ * from Ollama's `/api/tags`, e.g. `ProviderInfo.models` for the ollama
+ * provider), tolerating the `:latest` suffix mismatch on either side — see
+ * `normalizeModelTag`.
+ */
+export function isModelInstalled(tag: string, installed: readonly string[]): boolean {
+  const target = normalizeModelTag(tag);
+  return installed.some((m) => normalizeModelTag(m) === target);
+}

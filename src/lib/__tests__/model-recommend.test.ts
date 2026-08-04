@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recommendModels, type SystemInfo } from "../model-recommend";
+import { recommendModels, normalizeModelTag, isModelInstalled, type SystemInfo } from "../model-recommend";
 
 const appleSilicon = (totalRamGB: number): SystemInfo => ({ totalRamGB, arch: "arm64", platform: "darwin" });
 const windows = (totalRamGB: number): SystemInfo => ({ totalRamGB, arch: "x64", platform: "win32" });
@@ -92,5 +92,45 @@ describe("recommendModels", () => {
   it("does not apply the GPU caveat on an Intel Mac (darwin/x64)", () => {
     const recs = recommendModels({ totalRamGB: 32, arch: "x64", platform: "darwin" });
     expect(recs.find((r) => r.model === "gemma3:27b")?.caveat).toMatch(/GPU/);
+  });
+});
+
+describe("normalizeModelTag", () => {
+  it("strips a trailing :latest suffix", () => {
+    expect(normalizeModelTag("gemma3:4b:latest")).toBe("gemma3:4b");
+  });
+
+  it("leaves a tag without :latest unchanged", () => {
+    expect(normalizeModelTag("gemma3:4b")).toBe("gemma3:4b");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeModelTag("  gemma3:4b  ")).toBe("gemma3:4b");
+  });
+
+  it("does not strip :latest from the middle of a tag", () => {
+    expect(normalizeModelTag("gemma3:latest:4b")).toBe("gemma3:latest:4b");
+  });
+});
+
+describe("isModelInstalled", () => {
+  it("matches an exact tag", () => {
+    expect(isModelInstalled("gemma3:4b", ["gemma3:4b", "llama3.2"])).toBe(true);
+  });
+
+  it("matches when the installed list carries an explicit :latest and the target doesn't", () => {
+    expect(isModelInstalled("gemma3:4b", ["gemma3:4b:latest"])).toBe(true);
+  });
+
+  it("matches when the target carries an explicit :latest and the installed list doesn't", () => {
+    expect(isModelInstalled("gemma3:4b:latest", ["gemma3:4b"])).toBe(true);
+  });
+
+  it("returns false when nothing matches", () => {
+    expect(isModelInstalled("gemma3:27b", ["gemma3:4b", "llama3.2"])).toBe(false);
+  });
+
+  it("returns false against an empty installed list", () => {
+    expect(isModelInstalled("gemma3:4b", [])).toBe(false);
   });
 });

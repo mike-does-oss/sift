@@ -14,7 +14,7 @@ import {
 import type { SiftSettings } from "@/lib/settings";
 import { webSiftApi } from "@/lib/api";
 import { createPullProgressTracker } from "@/lib/pull-progress";
-import type { SystemInfo, ModelRec } from "@/lib/model-recommend";
+import { normalizeModelTag, isModelInstalled, type SystemInfo, type ModelRec } from "@/lib/model-recommend";
 
 type Provider = SiftSettings["provider"];
 
@@ -164,6 +164,13 @@ export default function SettingsPage() {
   const [pullState, setPullState] = useState<PullState>({ status: "idle" });
   const pullAbortRef = useRef<AbortController | null>(null);
   const [systemInfo, setSystemInfo] = useState<{ system: SystemInfo; recommendations: ModelRec[] } | null>(null);
+  // Installed Ollama model tags, sourced from GET /api/providers (same
+  // /api/tags data `webSiftApi.listProviders()` already exposes) — the one
+  // source of truth "installed" state reads from. `null` means unknown
+  // (Ollama unreachable, or not checked yet), not "nothing installed":
+  // recommendation rows fall back to a plain Download button rather than
+  // implying a false "not installed".
+  const [installedModels, setInstalledModels] = useState<string[] | null>(null);
   const [anthropicTest, setAnthropicTest] = useState<TestState>({ status: "idle" });
   const [openaiTest, setOpenaiTest] = useState<TestState>({ status: "idle" });
   const [geminiTest, setGeminiTest] = useState<TestState>({ status: "idle" });
@@ -218,6 +225,30 @@ export default function SettingsPage() {
       }
     })();
   }, []);
+
+  const refreshInstalledModels = useCallback(async () => {
+    try {
+      const providers = await webSiftApi.listProviders();
+      const ollama = providers.find((p) => p.id === "ollama");
+      // A `note` on the ollama entry (e.g. "Ollama not running") means the
+      // list couldn't be read — keep installed state unknown rather than
+      // treating an empty list as "nothing installed".
+      setInstalledModels(ollama && !ollama.note ? ollama.models : null);
+    } catch {
+      setInstalledModels(null);
+    }
+  }, []);
+
+  // Installed-state is best-effort and non-blocking: fetch on mount so
+  // recommendation rows already know what's installed before the user
+  // touches "Detect models" / "Test connection" (see also runTest below,
+  // which refreshes this from the same /api/tags data after a successful
+  // detect/test or pull).
+  useEffect(() => {
+    (async () => {
+      await refreshInstalledModels();
+    })();
+  }, [refreshInstalledModels]);
 
   const hasChanges =
     !!loaded &&
@@ -299,11 +330,17 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok || data.ok === false) {
         setState({ status: "error", error: data.error || "Test failed." });
+        if (testProvider === "ollama") setInstalledModels(null);
         return;
       }
       setState({ status: "ok", models: data.models });
+      // "Detect models"/"Test connection" hit the same /api/tags data as
+      // refreshInstalledModels — reuse this response instead of a redundant
+      // second fetch, so installed-state also updates on manual detect.
+      if (testProvider === "ollama") setInstalledModels(data.models ?? []);
     } catch {
       setState({ status: "error", error: "Could not reach the server." });
+      if (testProvider === "ollama") setInstalledModels(null);
     }
   };
 
@@ -423,6 +460,11 @@ export default function SettingsPage() {
             <div className="space-y-2">
               {systemInfo.recommendations.map((rec) => {
                 const isPullingThis = pullState.status === "pulling" && pullState.model === rec.model;
+                // `installedModels === null` means unknown (Ollama unreachable, or not
+                // checked yet) — keep the plain Download button rather than implying a
+                // false "not installed".
+                const isInstalled = installedModels !== null && isModelInstalled(rec.model, installedModels);
+                const isSelected = isInstalled && normalizeModelTag(rec.model) === normalizeModelTag(ollamaModel.trim());
                 return (
                   <div
                     key={rec.model}
@@ -448,14 +490,30 @@ export default function SettingsPage() {
                         {rec.caveat ? ` ${rec.caveat}` : ""}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handlePullModel(rec.model)}
-                      disabled={pullState.status === "pulling"}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      {isPullingThis ? "Downloading…" : "Download"}
-                    </button>
+                    {isInstalled ? (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)]">
+                          <Check className="w-3.5 h-3.5 text-[var(--accent)]" />
+                          Installed
+                        </span>
+                        <button
+                          onClick={() => setOllamaModel(rec.model)}
+                          disabled={isSelected}
+                          className="px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
+                        >
+                          {isSelected ? "Selected" : "Use"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handlePullModel(rec.model)}
+                        disabled={pullState.status === "pulling"}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {isPullingThis ? "Downloading…" : "Download"}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -494,7 +552,11 @@ export default function SettingsPage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                {pullState.status === "pulling" && pullState.model === ollamaModel.trim() ? "Downloading…" : "Download model"}
+                {pullState.status === "pulling" && pullState.model === ollamaModel.trim()
+                  ? "Downloading…"
+                  : installedModels !== null && ollamaModel.trim() && isModelInstalled(ollamaModel.trim(), installedModels)
+                    ? "Re-download"
+                    : "Download model"}
               </button>
             </div>
           </div>
