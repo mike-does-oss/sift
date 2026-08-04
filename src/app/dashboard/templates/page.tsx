@@ -19,6 +19,9 @@ const EMPTY_FIELD = (): ExtractionField => ({ id: `field-${Date.now()}`, name: "
 
 const MAX_EXAMPLES = 5;
 
+/** Which half of the §13 segmented pill tab bar is showing (founder feedback: presets and saved templates were mixed into one "cards and boxes" list — split them so "add" and "manage" each get their own tab). */
+type Tab = "yours" | "examples";
+
 /** A single example entry mid-edit — `text` is the raw JSON the user is typing (the `output` object, unwrapped); `error` is set on blur (or at save time) when it doesn't parse to a plain object, and cleared as soon as the user edits again. */
 interface ExampleDraft {
   text: string;
@@ -58,11 +61,23 @@ export default function TemplatesPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [addingPresetKey, setAddingPresetKey] = useState<string | null>(null);
   const [addedPresetKey, setAddedPresetKey] = useState<string | null>(null);
+  // Default: "Your templates" once there's something to show, "Examples" for
+  // a first-run/empty account. `load()` only runs once (on mount), so this
+  // is set exactly once from the fetched list and never fights a tab switch
+  // the user makes afterward.
+  const [activeTab, setActiveTab] = useState<Tab>("examples");
+  // The just-added-from-preset row to flash on the "Your templates" tab —
+  // cleared after the animation window so it doesn't replay on re-render.
+  const [flashId, setFlashId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/templates");
-      if (res.ok) setTemplates((await res.json()).templates ?? []);
+      if (res.ok) {
+        const list: Template[] = (await res.json()).templates ?? [];
+        setTemplates(list);
+        setActiveTab(list.length > 0 ? "yours" : "examples");
+      }
     } catch {
       // transient network failure — the page renders with whatever loaded
     } finally {
@@ -77,6 +92,7 @@ export default function TemplatesPage() {
   }, [load]);
 
   const startCreate = () => {
+    setActiveTab("yours");
     setEditingId("new");
     setName("");
     setPrompt("");
@@ -87,6 +103,7 @@ export default function TemplatesPage() {
   };
 
   const startEdit = (t: Template) => {
+    setActiveTab("yours");
     setEditingId(t.id);
     setName(t.name);
     setPrompt(t.prompt);
@@ -208,6 +225,13 @@ export default function TemplatesPage() {
       setTemplates((prev) => [data.template, ...prev]);
       setAddedPresetKey(preset.key);
       setTimeout(() => setAddedPresetKey((k) => (k === preset.key ? null : k)), 2000);
+      // Switch to "Your templates" so the add's result is visible, and flash
+      // the new row (reuses the sift-mark-flash convention: JS always
+      // triggers it, the CSS keyframe is what prefers-reduced-motion drops —
+      // see .row-flash in globals.css).
+      setActiveTab("yours");
+      setFlashId(data.template.id);
+      setTimeout(() => setFlashId((id) => (id === data.template.id ? null : id)), 1300);
     } finally {
       setAddingPresetKey(null);
     }
@@ -227,7 +251,7 @@ export default function TemplatesPage() {
             Reusable field definitions for extractions, batches, and schedules.
           </p>
         </div>
-        {!isEditingForm && (
+        {activeTab === "yours" && !isEditingForm && (
           <button
             onClick={startCreate}
             className="flex items-center gap-2 px-3 py-2 rounded-lg btn-primary text-sm"
@@ -238,7 +262,39 @@ export default function TemplatesPage() {
         )}
       </div>
 
-      {isEditingForm && (
+      {/* §13 segmented pill tab bar — same visual language as DocumentView's
+          Document/Extracted-text toggle. Founder feedback: presets ("cards
+          and boxes") and saved templates were mixed into one list; splitting
+          "add from an example" from "manage what I've saved" into tabs makes
+          the two actions legible on their own. */}
+      <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-sm font-medium w-fit">
+        <button
+          type="button"
+          onClick={() => setActiveTab("yours")}
+          aria-pressed={activeTab === "yours"}
+          className={`px-3.5 py-1.5 rounded-md transition-colors ${
+            activeTab === "yours"
+              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
+              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          Your templates
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("examples")}
+          aria-pressed={activeTab === "examples"}
+          className={`px-3.5 py-1.5 rounded-md transition-colors ${
+            activeTab === "examples"
+              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
+              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          Examples
+        </button>
+      </div>
+
+      {activeTab === "yours" && isEditingForm && (
         <section className="card-elevated rounded-xl p-5 space-y-5">
           <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
             {editingId === "new" ? "New template" : "Edit template"}
@@ -369,6 +425,7 @@ export default function TemplatesPage() {
         </section>
       )}
 
+      {activeTab === "examples" && (
       <section className="space-y-3">
         <div>
           <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
@@ -435,18 +492,35 @@ export default function TemplatesPage() {
           ))}
         </div>
       </section>
+      )}
 
+      {activeTab === "yours" && (
       <section className="space-y-2">
         {deleteError && <p className="text-sm text-[var(--error)]">{deleteError}</p>}
         {isLoading ? (
           <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
         ) : templates.length === 0 && !isEditingForm ? (
-          <p className="text-sm text-[var(--text-tertiary)]">No templates yet.</p>
+          <p className="text-sm text-[var(--text-tertiary)]">
+            No templates yet.{" "}
+            <button
+              type="button"
+              onClick={() => setActiveTab("examples")}
+              className="text-[var(--accent)] font-medium hover:underline"
+            >
+              Browse examples
+            </button>{" "}
+            to get started.
+          </p>
         ) : (
           templates
             .filter((t) => t.id !== editingId)
             .map((t) => (
-              <div key={t.id} className="card-elevated rounded-xl p-4 flex items-center gap-4">
+              <div
+                key={t.id}
+                className={`card-elevated rounded-xl p-4 flex items-center gap-4${
+                  t.id === flashId ? " row-flash" : ""
+                }`}
+              >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--text-primary)]">{t.name}</p>
                   <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
@@ -492,6 +566,7 @@ export default function TemplatesPage() {
             ))
         )}
       </section>
+      )}
     </div>
   );
 }

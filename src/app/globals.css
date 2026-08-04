@@ -481,6 +481,30 @@ html.dark .field-tint {
   }
 }
 
+/* Templates page (task-templates-tabs): flashes the row for a template just
+   added from a preset, on the "Your templates" tab it switches to — a
+   background-color keyframe like .sift-mark.flash rather than an overlay
+   like .cell-flash-overlay, since a template row (unlike a results cell)
+   always rests at the same --surface-elevated color. */
+@keyframes sift-row-flash {
+  0% {
+    background-color: var(--accent-subtle);
+  }
+  100% {
+    background-color: var(--surface-elevated);
+  }
+}
+
+.row-flash {
+  animation: sift-row-flash 1200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-flash {
+    animation: none;
+  }
+}
+
 /* Expand-to-modal backdrop (§13, "expand-to-modal" task) — the app's first
    true overlay. A theme-invariant dark scrim: in dark mode `--ink` is
    near-white, which read as a frosted light veil instead of dimming —
