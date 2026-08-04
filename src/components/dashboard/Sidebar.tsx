@@ -14,7 +14,6 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
-import { ProviderChip } from "./ProviderChip";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Extract", icon: Sparkles },
@@ -91,7 +90,8 @@ export function Sidebar() {
       </nav>
 
       <div className="flex-shrink-0 px-3 py-3 border-t border-[var(--border-subtle)] space-y-1">
-        <ProviderChip />
+        {/* Provider badge lives in the workspace action bar only — it was
+            duplicated here and removed on founder feedback. */}
         <div className="flex items-center justify-end gap-1 px-2 pt-1">
           <button
             onClick={toggleDarkMode}
