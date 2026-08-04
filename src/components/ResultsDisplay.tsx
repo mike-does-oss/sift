@@ -2,11 +2,18 @@
 
 import { motion } from "framer-motion";
 import { Check, Copy, Download, AlertCircle, Loader2, RotateCcw, Crosshair } from "lucide-react";
-import { useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ExtractionField, ExtractionData, ExtractionResult } from "@/types";
 import { toCsv, downloadText } from "@/lib/export";
 import { computeMatchRanges, type Quotes } from "@/lib/highlight";
+import { fieldColorVars } from "@/lib/fieldColors";
+import { prefersReducedMotion } from "@/lib/motion";
 import { SaveToDatasetPanel } from "./SaveToDatasetPanel";
+
+export interface ResultsDisplayHandle {
+  /** Reverse of DocumentView's scrollToMark — scrolls the matching cell into view and briefly flashes it. Called when a document mark is clicked. No-op if the field/row isn't currently rendered (e.g. a stale row after edits). */
+  flashCell: (fieldName: string, rowIndex: number) => void;
+}
 
 type FieldValue = string | number | boolean | string[] | null;
 
@@ -27,6 +34,10 @@ interface ResultsDisplayProps {
   extractedText?: string;
   /** Per-field/row source quotes from a grounded extraction — undefined when the engine/response didn't ground. */
   quotes?: Quotes;
+  /** The field currently hovered in either pane (lifted to DashboardPage). `null` when nothing is hovered — drives the column tint below. */
+  hoveredField?: string | null;
+  /** Reports hover in/out of a results cell, by field name (`null` on leave) — the other half of the two-way link with DocumentView's marks. Only called while highlighting is live (see `highlightsLive` below); a plain table with no document pane has nothing to link to. */
+  onHoverField?: (field: string | null) => void;
 }
 
 function valuesEqual(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
@@ -208,16 +219,18 @@ function ExportBar({
   );
 }
 
-export function ResultsDisplay({
-  results,
-  fields,
-  isLoading,
-  error,
-  onJumpToValue,
-  extractedText,
-  quotes,
-}: ResultsDisplayProps) {
+export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayProps>(function ResultsDisplay(
+  { results, fields, isLoading, error, onJumpToValue, extractedText, quotes, hoveredField = null, onHoverField },
+  ref
+) {
   const [copied, setCopied] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  // { field, row, token } identifies the currently-flashing cell; `token`
+  // (bumped on every flashCell call) forces the flash overlay to remount —
+  // and so restart its animation — even when the same cell is clicked twice
+  // in a row, when the field/row string key alone wouldn't change.
+  const [flashTarget, setFlashTarget] = useState<{ field: string; row: number; token: number } | null>(null);
+  const flashTokenRef = useRef(0);
   // Working copy the user edits. Immutable updates only, so sharing object
   // identity with `results` at rest is safe. Resyncs whenever a *new*
   // extraction replaces `results` (reference change) — not on unrelated
@@ -230,9 +243,41 @@ export function ResultsDisplay({
     setEdited(results);
   }
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      flashCell(fieldName: string, rowIndex: number) {
+        const container = tableContainerRef.current;
+        let el: HTMLElement | null = null;
+        try {
+          el =
+            container?.querySelector<HTMLElement>(
+              `td[data-field="${CSS.escape(fieldName)}"][data-row="${rowIndex}"]`
+            ) ?? null;
+        } catch {
+          el = null;
+        }
+        el?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+        flashTokenRef.current += 1;
+        setFlashTarget({ field: fieldName, row: rowIndex, token: flashTokenRef.current });
+        // Clear on a timer (rather than relying on onAnimationEnd) so the
+        // overlay unmounts even under prefers-reduced-motion, where the CSS
+        // animation is disabled and no animation-end event ever fires.
+        setTimeout(() => setFlashTarget((prev) => (prev?.token === flashTokenRef.current ? null : prev)), 950);
+      },
+    }),
+    []
+  );
+
   const isArray = Array.isArray(results);
   const resultsArray: ExtractionResult[] = isArray ? results : results ? [results] : [];
   const editedArray: ExtractionResult[] = Array.isArray(edited) ? edited : edited ? [edited] : [];
+
+  // Colors/swatches/hover-linking only make sense once there's a document
+  // pane with live marks to link to — same availability rule `onJumpToValue`
+  // already encodes (undefined for images / no extracted text). A plain
+  // table with no document pane renders exactly as it did before this task.
+  const highlightsLive = Boolean(onJumpToValue);
 
   // "Not found in source" hint (grounded extraction, T2): keyed off the
   // original extracted values/quotes, not the edited working copy — the
@@ -380,7 +425,7 @@ export function ResultsDisplay({
         <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" ref={tableContainerRef}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-inset)]">
@@ -389,11 +434,21 @@ export function ResultsDisplay({
                   #
                 </th>
               )}
-              {fields.map((field) => (
+              {fields.map((field, fieldIndex) => (
                 <th key={field.id} className="px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
                   {/* Type sub-label rides inline after the name on one line
                       (was a second stacked line) — reclaims header height for
-                      the "instrument" density this table targets (§13). */}
+                      the "instrument" density this table targets (§13). Color
+                      swatch (LangExtract-style field↔mark identity) only
+                      appears once there are live marks to identify — see
+                      `highlightsLive`. */}
+                  {highlightsLive && (
+                    <span
+                      aria-hidden="true"
+                      className="field-swatch inline-block w-2 h-2 rounded-[2px] mr-1.5 align-middle"
+                      style={fieldColorVars(fieldIndex) as CSSProperties}
+                    />
+                  )}
                   <span className="data text-[var(--text-secondary)]">{field.name}</span>
                   <span className="text-[var(--text-tertiary)]/70"> · {field.type}</span>
                 </th>
@@ -409,7 +464,7 @@ export function ResultsDisplay({
                 {showIndexColumn && (
                   <td className="px-2 py-1 text-[13px] text-[var(--text-tertiary)] tabular-nums align-top">{rowIndex + 1}</td>
                 )}
-                {fields.map((field) => {
+                {fields.map((field, fieldIndex) => {
                   const original = resultsArray[rowIndex]?.[field.name] ?? null;
                   const current = row[field.name] ?? null;
                   const isEdited = !valuesEqual(current, original);
@@ -420,12 +475,33 @@ export function ResultsDisplay({
                   // the source the way anchored cells can).
                   const unanchored =
                     anchoredMap !== null && original !== null && anchoredMap.get(`${rowIndex}:${field.name}`) === false;
+                  // Column tint (two-way hover linking, LangExtract-style):
+                  // this cell's field is the one currently hovered — either
+                  // a mark in the document or another cell in this same
+                  // column — so give it the field's own tinted background.
+                  // Only lit up while highlighting is actually live.
+                  const isHoveredColumn = highlightsLive && hoveredField === field.name;
+                  const isFlashing = flashTarget?.field === field.name && flashTarget.row === rowIndex;
                   return (
                     <td
                       key={field.id}
-                      className="relative group/cell px-2 py-1 min-w-[9rem] align-top"
+                      data-field={field.name}
+                      data-row={rowIndex}
+                      style={highlightsLive ? (fieldColorVars(fieldIndex) as CSSProperties) : undefined}
+                      onMouseEnter={() => {
+                        if (highlightsLive) onHoverField?.(field.name);
+                      }}
+                      onMouseLeave={() => {
+                        if (highlightsLive) onHoverField?.(null);
+                      }}
+                      className={`relative group/cell px-2 py-1 min-w-[9rem] align-top transition-colors ${
+                        isHoveredColumn ? "field-tint" : ""
+                      }`}
                       title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
                     >
+                      {isFlashing && flashTarget && (
+                        <span key={flashTarget.token} aria-hidden="true" className="cell-flash-overlay" />
+                      )}
                       <div
                         // Reserved clearance must be ≥ the overlay's actual
                         // footprint in the persistent (edited, unfocused)
@@ -507,4 +583,4 @@ export function ResultsDisplay({
       </details>
     </motion.div>
   );
-}
+});

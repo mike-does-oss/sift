@@ -351,30 +351,68 @@ html.dark .grain-overlay::before {
 
 /*
  * §13 signature: extracted values anchored to where they appear in the
- * source text — mono chips tinted with --accent-tint, small radius. Task 5
- * (DocumentView's "Extracted text" view) renders these as <mark> elements.
+ * source text — mono chips tinted per-field (task: per-field color-coded
+ * highlights), small radius. DocumentView's "Extracted text" view renders
+ * these as <mark> elements; ResultsDisplay renders the matching field's
+ * column with the same hue (`--mark-bg-*`/`--mark-text-*`, both set inline
+ * per element by `fieldColorVars()` — see src/lib/fieldColors.ts — so plain
+ * CSS below just picks the light/dark variant, no JS theme sniffing). The
+ * `var(--accent-tint, ...)`/`var(--text-primary, ...)` fallbacks only matter
+ * for a hypothetical mark with no color vars set; every mark DocumentView
+ * renders sets them, so in practice the field color always wins.
  */
 .sift-mark {
-  background: var(--accent-tint);
-  color: var(--text-primary);
+  background: var(--mark-bg-light, var(--accent-tint));
+  color: var(--mark-text-light, var(--text-primary));
   font-family: var(--font-mono);
   border-radius: 3px;
   padding: 0 2px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  transition: box-shadow 0.15s ease;
+}
+
+html.dark .sift-mark {
+  background: var(--mark-bg-dark, var(--accent-tint));
+  color: var(--mark-text-dark, var(--text-primary));
+}
+
+/* Hovering the matching results-table cell rings every mark for that field
+   (the document-side half of the two-way hover link) — `currentColor` is
+   the mark's own (per-field) text color, so the ring always matches. */
+.sift-mark--linked {
+  box-shadow: 0 0 0 2px currentColor;
 }
 
 /* Clicking a result row flashes its mark (restarted via classList on every
    click, see DocumentView.scrollToMark). Reduced-motion users still get the
-   scroll-into-view jump; the animation itself is dropped below. */
+   scroll-into-view jump; the animation itself is dropped below. Settles back
+   to the mark's own field color (light/dark) rather than the old flat
+   --accent-tint, so a colored mark doesn't pop to the wrong hue once the
+   flash ends. */
 @keyframes sift-mark-flash {
   0% {
     background: var(--accent);
     color: var(--btn-text);
   }
   100% {
-    background: var(--accent-tint);
-    color: var(--text-primary);
+    background: var(--mark-bg-light, var(--accent-tint));
+    color: var(--mark-text-light, var(--text-primary));
+  }
+}
+
+html.dark .sift-mark.flash {
+  animation-name: sift-mark-flash-dark;
+}
+
+@keyframes sift-mark-flash-dark {
+  0% {
+    background: var(--accent);
+    color: var(--btn-text);
+  }
+  100% {
+    background: var(--mark-bg-dark, var(--accent-tint));
+    color: var(--mark-text-dark, var(--text-primary));
   }
 }
 
@@ -385,5 +423,60 @@ html.dark .grain-overlay::before {
 @media (prefers-reduced-motion: reduce) {
   .sift-mark.flash {
     animation: none;
+  }
+}
+
+/*
+ * ResultsDisplay half of the per-field color-coding: a small swatch before
+ * each column's name (matches that field's mark color) and a subtle
+ * bg/ring tint on the column's cells while its field is hovered in either
+ * pane. Both read the same `--mark-bg-*`/`--mark-text-*` vars `fieldColorVars()`
+ * sets inline on the <th>/<td> — same source of truth as .sift-mark above.
+ */
+.field-swatch {
+  background: var(--mark-bg-light);
+}
+
+html.dark .field-swatch {
+  background: var(--mark-bg-dark);
+}
+
+.field-tint {
+  background: color-mix(in srgb, var(--mark-bg-light) 45%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark-text-light) 35%, transparent);
+}
+
+html.dark .field-tint {
+  background: color-mix(in srgb, var(--mark-bg-dark) 45%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark-text-dark) 35%, transparent);
+}
+
+/* Reverse-direction flash (ResultsDisplay.flashCell): clicking a document
+   mark scrolls to and briefly flashes its results cell. A pulsing overlay
+   rather than a background-color keyframe (like .sift-mark.flash) because a
+   cell's resting background is the row's own hover/tint state, not a fixed
+   color to animate back to. */
+@keyframes sift-cell-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.cell-flash-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 4px;
+  background: var(--accent);
+  animation: sift-cell-flash 900ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-flash-overlay {
+    animation: none;
+    opacity: 0;
   }
 }

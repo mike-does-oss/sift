@@ -7,13 +7,17 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { FileText, Image as ImageIcon, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 import { PDFPreview } from "./PDFPreview";
-import type { ExtractionData } from "@/types";
+import type { ExtractionData, ExtractionField } from "@/types";
 import { computeMatchRanges, type MatchRange, type Quotes } from "@/lib/highlight";
+import { fieldColorVars } from "@/lib/fieldColors";
+import { prefersReducedMotion } from "@/lib/motion";
 
 export interface DocumentViewHandle {
   /** Scrolls the first matching `<mark>` for this field/row into view and flashes it (playbook §13 signature). No-op if the value wasn't anchored (never appeared verbatim in the text). */
@@ -30,6 +34,21 @@ interface DocumentViewProps {
   extractedText?: string;
   /** Per-field/row source quotes from a grounded extraction — undefined when the engine/response didn't ground. Quote matches take precedence over value matching (see `computeMatchRanges`). */
   quotes?: Quotes;
+  /**
+   * Ordered field list — same array (same filter, same order) ResultsDisplay
+   * renders its columns from, so a mark's color-by-index always agrees with
+   * its column's swatch. Only used to look up each mark's palette index by
+   * field name; an unknown field (shouldn't happen — marks only come from
+   * `results`, which is produced against these same fields) falls back to
+   * index 0 rather than throwing.
+   */
+  fields: ExtractionField[];
+  /** The field currently hovered in either pane (lifted to DashboardPage) — lets a mark whose field is hovered from the *results table* pick up the same "linked" emphasis a directly-hovered mark gets. `null` when nothing is hovered. */
+  hoveredField: string | null;
+  /** Reports document-side hover in/out of a mark, by field name (`null` on leave) — drives ResultsDisplay's column tint the other direction. */
+  onHoverField: (field: string | null) => void;
+  /** Clicking a mark — reverse of ResultsDisplay's crosshair jump: tells the parent to flash+scroll the matching results cell into view. */
+  onMarkClick: (field: string, row: number) => void;
   /**
    * Collapsed rail state — lives in the parent (DashboardPage) because it
    * also drives the two-pane width split, not just this component's own
@@ -64,13 +83,34 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function renderHighlightedText(text: string, ranges: MatchRange[]): ReactNode[] {
+/**
+ * Renders each anchored range as a `<mark>` tinted with its field's color
+ * (§13 signature, now per-field — see `fieldColors.ts`). `fieldIndex` maps
+ * field name → position in the shared `fields` order so the hue agrees with
+ * ResultsDisplay's column for the same field. `hoveredField` (set from
+ * either pane) gets a "linked" emphasis so hovering a results cell lights up
+ * every mark for that field, not just the one under the cursor.
+ */
+function renderHighlightedText(
+  text: string,
+  ranges: MatchRange[],
+  fieldIndex: Map<string, number>,
+  hoveredField: string | null
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   let cursor = 0;
   ranges.forEach((r, i) => {
     if (r.start > cursor) nodes.push(text.slice(cursor, r.start));
+    const vars = fieldColorVars(fieldIndex.get(r.field) ?? 0);
+    const linked = hoveredField !== null && hoveredField === r.field;
     nodes.push(
-      <mark key={`mark-${i}`} className="sift-mark" data-field={r.field} data-row={r.row}>
+      <mark
+        key={`mark-${i}`}
+        className={`sift-mark${linked ? " sift-mark--linked" : ""}`}
+        style={vars as CSSProperties}
+        data-field={r.field}
+        data-row={r.row}
+      >
         {text.slice(r.start, r.end)}
       </mark>
     );
@@ -78,10 +118,6 @@ function renderHighlightedText(text: string, ranges: MatchRange[]): ReactNode[] 
   });
   if (cursor < text.length) nodes.push(text.slice(cursor));
   return nodes;
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 }
 
 /**
@@ -92,7 +128,20 @@ function prefersReducedMotion(): boolean {
  * verbatim-matching result value with a `<mark>` (the product's signature).
  */
 export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(function DocumentView(
-  { file, onFileSelect, onClear, results, extractedText, quotes, collapsed, onCollapsedChange },
+  {
+    file,
+    onFileSelect,
+    onClear,
+    results,
+    extractedText,
+    quotes,
+    fields,
+    hoveredField,
+    onHoverField,
+    onMarkClick,
+    collapsed,
+    onCollapsedChange,
+  },
   ref
 ) {
   const [view, setView] = useState<"document" | "extracted">("document");
@@ -136,10 +185,31 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
     () => computeMatchRanges(extractedText ?? "", results, quotes),
     [extractedText, results, quotes]
   );
+  // Same order ResultsDisplay derives its column index from (see page.tsx —
+  // both panes are handed the identical filtered `fields` array), so a
+  // field's hue always agrees between its marks here and its column there.
+  const fieldIndex = useMemo(() => new Map(fields.map((f, i) => [f.name, i] as const)), [fields]);
   const segments = useMemo(
-    () => renderHighlightedText(extractedText ?? "", ranges),
-    [extractedText, ranges]
+    () => renderHighlightedText(extractedText ?? "", ranges, fieldIndex, hoveredField),
+    [extractedText, ranges, fieldIndex, hoveredField]
   );
+
+  // Event delegation on the extracted-text container rather than a handler
+  // per `<mark>` — keeps `segments`'s memoization independent of the hover/
+  // click callbacks' identity (which page.tsx doesn't memoize) and scales to
+  // documents with many marks without attaching 3 listeners each.
+  const handleMarkMouseOver = (e: MouseEvent<HTMLElement>) => {
+    const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-field]");
+    if (mark?.dataset.field) onHoverField(mark.dataset.field);
+  };
+  const handleMarkMouseOut = (e: MouseEvent<HTMLElement>) => {
+    const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-field]");
+    if (mark) onHoverField(null);
+  };
+  const handleMarkClick = (e: MouseEvent<HTMLElement>) => {
+    const mark = (e.target as HTMLElement).closest<HTMLElement>("mark[data-field]");
+    if (mark?.dataset.field) onMarkClick(mark.dataset.field, Number(mark.dataset.row ?? "0"));
+  };
 
   useImperativeHandle(
     ref,
@@ -286,7 +356,13 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
 
         <div className="flex-1 overflow-hidden">
           {view === "extracted" && extractedText ? (
-            <div ref={extractedContainerRef} className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
+            <div
+              ref={extractedContainerRef}
+              onMouseOver={handleMarkMouseOver}
+              onMouseOut={handleMarkMouseOut}
+              onClick={handleMarkClick}
+              className="h-full overflow-auto p-6 bg-[var(--surface-inset)]"
+            >
               <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
                 {segments}
               </pre>

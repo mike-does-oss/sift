@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Sparkles, Table2, FolderOpen, Save, Loader2, Anchor } from "lucide-react";
-import { FieldConfiguration, ResultsDisplay, DocumentView, type DocumentViewHandle } from "@/components";
+import {
+  FieldConfiguration,
+  ResultsDisplay,
+  DocumentView,
+  type DocumentViewHandle,
+  type ResultsDisplayHandle,
+} from "@/components";
 import type { ExtractionField, ExtractionData, TemplateExample } from "@/types";
 import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
@@ -125,6 +131,12 @@ export default function DashboardPage() {
   } | null>(null);
 
   const documentViewRef = useRef<DocumentViewHandle>(null);
+  const resultsDisplayRef = useRef<ResultsDisplayHandle>(null);
+  // Two-way hover linking (per-field color-coded highlights task): which
+  // field is currently hovered, in either pane — lifted here (not local to
+  // either component) because a hover in DocumentView needs to tint
+  // ResultsDisplay's column and vice versa.
+  const [hoveredField, setHoveredField] = useState<string | null>(null);
 
   // Per-request provider/model picker (playbook §13 action bar).
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -447,6 +459,16 @@ export default function DashboardPage() {
     documentViewRef.current?.scrollToMark(fieldName, rowIndex);
   };
 
+  /** Reverse of handleJumpToValue — a document mark was clicked, so flash+scroll the matching results cell. */
+  const handleMarkClick = (fieldName: string, rowIndex: number) => {
+    resultsDisplayRef.current?.flashCell(fieldName, rowIndex);
+  };
+
+  // Same filtered, ordered field list handed to both panes so a field's
+  // color-coded mark and its results column always agree on which index
+  // (hue) it gets — see fieldColors.ts.
+  const activeFields = useMemo(() => fields.filter((f) => f.name.trim() !== ""), [fields]);
+
   const canExtract =
     Boolean(selectedFile) &&
     fields.some((f) => f.name.trim() !== "") &&
@@ -596,6 +618,10 @@ export default function DashboardPage() {
               results={results}
               extractedText={extractedText}
               quotes={quotes}
+              fields={activeFields}
+              hoveredField={hoveredField}
+              onHoverField={setHoveredField}
+              onMarkClick={handleMarkClick}
               collapsed={docCollapsed}
               onCollapsedChange={handleSetDocCollapsed}
             />
@@ -809,13 +835,16 @@ export default function DashboardPage() {
                   )}
 
                   <ResultsDisplay
+                    ref={resultsDisplayRef}
                     results={results}
-                    fields={fields.filter((f) => f.name.trim() !== "")}
+                    fields={activeFields}
                     isLoading={isLoading}
                     error={error}
                     onJumpToValue={extractedText ? handleJumpToValue : undefined}
                     extractedText={extractedText}
                     quotes={quotes}
+                    hoveredField={hoveredField}
+                    onHoverField={setHoveredField}
                   />
                 </motion.section>
               )}
