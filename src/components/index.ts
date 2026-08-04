@@ -9,3 +9,5 @@ export { CompletionPopup } from "./CompletionPopup";
 export type { CompletionPopupInfo } from "./CompletionPopup";
 export { SaveToDatasetPanel } from "./SaveToDatasetPanel";
 export { PaginationBar } from "./PaginationBar";
+export { OutputSettingsFields } from "./OutputSettingsFields";
+export type { OutputSettingsValue } from "./OutputSettingsFields";

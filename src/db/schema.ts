@@ -25,6 +25,15 @@ export const documents = sqliteTable("documents", {
   createdAt: createdAt(),
 });
 
+// §output-dest: `outputDir`/`outputFormat`/`keepResults` are shared by
+// `batches` and `schedules` — when `outputDir` is set, the worker writes
+// completed results to that folder (see `src/lib/output-writer.ts`) once the
+// batch/run finishes, and `keepResults = false` nulls the DB copy afterward
+// (status/error columns are always kept).
+const outputDir = () => text("output_dir");
+const outputFormat = () => text("output_format", { enum: ["csv", "json", "both"] }).notNull().default("csv");
+const keepResults = () => integer("keep_results", { mode: "boolean" }).notNull().default(true);
+
 export const batches = sqliteTable("batches", {
   id: id(),
   name: text("name").notNull(),
@@ -32,6 +41,9 @@ export const batches = sqliteTable("batches", {
   totalCount: integer("total_count").notNull(),
   completedCount: integer("completed_count").notNull().default(0),
   failedCount: integer("failed_count").notNull().default(0),
+  outputDir: outputDir(),
+  outputFormat: outputFormat(),
+  keepResults: keepResults(),
   createdAt: createdAt(),
 });
 
@@ -46,6 +58,10 @@ export const jobs = sqliteTable("jobs", {
   source: text("source", { enum: ["single", "batch", "schedule"] }).notNull(),
   batchId: text("batch_id"),
   scheduleId: text("schedule_id"),
+  // One uuid per `enqueueInbox` invocation (schedule jobs only — batch jobs
+  // group by `batchId` instead) so a single scheduled run's jobs can be
+  // gathered together once they've all reached a terminal state.
+  runId: text("run_id"),
   provider: text("provider"),
   model: text("model"),
   createdAt: createdAt(),
@@ -62,6 +78,9 @@ export const schedules = sqliteTable("schedules", {
   dayOfWeek: integer("day_of_week"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   lastRunAt: integer("last_run_at", { mode: "timestamp_ms" }),
+  outputDir: outputDir(),
+  outputFormat: outputFormat(),
+  keepResults: keepResults(),
   createdAt: createdAt(),
 });
 

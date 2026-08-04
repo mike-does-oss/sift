@@ -5,6 +5,7 @@ import { UPLOAD_ACCEPT_ATTR, UPLOAD_FORMATS_LABEL, filterSupportedFiles } from "
 import Link from "next/link";
 import { Layers, UploadCloud, X, FileText } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
+import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
 import type { TemplateExample } from "@/types";
 
 interface Template {
@@ -23,6 +24,7 @@ interface Batch {
   completedCount: number;
   failedCount: number;
   createdAt: string;
+  outputDir: string | null;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -58,6 +60,11 @@ export default function BatchesPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [output, setOutput] = useState<OutputSettingsValue>({
+    outputDir: "",
+    outputFormat: "csv",
+    keepResults: true,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +135,9 @@ export default function BatchesPage() {
             extractMultiple: selectedTemplate.extractMultiple,
             examples: selectedTemplate.examples,
           },
+          outputDir: output.outputDir.trim() || undefined,
+          outputFormat: output.outputFormat,
+          keepResults: output.keepResults,
         }),
       });
       const data = await response.json();
@@ -229,6 +239,8 @@ export default function BatchesPage() {
             to run a batch.
           </p>
         )}
+
+        <OutputSettingsFields value={output} onChange={setOutput} />
 
         {error && <p className="text-sm text-[var(--error)]">{error}</p>}
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Trash2 } from "lucide-react";
+import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
 
 interface Template {
   id: string;
@@ -18,6 +19,7 @@ interface Schedule {
   dayOfWeek: number | null;
   active: boolean;
   lastRunAt: string | null;
+  outputDir: string | null;
 }
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -38,6 +40,11 @@ export default function SchedulesPage() {
   const [cadence, setCadence] = useState<"daily" | "weekly">("daily");
   const [hourUtc, setHourUtc] = useState(9);
   const [dayOfWeek, setDayOfWeek] = useState(1);
+  const [output, setOutput] = useState<OutputSettingsValue>({
+    outputDir: "",
+    outputFormat: "csv",
+    keepResults: true,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -86,6 +93,9 @@ export default function SchedulesPage() {
           cadence,
           hourUtc,
           dayOfWeek: cadence === "weekly" ? dayOfWeek : undefined,
+          outputDir: output.outputDir.trim() || undefined,
+          outputFormat: output.outputFormat,
+          keepResults: output.keepResults,
         }),
       });
       const data = await response.json();
@@ -96,6 +106,7 @@ export default function SchedulesPage() {
       setSchedules((prev) => [data.schedule, ...prev]);
       setName("");
       setTemplateId("");
+      setOutput({ outputDir: "", outputFormat: "csv", keepResults: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -218,6 +229,8 @@ export default function SchedulesPage() {
             </select>
           )}
         </div>
+
+        <OutputSettingsFields value={output} onChange={setOutput} />
 
         {error && <p className="text-sm text-[var(--error)]">{error}</p>}
 

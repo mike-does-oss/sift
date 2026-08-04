@@ -2,9 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules, templates } from "@/db/schema";
+import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
-  let body: { name?: string; templateId?: string; cadence?: string; hourUtc?: number; dayOfWeek?: number };
+  let body: {
+    name?: string;
+    templateId?: string;
+    cadence?: string;
+    hourUtc?: number;
+    dayOfWeek?: number;
+    outputDir?: unknown;
+    outputFormat?: unknown;
+    keepResults?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -24,9 +34,26 @@ export async function POST(req: NextRequest) {
   const template = await db.query.templates.findFirst({ where: eq(templates.id, templateId) });
   if (!template) return NextResponse.json({ error: "Template not found" }, { status: 400 });
 
+  // §output-dest: same output-folder validation the batches route uses.
+  const outputDirResult = parseOutputDirInput(body.outputDir);
+  if ("error" in outputDirResult) {
+    return NextResponse.json({ error: outputDirResult.error }, { status: 400 });
+  }
+  const outputFormatResult = parseOutputFormatInput(body.outputFormat);
+  if ("error" in outputFormatResult) {
+    return NextResponse.json({ error: outputFormatResult.error }, { status: 400 });
+  }
+  const keepResultsResult = parseKeepResultsInput(body.keepResults);
+  if ("error" in keepResultsResult) {
+    return NextResponse.json({ error: keepResultsResult.error }, { status: 400 });
+  }
+
   const [schedule] = await db.insert(schedules).values({
     name, templateId, cadence: cadence as "daily" | "weekly", hourUtc,
     dayOfWeek: cadence === "weekly" ? (dayOfWeek ?? null) : null,
+    outputDir: outputDirResult.value,
+    outputFormat: outputFormatResult.value,
+    keepResults: keepResultsResult.value,
   }).returning();
   return NextResponse.json({ schedule });
 }

@@ -4,9 +4,17 @@ import { db } from "@/db";
 import { batches, documents, jobs } from "@/db/schema";
 import { processPendingJobs } from "@/lib/jobs";
 import { validateExamples } from "@/lib/template-examples";
+import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
-  let body: { name?: string; documentIds?: string[]; template?: { fields?: unknown[]; examples?: unknown } };
+  let body: {
+    name?: string;
+    documentIds?: string[];
+    template?: { fields?: unknown[]; examples?: unknown };
+    outputDir?: unknown;
+    outputFormat?: unknown;
+    keepResults?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -32,6 +40,21 @@ export async function POST(req: NextRequest) {
   }
   const templateSnapshot = { ...template, examples: examplesResult.examples };
 
+  // §output-dest: output-folder settings — absent/empty outputDir is fine
+  // (no auto-write), anything else must resolve to an absolute path.
+  const outputDirResult = parseOutputDirInput(body.outputDir);
+  if ("error" in outputDirResult) {
+    return NextResponse.json({ error: outputDirResult.error }, { status: 400 });
+  }
+  const outputFormatResult = parseOutputFormatInput(body.outputFormat);
+  if ("error" in outputFormatResult) {
+    return NextResponse.json({ error: outputFormatResult.error }, { status: 400 });
+  }
+  const keepResultsResult = parseKeepResultsInput(body.keepResults);
+  if ("error" in keepResultsResult) {
+    return NextResponse.json({ error: keepResultsResult.error }, { status: 400 });
+  }
+
   const docs = await db.query.documents.findMany({ where: inArray(documents.id, documentIds) });
   if (docs.length !== documentIds.length) {
     return NextResponse.json({ error: "Some documents were not found" }, { status: 400 });
@@ -41,6 +64,9 @@ export async function POST(req: NextRequest) {
     name: name.trim(),
     templateSnapshot,
     totalCount: docs.length,
+    outputDir: outputDirResult.value,
+    outputFormat: outputFormatResult.value,
+    keepResults: keepResultsResult.value,
   }).returning();
 
   await db.insert(jobs).values(docs.map((d) => ({

@@ -29,6 +29,7 @@ interface Batch {
   createdAt: string;
   /** `{ fields, prompt, extractMultiple }` at the time the batch was created — see `templates`/`jobs` in the schema comment. Loosely typed here since only `fields[].name` is used (see `fieldKeysFromSnapshot`). */
   templateSnapshot: unknown;
+  outputDir: string | null;
 }
 
 /** Same key derivation `jobsToRows` implicitly relies on (result object keys == template field names) — read directly from the batch's `templateSnapshot.fields`, defensively, since it's untyped JSON from the DB. */
@@ -192,6 +193,11 @@ export default function BatchDetailPage() {
             {processed} / {batch.totalCount} processed
             {batch.failedCount > 0 && ` · ${batch.failedCount} failed`}
           </p>
+          {batch.outputDir && (
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              Writing results to <span className="font-mono">{batch.outputDir}</span>
+            </p>
+          )}
         </div>
         {isDone && (
           <div className="flex items-center gap-2 flex-shrink-0">

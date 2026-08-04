@@ -1,10 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, sqlite } from "@/db";
-import { jobs, documents, schedules, templates } from "@/db/schema";
+import { jobs, documents, schedules, templates, batches } from "@/db/schema";
 import { runExtraction } from "@/lib/extraction";
 import { readDocument } from "@/lib/storage";
 import { parseDocument } from "@/lib/documents";
 import { isScheduleDue } from "@/lib/schedule";
+import { jobsToRows } from "@/lib/export";
+import { writeOutputs } from "@/lib/output-writer";
 import type { ExtractionField, TemplateExample } from "@/types";
 
 const MAX_ATTEMPTS = 3;
@@ -84,6 +86,7 @@ async function runOneInner(jobId: string): Promise<void> {
       provider: result.provider, model: result.model,
     }).where(eq(jobs.id, jobId));
     if (job.batchId) sqlite.prepare(`UPDATE batches SET completed_count = completed_count + 1 WHERE id = ?`).run(job.batchId);
+    await writeOutputsIfDone(job);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     const terminal = (job.attempts >= MAX_ATTEMPTS) || message.includes("declined to process");
@@ -93,9 +96,92 @@ async function runOneInner(jobId: string): Promise<void> {
         provider: (err as { provider?: string }).provider ?? null, model: (err as { model?: string }).model ?? null,
       }).where(eq(jobs.id, jobId));
       if (terminal && job.batchId) sqlite.prepare(`UPDATE batches SET failed_count = failed_count + 1 WHERE id = ?`).run(job.batchId);
+      if (terminal) await writeOutputsIfDone(job);
     } catch (recordErr) {
       console.error("Failed to record job failure:", recordErr);
     }
+  }
+}
+
+/** Extraction field names in template order, from a `Snapshot`'s `fields` — drives output column order. */
+function fieldNames(snapshot: Snapshot): string[] {
+  return (snapshot.fields ?? []).map((f) => f.name).filter((n): n is string => typeof n === "string" && n.length > 0);
+}
+
+/**
+ * Called after a job reaches a terminal state (completed, or failed with no
+ * retries left). If the job belongs to a batch whose every job is now
+ * terminal, and/or a schedule run (`runId`) whose every job is now terminal,
+ * writes that batch's/run's completed results to its configured output
+ * folder and — if `keepResults` is off — nulls the `result` column for its
+ * completed jobs (status/error columns are untouched either way).
+ *
+ * Best-effort: any failure here is logged and swallowed. An output-write
+ * problem must never fail, retry, or otherwise affect a job.
+ */
+async function writeOutputsIfDone(job: { batchId: string | null; runId: string | null; scheduleId: string | null }): Promise<void> {
+  if (job.batchId) {
+    try {
+      await maybeWriteBatchOutputs(job.batchId);
+    } catch (err) {
+      console.error("Failed to write batch outputs:", job.batchId, err);
+    }
+  }
+  if (job.runId) {
+    try {
+      await maybeWriteRunOutputs(job.runId, job.scheduleId);
+    } catch (err) {
+      console.error("Failed to write schedule run outputs:", job.runId, err);
+    }
+  }
+}
+
+async function maybeWriteBatchOutputs(batchId: string): Promise<void> {
+  const batch = await db.query.batches.findFirst({ where: eq(batches.id, batchId) });
+  if (!batch || !batch.outputDir) return;
+  if (batch.completedCount + batch.failedCount < batch.totalCount) return; // not done yet
+
+  const jobRows = await db
+    .select({ job: jobs, filename: documents.filename })
+    .from(jobs)
+    .leftJoin(documents, eq(jobs.documentId, documents.id))
+    .where(and(eq(jobs.batchId, batchId), eq(jobs.status, "completed")));
+
+  const rows = jobsToRows(jobRows.map((r) => ({ result: r.job.result, filename: r.filename })));
+  const fields = fieldNames(batch.templateSnapshot as Snapshot);
+  writeOutputs({ name: batch.name, rows, fields, dir: batch.outputDir, format: batch.outputFormat });
+
+  if (!batch.keepResults) {
+    sqlite.prepare(`UPDATE jobs SET result = NULL WHERE batch_id = ? AND status = 'completed'`).run(batchId);
+  }
+}
+
+async function maybeWriteRunOutputs(runId: string, scheduleId: string | null): Promise<void> {
+  if (!scheduleId) return;
+  const schedule = await db.query.schedules.findFirst({ where: eq(schedules.id, scheduleId) });
+  if (!schedule || !schedule.outputDir) return;
+
+  const counts = sqlite.prepare(`
+    SELECT
+      count(*) AS total,
+      sum(CASE WHEN status = 'completed' OR (status = 'failed' AND completed_at IS NOT NULL) THEN 1 ELSE 0 END) AS terminal
+    FROM jobs WHERE run_id = ?
+  `).get(runId) as { total: number; terminal: number };
+  if (counts.total === 0 || counts.terminal < counts.total) return; // not done yet
+
+  const jobRows = await db
+    .select({ job: jobs, filename: documents.filename })
+    .from(jobs)
+    .leftJoin(documents, eq(jobs.documentId, documents.id))
+    .where(and(eq(jobs.runId, runId), eq(jobs.status, "completed")));
+
+  const rows = jobsToRows(jobRows.map((r) => ({ result: r.job.result, filename: r.filename })));
+  const template = await db.query.templates.findFirst({ where: eq(templates.id, schedule.templateId) });
+  const fields = template ? (template.fields as ExtractionField[]).map((f) => f.name) : [];
+  writeOutputs({ name: schedule.name, rows, fields, dir: schedule.outputDir, format: schedule.outputFormat });
+
+  if (!schedule.keepResults) {
+    sqlite.prepare(`UPDATE jobs SET result = NULL WHERE run_id = ? AND status = 'completed'`).run(runId);
   }
 }
 
@@ -132,18 +218,19 @@ async function enqueueInbox(scheduleId: string): Promise<number> {
     examples: (template.examples as TemplateExample[] | null) ?? undefined,
   };
   // Atomic claim: transaction over sync driver
+  const runId = crypto.randomUUID();
   const tx = sqlite.transaction(() => {
     const inbox = sqlite.prepare(
       `SELECT id FROM documents WHERE schedule_id = ? AND processed_at IS NULL`
     ).all(schedule.id) as Array<{ id: string }>;
     const insert = sqlite.prepare(`
-      INSERT INTO jobs (id, document_id, template_snapshot, source, schedule_id, status, attempts, created_at)
-      VALUES (?, ?, ?, 'schedule', ?, 'pending', 0, ?)
+      INSERT INTO jobs (id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at)
+      VALUES (?, ?, ?, 'schedule', ?, ?, 'pending', 0, ?)
     `);
     const mark = sqlite.prepare(`UPDATE documents SET processed_at = ? WHERE id = ?`);
     const now = Date.now();
     for (const d of inbox) {
-      insert.run(crypto.randomUUID(), d.id, JSON.stringify(snapshot), schedule.id, now);
+      insert.run(crypto.randomUUID(), d.id, JSON.stringify(snapshot), schedule.id, runId, now);
       mark.run(now, d.id);
     }
     return inbox.length;

@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UPLOAD_ACCEPT_ATTR, filterSupportedFiles } from "@/lib/upload-accept";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Play } from "lucide-react";
+import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Play, Settings2 } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
+import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
 
 interface Schedule {
   id: string;
@@ -16,6 +17,9 @@ interface Schedule {
   dayOfWeek: number | null;
   active: boolean;
   lastRunAt: string | null;
+  outputDir: string | null;
+  outputFormat: "csv" | "json" | "both";
+  keepResults: boolean;
 }
 
 interface Job {
@@ -97,6 +101,14 @@ export default function ScheduleDetailPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
+  const [isEditingOutput, setIsEditingOutput] = useState(false);
+  const [outputDraft, setOutputDraft] = useState<OutputSettingsValue>({
+    outputDir: "",
+    outputFormat: "csv",
+    keepResults: true,
+  });
+  const [isSavingOutput, setIsSavingOutput] = useState(false);
+  const [outputSaveError, setOutputSaveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -179,6 +191,44 @@ export default function ScheduleDetailPage() {
     }
   };
 
+  const startEditingOutput = () => {
+    if (!schedule) return;
+    setOutputDraft({
+      outputDir: schedule.outputDir ?? "",
+      outputFormat: schedule.outputFormat,
+      keepResults: schedule.keepResults,
+    });
+    setOutputSaveError(null);
+    setIsEditingOutput(true);
+  };
+
+  const handleSaveOutput = async () => {
+    setIsSavingOutput(true);
+    setOutputSaveError(null);
+    try {
+      const response = await fetch(`/api/schedules/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outputDir: outputDraft.outputDir.trim(),
+          outputFormat: outputDraft.outputFormat,
+          keepResults: outputDraft.keepResults,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setOutputSaveError(data.error || "Couldn't save output settings.");
+        return;
+      }
+      setSchedule(data.schedule);
+      setIsEditingOutput(false);
+    } catch {
+      setOutputSaveError("Couldn't save output settings. Check your connection.");
+    } finally {
+      setIsSavingOutput(false);
+    }
+  };
+
   const downloadRunCsv = (run: { label: string; rows: JobRow[] }) => {
     const rows = jobsToRows(
       run.rows
@@ -242,6 +292,11 @@ export default function ScheduleDetailPage() {
             {describeCadence(schedule)} · {schedule.active ? "Active" : "Paused"}
             {schedule.lastRunAt && ` · Last ran ${new Date(schedule.lastRunAt).toLocaleString()}`}
           </p>
+          {schedule.outputDir && (
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              Writing results to <span className="font-mono">{schedule.outputDir}</span>
+            </p>
+          )}
         </div>
         <div className="flex-shrink-0 text-right">
           <button
@@ -259,6 +314,61 @@ export default function ScheduleDetailPage() {
         <p className="text-sm text-[var(--success)]">{runNotice}</p>
       )}
       {runError && <p className="text-sm text-[var(--error)]">{runError}</p>}
+
+      <section className="card-elevated rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+            Output
+          </h2>
+          {!isEditingOutput && (
+            <button
+              onClick={startEditingOutput}
+              className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
+        </div>
+
+        {isEditingOutput ? (
+          <div className="space-y-4">
+            <OutputSettingsFields value={outputDraft} onChange={setOutputDraft} />
+            {outputSaveError && <p className="text-sm text-[var(--error)]">{outputSaveError}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveOutput}
+                disabled={isSavingOutput}
+                className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+              >
+                {isSavingOutput ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditingOutput(false);
+                  setOutputSaveError(null);
+                }}
+                disabled={isSavingOutput}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : schedule.outputDir ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Results are written to <span className="font-mono text-[var(--text-tertiary)]">{schedule.outputDir}</span> as{" "}
+            {schedule.outputFormat === "both" ? "CSV and JSON" : schedule.outputFormat.toUpperCase()}.{" "}
+            {schedule.keepResults
+              ? "Results also stay in the app's database."
+              : "Results are cleared from History once the file is written."}
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--text-tertiary)]">
+            Not configured — results stay in the app&apos;s database only.
+          </p>
+        )}
+      </section>
 
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
