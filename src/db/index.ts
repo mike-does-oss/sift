@@ -10,6 +10,10 @@ mkdirSync(path.join(DATA_DIR, "files"), { recursive: true });
 
 export const sqlite = new Database(path.join(DATA_DIR, "sift.db"));
 sqlite.pragma("journal_mode = WAL");
+// Concurrent module loads (e.g. Next's parallel page-data build workers)
+// race to run migrate() on a fresh DB; without a busy timeout the loser
+// fails instantly with SQLITE_BUSY instead of waiting its turn.
+sqlite.pragma("busy_timeout = 5000");
 
 export const db = drizzle(sqlite, { schema });
 migrate(db, {
