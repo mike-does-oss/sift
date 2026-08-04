@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { UPLOAD_ACCEPT_ATTR, filterSupportedFiles } from "@/lib/upload-accept";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Play } from "lucide-react";
@@ -136,11 +137,11 @@ export default function ScheduleDetailPage() {
 
   const handleFilesSelected = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const pdfs = Array.from(fileList).filter((f) => f.type === "application/pdf");
+    const supported = filterSupportedFiles(fileList);
     setIsUploading(true);
     setUploadError(null);
     try {
-      for (const file of pdfs) {
+      for (const file of supported) {
         await uploadDocument(file, id);
       }
     } catch (err) {
@@ -266,14 +267,14 @@ export default function ScheduleDetailPage() {
         <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--border-default)] rounded-xl cursor-pointer hover:border-[var(--accent-muted)] hover:bg-[var(--surface-elevated)] transition-all">
           <input
             type="file"
-            accept=".pdf,application/pdf"
+            accept={UPLOAD_ACCEPT_ATTR}
             multiple
             onChange={(e) => handleFilesSelected(e.target.files)}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
           <UploadCloud className="w-6 h-6 text-[var(--text-tertiary)] mb-2" strokeWidth={1.5} />
           <p className="text-sm font-medium text-[var(--text-primary)]">
-            {isUploading ? "Uploading…" : "Drop PDFs here or browse files"}
+            {isUploading ? "Uploading…" : "Drop documents here or browse files"}
           </p>
           <p className="text-xs text-[var(--text-tertiary)] mt-1">
             Picked up on the next scheduled run, or click Run now above

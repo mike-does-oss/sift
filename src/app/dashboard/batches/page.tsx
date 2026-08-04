@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { UPLOAD_ACCEPT_ATTR, UPLOAD_FORMATS_LABEL, filterSupportedFiles } from "@/lib/upload-accept";
 import Link from "next/link";
 import { Layers, UploadCloud, X, FileText } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
@@ -95,8 +96,8 @@ export default function BatchesPage() {
 
   const handleFilesSelected = (fileList: FileList | null) => {
     if (!fileList) return;
-    const pdfs = Array.from(fileList).filter((f) => f.type === "application/pdf");
-    setFiles(pdfs);
+    const supported = filterSupportedFiles(fileList);
+    setFiles(supported);
   };
 
   const removeFile = (index: number) => {
@@ -163,16 +164,16 @@ export default function BatchesPage() {
         <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--border-default)] rounded-xl cursor-pointer hover:border-[var(--accent-muted)] hover:bg-[var(--surface-elevated)] transition-all">
           <input
             type="file"
-            accept=".pdf,application/pdf"
+            accept={UPLOAD_ACCEPT_ATTR}
             multiple
             onChange={(e) => handleFilesSelected(e.target.files)}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
           <UploadCloud className="w-6 h-6 text-[var(--text-tertiary)] mb-2" strokeWidth={1.5} />
           <p className="text-sm font-medium text-[var(--text-primary)]">
-            Drop PDFs here or browse files
+            Drop documents here or browse files
           </p>
-          <p className="text-xs text-[var(--text-tertiary)] mt-1">PDF only</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1">{UPLOAD_FORMATS_LABEL}</p>
         </label>
 
         {files.length > 0 && (

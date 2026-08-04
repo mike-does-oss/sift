@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { UPLOAD_ACCEPT_ATTR } from "@/lib/upload-accept";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, FileText, X, Check } from "lucide-react";
 
@@ -114,7 +115,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
           >
             <input
               type="file"
-              accept=".pdf,.docx,.pptx,.eml,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,message/rfc822,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp"
+              accept={UPLOAD_ACCEPT_ATTR}
               onChange={handleFileInput}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
