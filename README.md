@@ -36,7 +36,17 @@ Add your API key and model in Settings. Keys are stored in your local SQLite dat
 
 Point the OpenAI-compatible provider at a base URL — Groq, vLLM, LM Studio, or Ollama's own `/v1` endpoint all work. API key optional (many local servers don't need one).
 
-## Desktop app (build it yourself, for now)
+## Desktop app
+
+**One-command install (macOS, Apple Silicon):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mike-whypred/sift/main/install.sh | sh
+```
+
+Downloads the latest release to /Applications and launches it. The build is unsigned for now — the script clears the quarantine flag for you (you're choosing to trust an open-source build you can read right here). Or grab the `.dmg` from [Releases](https://github.com/mike-whypred/sift/releases) and right-click → Open on first launch.
+
+**Or build it yourself:**
 
 ```bash
 npm run desktop:build
