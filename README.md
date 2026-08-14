@@ -7,7 +7,7 @@ Open-source, self-hostable document extractor that runs fully local by default (
 ## Quick start
 
 ```bash
-git clone https://github.com/mike-whypred/sift && cd sift
+git clone https://github.com/mike-does-oss/sift && cd sift
 npm install
 npm run dev
 ```
@@ -41,10 +41,10 @@ Point the OpenAI-compatible provider at a base URL — Groq, vLLM, LM Studio, or
 **One-command install (macOS, Apple Silicon):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mike-whypred/sift/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mike-does-oss/sift/main/install.sh | sh
 ```
 
-Downloads the latest release to /Applications and launches it. The build is unsigned for now — the script clears the quarantine flag for you (you're choosing to trust an open-source build you can read right here). Or grab the `.dmg` from [Releases](https://github.com/mike-whypred/sift/releases) and right-click → Open on first launch.
+Downloads the latest release to /Applications and launches it. The build is unsigned for now — the script clears the quarantine flag for you (you're choosing to trust an open-source build you can read right here). Or grab the `.dmg` from [Releases](https://github.com/mike-does-oss/sift/releases) and right-click → Open on first launch.
 
 **Or build it yourself:**
 

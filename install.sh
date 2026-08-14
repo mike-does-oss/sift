@@ -1,10 +1,10 @@
 #!/bin/sh
 # Sift installer — macOS (Apple Silicon)
 # Downloads the latest release, installs to /Applications, and launches it.
-# Usage: curl -fsSL https://raw.githubusercontent.com/mike-whypred/sift/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/mike-does-oss/sift/main/install.sh | sh
 set -eu
 
-REPO="mike-whypred/sift"
+REPO="mike-does-oss/sift"
 APP_NAME="Sift.app"
 DEST="/Applications/$APP_NAME"
 
@@ -38,7 +38,7 @@ mv "$TMP/unpacked/$APP_NAME" "$DEST"
 
 # The build is unsigned; clearing the quarantine attribute skips the
 # Gatekeeper "unidentified developer" block. You are choosing to trust
-# this build — the source is fully open at https://github.com/mike-whypred/sift
+# this build — the source is fully open at https://github.com/mike-does-oss/sift
 say "Clearing quarantine flag (unsigned build)…"
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
