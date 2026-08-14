@@ -49,3 +49,7 @@ data/
 # electron desktop build
 /dist-electron/
 /dist-desktop/
+
+# internal founder docs — never publish
+docs/plans/
+docs/specs/
