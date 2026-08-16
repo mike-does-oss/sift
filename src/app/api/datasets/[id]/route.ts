@@ -31,10 +31,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  db.transaction((tx) => {
-    tx.delete(datasetRows).where(eq(datasetRows.datasetId, id)).run();
-    tx.delete(datasets).where(eq(datasets.id, id)).run();
-  });
+  // Non-atomic (no cross-dialect transactions): rows first, then the dataset.
+  // Worst case a failure in between leaves orphan rows for a dataset that
+  // survives — the user retries the delete.
+  await db.delete(datasetRows).where(eq(datasetRows.datasetId, id));
+  await db.delete(datasets).where(eq(datasets.id, id));
 
   return NextResponse.json({ ok: true });
 }

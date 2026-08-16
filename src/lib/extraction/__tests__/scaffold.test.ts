@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const getSettingsMock = vi.fn();
-vi.mock("@/lib/settings", () => ({ getSettings: () => getSettingsMock() }));
+vi.mock("@/lib/settings", () => ({ getSettings: async () => getSettingsMock() }));
 
 // Mirrors claude.test.ts's Anthropic SDK mock — scaffoldSchema makes its own
 // structured-output call for the anthropic provider (no shared low-level

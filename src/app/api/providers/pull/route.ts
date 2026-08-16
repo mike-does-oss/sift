@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  const settings = getSettings();
+  const settings = await getSettings();
   const result = await proxyOllamaPull(settings.ollamaBaseUrl, validated.model);
   if (result.kind === "error") {
     return NextResponse.json({ error: result.error }, { status: result.status });

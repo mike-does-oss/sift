@@ -58,20 +58,24 @@ export async function POST(req: NextRequest) {
 
   const initialRows = Array.isArray(rows) ? rowsForHeaders(rows as Record<string, unknown>[], headers) : [];
 
-  const dataset = db.transaction((tx) => {
-    const [inserted] = tx
-      .insert(datasets)
-      .values({ name: name.trim(), headers })
-      .returning()
-      .all();
-    if (initialRows.length > 0) {
-      tx
+  // Transactionless (the hosted neon-http driver has no interactive
+  // transactions): insert the dataset, then its rows; if the rows insert
+  // fails, compensating-delete the dataset row so no empty shell survives,
+  // then rethrow.
+  const [inserted] = await db
+    .insert(datasets)
+    .values({ name: name.trim(), headers })
+    .returning();
+  if (initialRows.length > 0) {
+    try {
+      await db
         .insert(datasetRows)
-        .values(initialRows.map((row) => ({ datasetId: inserted.id, row })))
-        .run();
+        .values(initialRows.map((row) => ({ datasetId: inserted.id, row })));
+    } catch (err) {
+      await db.delete(datasets).where(eq(datasets.id, inserted.id));
+      throw err;
     }
-    return inserted;
-  });
+  }
 
-  return NextResponse.json({ dataset: { ...dataset, rowCount: initialRows.length } });
+  return NextResponse.json({ dataset: { ...inserted, rowCount: initialRows.length } });
 }

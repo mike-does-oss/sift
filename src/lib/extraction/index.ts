@@ -15,7 +15,7 @@ export async function runExtraction(
   input: Omit<ExtractionInput, "apiKey" | "model">,
   override?: ExtractionOverride
 ): Promise<RunResult> {
-  const resolved = resolveProvider(override);
+  const resolved = await resolveProvider(override);
   if (!resolved.ok) {
     return { success: false, error: resolved.error, provider: resolved.provider, model: resolved.model };
   }

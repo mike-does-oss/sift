@@ -9,11 +9,14 @@
     "start": "next start -H 127.0.0.1",
     "lint": "eslint",
     "test": "vitest run",
+    "db:generate:pg": "drizzle-kit generate --config drizzle.config.pg.ts",
+    "db:push:pg": "drizzle-kit push --config drizzle.config.pg.ts",
     "desktop:dev": "node scripts/desktop-dev.mjs",
     "desktop:build": "node scripts/desktop-build.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@neondatabase/serverless": "^1.1.0",
     "better-sqlite3": "^13.0.1",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.42.2",

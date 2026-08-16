@@ -33,15 +33,15 @@ export const DEFAULT_SETTINGS: SiftSettings = {
 };
 
 /** Reads all rows from the `settings` table into a plain key/value record. */
-function readRows(): Record<string, string> {
-  const rows = db.select().from(settings).all();
+async function readRows(): Promise<Record<string, string>> {
+  const rows = await db.select().from(settings);
   const record: Record<string, string> = {};
   for (const row of rows) record[row.key] = row.value;
   return record;
 }
 
-export function getSettings(): SiftSettings {
-  const record = readRows();
+export async function getSettings(): Promise<SiftSettings> {
+  const record = await readRows();
   const merged = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof SiftSettings)[]) {
     if (key in record) {
@@ -54,7 +54,7 @@ export function getSettings(): SiftSettings {
   return merged;
 }
 
-export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
+export async function updateSettings(patch: Partial<SiftSettings>): Promise<SiftSettings> {
   const validKeys = new Set(Object.keys(DEFAULT_SETTINGS));
   for (const key of Object.keys(patch)) {
     if (!validKeys.has(key)) {
@@ -88,10 +88,9 @@ export function updateSettings(patch: Partial<SiftSettings>): SiftSettings {
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
-    db.insert(settings)
+    await db.insert(settings)
       .values({ key, value })
-      .onConflictDoUpdate({ target: settings.key, set: { value } })
-      .run();
+      .onConflictDoUpdate({ target: settings.key, set: { value } });
   }
 
   return getSettings();
@@ -107,8 +106,8 @@ function maskKey(key: string): string {
  * and only PATCH a key field when the user actually typed a new value —
  * never round-trip the masked value back as if it were the real key.
  */
-export function maskedSettings(): SiftSettings {
-  const current = getSettings();
+export async function maskedSettings(): Promise<SiftSettings> {
+  const current = await getSettings();
   return {
     ...current,
     anthropicApiKey: maskKey(current.anthropicApiKey),

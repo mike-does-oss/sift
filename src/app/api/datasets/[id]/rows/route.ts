@@ -44,12 +44,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const projected = rowsForHeaders(rows as Record<string, unknown>[], dataset.headers as string[]);
 
-  db.transaction((tx) => {
-    tx
-      .insert(datasetRows)
-      .values(projected.map((row) => ({ datasetId: id, row, sourceJobId: sourceJobId ?? null })))
-      .run();
-  });
+  // Single statement — needs no transaction on either dialect.
+  await db
+    .insert(datasetRows)
+    .values(projected.map((row) => ({ datasetId: id, row, sourceJobId: sourceJobId ?? null })));
 
   return NextResponse.json({ added: projected.length, rowCount: await rowCount(id) });
 }

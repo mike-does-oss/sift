@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { maskedSettings, updateSettings, type SiftSettings } from "@/lib/settings";
 
 export async function GET() {
-  return NextResponse.json({ settings: maskedSettings() });
+  return NextResponse.json({ settings: await maskedSettings() });
 }
 
 // Note: GET returns masked keys ("…xxxx" for a set key, "" for unset), so the
@@ -18,11 +18,11 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    updateSettings(body);
+    await updateSettings(body);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid settings update.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  return NextResponse.json({ settings: maskedSettings() });
+  return NextResponse.json({ settings: await maskedSettings() });
 }

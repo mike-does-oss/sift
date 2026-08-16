@@ -1,5 +1,5 @@
 import { eq, and } from "drizzle-orm";
-import { db, sqlite } from "@/db";
+import { db, getSqlite } from "@/db";
 import { jobs, documents, schedules, templates, batches } from "@/db/schema";
 import { runExtraction } from "@/lib/extraction";
 import { readDocument } from "@/lib/storage";
@@ -8,6 +8,10 @@ import { isScheduleDue } from "@/lib/schedule";
 import { jobsToRows } from "@/lib/export";
 import { writeOutputs } from "@/lib/output-writer";
 import type { ExtractionField, TemplateExample } from "@/types";
+
+// Raw sqlite is local-profile only; the hosted job store lands in a later
+// task (§SaaS-1 T3) — until then this module must not load on hosted.
+const sqlite = getSqlite();
 
 const MAX_ATTEMPTS = 3;
 const STALE_MS = 10 * 60 * 1000; // keep < any future long-running change; single process makes staleness rare

@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Unknown provider: "${body.provider}". Must be one of ${PROVIDER_IDS.join(", ")}.` }, { status: 400 });
   }
 
-  const settings = getSettings();
+  const settings = await getSettings();
 
   switch (body.provider) {
     case "ollama": {

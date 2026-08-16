@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getSettingsMock = vi.fn();
-vi.mock("@/lib/settings", () => ({ getSettings: () => getSettingsMock() }));
+vi.mock("@/lib/settings", () => ({ getSettings: async () => getSettingsMock() }));
 
 const extractWithClaudeMock = vi.fn();
 const extractWithOpenAIMock = vi.fn();

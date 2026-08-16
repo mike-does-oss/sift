@@ -221,7 +221,7 @@ async function scaffoldWithOpenAI(model: string, apiKey: string | undefined, des
  * helper (their extract* functions are document-extraction-specific).
  */
 export async function scaffoldSchema(description: string, override?: ExtractionOverride): Promise<ScaffoldResult> {
-  const resolved = resolveProvider(override);
+  const resolved = await resolveProvider(override);
   if (!resolved.ok) return { success: false, error: resolved.error };
 
   let raw: RawScaffoldResult;

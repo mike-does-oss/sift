@@ -31,8 +31,8 @@ export type ProviderResolution =
   | { ok: true; provider: "ollama"; model: string; baseUrl: string }
   | { ok: false; provider: ProviderId; model: string; error: string };
 
-export function resolveProvider(override?: ExtractionOverride): ProviderResolution {
-  const s = getSettings();
+export async function resolveProvider(override?: ExtractionOverride): Promise<ProviderResolution> {
+  const s = await getSettings();
   const provider = override?.provider ?? s.provider;
 
   switch (provider) {
