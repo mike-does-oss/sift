@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { count, eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { datasets, datasetRows } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { rowsForHeaders } from "@/lib/datasets";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function find(id: string) {
-  return db.query.datasets.findFirst({ where: eq(datasets.id, id) });
+// Cross-tenant dataset ids 404 (existence not revealed). Child rows are
+// touched by datasetId only AFTER parent ownership is verified.
+async function find(id: string, userId: string) {
+  return db.query.datasets.findFirst({ where: and(eq(datasets.id, id), eq(datasets.userId, userId)) });
 }
 
 async function rowCount(id: string): Promise<number> {
@@ -21,8 +24,12 @@ async function rowCount(id: string): Promise<number> {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  const dataset = await find(id);
+  const dataset = await find(id, user.id);
   if (!dataset) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -47,14 +54,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Single statement — needs no transaction on either dialect.
   await db
     .insert(datasetRows)
-    .values(projected.map((row) => ({ datasetId: id, row, sourceJobId: sourceJobId ?? null })));
+    .values(projected.map((row) => ({ userId: user.id, datasetId: id, row, sourceJobId: sourceJobId ?? null })));
 
   return NextResponse.json({ added: projected.length, rowCount: await rowCount(id) });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  const dataset = await find(id);
+  const dataset = await find(id, user.id);
   if (!dataset) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

@@ -1,6 +1,8 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { settings } from "@/db/schema";
 import { PROVIDER_IDS, isProviderId, type ProviderId } from "@/lib/api";
+import { isHosted } from "@/lib/profile";
 
 export interface SiftSettings {
   provider: ProviderId;
@@ -32,16 +34,32 @@ export const DEFAULT_SETTINGS: SiftSettings = {
   compatModel: "",
 };
 
-/** Reads all rows from the `settings` table into a plain key/value record. */
-async function readRows(): Promise<Record<string, string>> {
-  const rows = await db.select().from(settings);
+/**
+ * Tenancy scope for the settings k/v store. Callers on authenticated paths
+ * pass `user.id` from `requireUser()`; the jobs worker passes the job row's
+ * `userId`. Omitting it is only legal on the local profile (where every row
+ * belongs to the constant user "local") — on hosted an unscoped read/write is
+ * a missing tenant stamp and must fail loudly, never fall back to a shared
+ * row.
+ */
+function scopeUserId(userId?: string): string {
+  if (userId) return userId;
+  if (isHosted()) {
+    throw new Error("settings access requires a userId on the hosted profile");
+  }
+  return "local";
+}
+
+/** Reads one user's rows from the `settings` table into a plain key/value record. */
+async function readRows(userId: string): Promise<Record<string, string>> {
+  const rows = await db.select().from(settings).where(eq(settings.userId, userId));
   const record: Record<string, string> = {};
   for (const row of rows) record[row.key] = row.value;
   return record;
 }
 
-export async function getSettings(): Promise<SiftSettings> {
-  const record = await readRows();
+export async function getSettings(userId?: string): Promise<SiftSettings> {
+  const record = await readRows(scopeUserId(userId));
   const merged = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof SiftSettings)[]) {
     if (key in record) {
@@ -54,7 +72,8 @@ export async function getSettings(): Promise<SiftSettings> {
   return merged;
 }
 
-export async function updateSettings(patch: Partial<SiftSettings>): Promise<SiftSettings> {
+export async function updateSettings(patch: Partial<SiftSettings>, userId?: string): Promise<SiftSettings> {
+  const uid = scopeUserId(userId);
   const validKeys = new Set(Object.keys(DEFAULT_SETTINGS));
   for (const key of Object.keys(patch)) {
     if (!validKeys.has(key)) {
@@ -88,12 +107,15 @@ export async function updateSettings(patch: Partial<SiftSettings>): Promise<Sift
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
+    // Conflict target matches the composite PK (user_id, key), which both
+    // dialects now share (sqlite migration 0005) — targeting `key` alone
+    // would be rejected at runtime on pg.
     await db.insert(settings)
-      .values({ key, value })
-      .onConflictDoUpdate({ target: settings.key, set: { value } });
+      .values({ key, value, userId: uid })
+      .onConflictDoUpdate({ target: [settings.userId, settings.key], set: { value } });
   }
 
-  return getSettings();
+  return getSettings(uid);
 }
 
 function maskKey(key: string): string {
@@ -106,8 +128,8 @@ function maskKey(key: string): string {
  * and only PATCH a key field when the user actually typed a new value —
  * never round-trip the masked value back as if it were the real key.
  */
-export async function maskedSettings(): Promise<SiftSettings> {
-  const current = await getSettings();
+export async function maskedSettings(userId?: string): Promise<SiftSettings> {
+  const current = await getSettings(scopeUserId(userId));
   return {
     ...current,
     anthropicApiKey: maskKey(current.anthropicApiKey),

@@ -1,29 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules, jobs, documents } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
-async function find(id: string) {
-  return db.query.schedules.findFirst({ where: eq(schedules.id, id) });
+// Cross-tenant schedule ids 404 (existence not revealed).
+async function find(id: string, userId: string) {
+  return db.query.schedules.findFirst({ where: and(eq(schedules.id, id), eq(schedules.userId, userId)) });
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  const schedule = await find(id);
+  const schedule = await find(id, user.id);
   if (!schedule) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const runs = await db
     .select({ job: jobs, filename: documents.filename })
     .from(jobs)
-    .leftJoin(documents, eq(jobs.documentId, documents.id))
-    .where(eq(jobs.scheduleId, id))
+    .leftJoin(documents, and(eq(jobs.documentId, documents.id), eq(documents.userId, user.id)))
+    .where(and(eq(jobs.scheduleId, id), eq(jobs.userId, user.id)))
     .orderBy(desc(jobs.createdAt));
   return NextResponse.json({ schedule, jobs: runs });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  if (!(await find(id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await find(id, user.id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let body: {
     active?: boolean;
@@ -62,13 +72,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.keepResults = result.value;
   }
 
-  const [updated] = await db.update(schedules).set(patch).where(eq(schedules.id, id)).returning();
+  const [updated] = await db.update(schedules).set(patch)
+    .where(and(eq(schedules.id, id), eq(schedules.userId, user.id)))
+    .returning();
   return NextResponse.json({ schedule: updated });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  if (!(await find(id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  await db.delete(schedules).where(eq(schedules.id, id));
+  if (!(await find(id, user.id))) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  await db.delete(schedules).where(and(eq(schedules.id, id), eq(schedules.userId, user.id)));
   return NextResponse.json({ ok: true });
 }

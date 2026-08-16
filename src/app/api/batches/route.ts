@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { inArray, desc } from "drizzle-orm";
+import { and, eq, inArray, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { batches, documents, jobs } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { processPendingJobs } from "@/lib/jobs";
 import { validateExamples } from "@/lib/template-examples";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: {
     name?: string;
     documentIds?: string[];
@@ -55,12 +60,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: keepResultsResult.error }, { status: 400 });
   }
 
-  const docs = await db.query.documents.findMany({ where: inArray(documents.id, documentIds) });
+  // Scoped lookup: another tenant's document ids simply come back missing.
+  const docs = await db.query.documents.findMany({
+    where: and(inArray(documents.id, documentIds), eq(documents.userId, user.id)),
+  });
   if (docs.length !== documentIds.length) {
     return NextResponse.json({ error: "Some documents were not found" }, { status: 400 });
   }
 
   const [batch] = await db.insert(batches).values({
+    userId: user.id,
     name: name.trim(),
     templateSnapshot,
     totalCount: docs.length,
@@ -70,6 +79,7 @@ export async function POST(req: NextRequest) {
   }).returning();
 
   await db.insert(jobs).values(docs.map((d) => ({
+    userId: user.id,
     documentId: d.id,
     templateSnapshot,
     source: "batch" as const,
@@ -82,6 +92,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const list = await db.query.batches.findMany({ orderBy: desc(batches.createdAt) });
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
+  const list = await db.query.batches.findMany({
+    where: eq(batches.userId, user.id),
+    orderBy: desc(batches.createdAt),
+  });
   return NextResponse.json({ batches: list });
 }

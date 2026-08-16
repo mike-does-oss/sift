@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/user";
 import { scaffoldSchema, validateScaffoldDescription } from "@/lib/extraction/scaffold";
 import { isProviderId } from "@/lib/api";
 import type { ExtractionOverride } from "@/lib/extraction/provider-resolution";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: { description?: unknown; provider?: unknown; model?: unknown };
   try {
     body = await req.json();
@@ -29,7 +34,7 @@ export async function POST(req: NextRequest) {
     override = { provider: providerField, model: typeof modelField === "string" && modelField ? modelField : undefined };
   }
 
-  const result = await scaffoldSchema(validated.description, override);
+  const result = await scaffoldSchema(validated.description, override, user.id);
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }

@@ -31,8 +31,12 @@ export type ProviderResolution =
   | { ok: true; provider: "ollama"; model: string; baseUrl: string }
   | { ok: false; provider: ProviderId; model: string; error: string };
 
-export async function resolveProvider(override?: ExtractionOverride): Promise<ProviderResolution> {
-  const s = await getSettings();
+export async function resolveProvider(override?: ExtractionOverride, userId?: string): Promise<ProviderResolution> {
+  // `userId` scopes which tenant's settings drive the resolution (§SaaS-1):
+  // request paths pass `user.id` from `requireUser()`, the jobs worker passes
+  // the job row's `userId`. Omitted = local profile's "local" user
+  // (`getSettings` refuses an unscoped read on hosted).
+  const s = await getSettings(userId);
   const provider = override?.provider ?? s.provider;
 
   switch (provider) {

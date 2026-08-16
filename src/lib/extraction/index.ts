@@ -13,9 +13,10 @@ import type { ExtractionOverride } from "./provider-resolution";
 
 export async function runExtraction(
   input: Omit<ExtractionInput, "apiKey" | "model">,
-  override?: ExtractionOverride
+  override?: ExtractionOverride,
+  userId?: string
 ): Promise<RunResult> {
-  const resolved = await resolveProvider(override);
+  const resolved = await resolveProvider(override, userId);
   if (!resolved.ok) {
     return { success: false, error: resolved.error, provider: resolved.provider, model: resolved.model };
   }

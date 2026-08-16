@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
 import { isProviderId } from "@/lib/api";
 import { parseDocument, detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
@@ -15,6 +16,10 @@ const MAX_DOC_SIZE_BYTES = 32 * 1024 * 1024;
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -92,10 +97,11 @@ export async function POST(request: NextRequest) {
 
   let result: Awaited<ReturnType<typeof runExtraction>>;
   try {
-    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple, grounded, examples }, override);
+    result = await runExtraction({ source, filename: file.name, fields, prompt, extractMultiple, grounded, examples }, override, user.id);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({
+      userId: user.id,
       templateSnapshot: { fields, prompt, extractMultiple, examples },
       status: "failed",
       attempts: 1,
@@ -111,6 +117,7 @@ export async function POST(request: NextRequest) {
   }
 
   await db.insert(jobs).values({
+    userId: user.id,
     templateSnapshot: { fields, prompt, extractMultiple, examples },
     status: result.success ? "completed" : "failed",
     attempts: 1,

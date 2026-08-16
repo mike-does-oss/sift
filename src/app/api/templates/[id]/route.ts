@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { templates, schedules } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { validateExamples } from "@/lib/template-examples";
 
-async function find(id: string) {
-  return db.query.templates.findFirst({ where: eq(templates.id, id) });
+// Cross-tenant access convention: a template that exists but belongs to
+// another user is indistinguishable from one that doesn't exist — 404.
+async function find(id: string, userId: string) {
+  return db.query.templates.findFirst({ where: and(eq(templates.id, id), eq(templates.userId, userId)) });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  if (!(await find(id))) {
+  if (!(await find(id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -63,19 +70,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const [updated] = await db.update(templates)
     .set(updates)
-    .where(eq(templates.id, id))
+    .where(and(eq(templates.id, id), eq(templates.userId, user.id)))
     .returning();
 
   return NextResponse.json({ template: updated });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  if (!(await find(id))) {
+  if (!(await find(id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const usedBy = await db.query.schedules.findFirst({ where: eq(schedules.templateId, id) });
+  // Templates are per-user, so only this user's schedules can reference this
+  // template — but scope anyway so a (buggy) cross-tenant reference could
+  // never leak another tenant's schedule name.
+  const usedBy = await db.query.schedules.findFirst({
+    where: and(eq(schedules.templateId, id), eq(schedules.userId, user.id)),
+  });
   if (usedBy) {
     return NextResponse.json(
       { error: `This template is used by schedule "${usedBy.name}" — delete or repoint that schedule first.` },
@@ -83,6 +99,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  await db.delete(templates).where(eq(templates.id, id));
+  await db.delete(templates).where(and(eq(templates.id, id), eq(templates.userId, user.id)));
   return NextResponse.json({ ok: true });
 }

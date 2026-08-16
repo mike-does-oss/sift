@@ -74,7 +74,12 @@ async function runOneInner(jobId: string): Promise<void> {
   if (!job) return;
   try {
     if (!job.documentId) throw new Error("Job has no document");
-    const doc = await db.query.documents.findFirst({ where: eq(documents.id, job.documentId) });
+    // The worker claims jobs across ALL users by design; per-job reads and
+    // settings/provider resolution are scoped by the JOB ROW's userId (there
+    // is no session here).
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.id, job.documentId), eq(documents.userId, job.userId)),
+    });
     if (!doc) throw new Error("Document not found");
     const buf = readDocument(doc.filePath);
     const source = await parseDocument(buf, doc.filename);
@@ -83,7 +88,7 @@ async function runOneInner(jobId: string): Promise<void> {
       source, filename: doc.filename,
       fields: snap.fields, prompt: snap.prompt, extractMultiple: snap.extractMultiple,
       examples: snap.examples,
-    });
+    }, undefined, job.userId);
     if (!result.success) throw Object.assign(new Error(result.error), { provider: result.provider, model: result.model });
     await db.update(jobs).set({
       status: "completed", result: result.data, error: null, completedAt: new Date(),
@@ -180,7 +185,9 @@ async function maybeWriteRunOutputs(runId: string, scheduleId: string | null): P
     .where(and(eq(jobs.runId, runId), eq(jobs.status, "completed")));
 
   const rows = jobsToRows(jobRows.map((r) => ({ result: r.job.result, filename: r.filename })));
-  const template = await db.query.templates.findFirst({ where: eq(templates.id, schedule.templateId) });
+  const template = await db.query.templates.findFirst({
+    where: and(eq(templates.id, schedule.templateId), eq(templates.userId, schedule.userId)),
+  });
   const fields = template ? (template.fields as ExtractionField[]).map((f) => f.name) : [];
   writeOutputs({ name: schedule.name, rows, fields, dir: schedule.outputDir, format: schedule.outputFormat });
 
@@ -213,7 +220,11 @@ export async function processPendingJobs(timeBudgetMs: number): Promise<{ proces
 async function enqueueInbox(scheduleId: string): Promise<number> {
   const schedule = await db.query.schedules.findFirst({ where: eq(schedules.id, scheduleId) });
   if (!schedule) return 0;
-  const template = await db.query.templates.findFirst({ where: eq(templates.id, schedule.templateId) });
+  // Scoped to the schedule owner's templates — a (buggy) cross-tenant
+  // templateId reference must never leak another tenant's template into jobs.
+  const template = await db.query.templates.findFirst({
+    where: and(eq(templates.id, schedule.templateId), eq(templates.userId, schedule.userId)),
+  });
   if (!template) return 0;
   const snapshot: Snapshot = {
     fields: template.fields as ExtractionField[],
@@ -224,17 +235,19 @@ async function enqueueInbox(scheduleId: string): Promise<number> {
   // Atomic claim: transaction over sync driver
   const runId = crypto.randomUUID();
   const tx = sqlite.transaction(() => {
+    // Inbox documents inherit the schedule's tenant: filter and stamp the
+    // new job rows with the schedule row's user_id.
     const inbox = sqlite.prepare(
-      `SELECT id FROM documents WHERE schedule_id = ? AND processed_at IS NULL`
-    ).all(schedule.id) as Array<{ id: string }>;
+      `SELECT id FROM documents WHERE schedule_id = ? AND user_id = ? AND processed_at IS NULL`
+    ).all(schedule.id, schedule.userId) as Array<{ id: string }>;
     const insert = sqlite.prepare(`
-      INSERT INTO jobs (id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at)
-      VALUES (?, ?, ?, 'schedule', ?, ?, 'pending', 0, ?)
+      INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at)
+      VALUES (?, ?, ?, ?, 'schedule', ?, ?, 'pending', 0, ?)
     `);
     const mark = sqlite.prepare(`UPDATE documents SET processed_at = ? WHERE id = ?`);
     const now = Date.now();
     for (const d of inbox) {
-      insert.run(crypto.randomUUID(), d.id, JSON.stringify(snapshot), schedule.id, runId, now);
+      insert.run(crypto.randomUUID(), schedule.userId, d.id, JSON.stringify(snapshot), schedule.id, runId, now);
       mark.run(now, d.id);
     }
     return inbox.length;

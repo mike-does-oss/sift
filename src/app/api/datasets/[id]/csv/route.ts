@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { datasets, datasetRows } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { rowsForHeaders } from "@/lib/datasets";
 import { toCsv } from "@/lib/export";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  const dataset = await db.query.datasets.findFirst({ where: eq(datasets.id, id) });
+  // Cross-tenant dataset ids 404; rows are read by datasetId only after
+  // parent ownership is verified.
+  const dataset = await db.query.datasets.findFirst({
+    where: and(eq(datasets.id, id), eq(datasets.userId, user.id)),
+  });
   if (!dataset) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

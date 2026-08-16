@@ -31,7 +31,8 @@ describe("POST /api/scaffold — provider/model override validation (§S3)", () 
   it("dispatches with no override when provider is omitted", async () => {
     const res = await POST(req({ description: "extract the vendor and total" }));
     expect(res.status).toBe(200);
-    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor and total", undefined);
+    // Third arg: tenancy scope — the local profile's fixed "local" user.
+    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor and total", undefined, "local");
   });
 
   it("400s on an unknown provider", async () => {
@@ -45,13 +46,13 @@ describe("POST /api/scaffold — provider/model override validation (§S3)", () 
   it("passes a valid provider through as the override", async () => {
     const res = await POST(req({ description: "extract the vendor", provider: "ollama" }));
     expect(res.status).toBe(200);
-    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor", { provider: "ollama", model: undefined });
+    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor", { provider: "ollama", model: undefined }, "local");
   });
 
   it("passes provider + model through together", async () => {
     const res = await POST(req({ description: "extract the vendor", provider: "anthropic", model: "claude-opus-4-8" }));
     expect(res.status).toBe(200);
-    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor", { provider: "anthropic", model: "claude-opus-4-8" });
+    expect(scaffoldSchema).toHaveBeenCalledWith("extract the vendor", { provider: "anthropic", model: "claude-opus-4-8" }, "local");
   });
 
   it("still validates description first, before looking at provider", async () => {

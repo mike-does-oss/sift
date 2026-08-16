@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { datasets, datasetRows } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 
-async function find(id: string) {
-  return db.query.datasets.findFirst({ where: eq(datasets.id, id) });
+// Cross-tenant dataset ids 404 (existence not revealed). Child rows are read
+// by datasetId only AFTER parent ownership is verified.
+async function find(id: string, userId: string) {
+  return db.query.datasets.findFirst({ where: and(eq(datasets.id, id), eq(datasets.userId, userId)) });
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  const dataset = await find(id);
+  const dataset = await find(id, user.id);
   if (!dataset) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -26,8 +33,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const { id } = await params;
-  if (!(await find(id))) {
+  if (!(await find(id, user.id))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

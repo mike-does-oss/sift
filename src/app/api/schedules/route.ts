@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules, templates } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: {
     name?: string;
     templateId?: string;
@@ -31,7 +36,10 @@ export async function POST(req: NextRequest) {
   if (cadence === "weekly" && (typeof dayOfWeek !== "number" || dayOfWeek < 0 || dayOfWeek > 6)) {
     return NextResponse.json({ error: "dayOfWeek 0-6 required for weekly" }, { status: 400 });
   }
-  const template = await db.query.templates.findFirst({ where: eq(templates.id, templateId) });
+  // Scoped: a schedule can only ever point at its owner's template.
+  const template = await db.query.templates.findFirst({
+    where: and(eq(templates.id, templateId), eq(templates.userId, user.id)),
+  });
   if (!template) return NextResponse.json({ error: "Template not found" }, { status: 400 });
 
   // §output-dest: same output-folder validation the batches route uses.
@@ -49,6 +57,7 @@ export async function POST(req: NextRequest) {
   }
 
   const [schedule] = await db.insert(schedules).values({
+    userId: user.id,
     name, templateId, cadence: cadence as "daily" | "weekly", hourUtc,
     dayOfWeek: cadence === "weekly" ? (dayOfWeek ?? null) : null,
     outputDir: outputDirResult.value,
@@ -59,6 +68,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const list = await db.query.schedules.findMany({ orderBy: desc(schedules.createdAt) });
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
+  const list = await db.query.schedules.findMany({
+    where: eq(schedules.userId, user.id),
+    orderBy: desc(schedules.createdAt),
+  });
   return NextResponse.json({ schedules: list });
 }

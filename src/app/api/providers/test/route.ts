@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { requireUser } from "@/lib/user";
 import { getSettings } from "@/lib/settings";
 import { PROVIDER_IDS, isProviderId, type ProviderId } from "@/lib/api";
 
@@ -91,6 +92,10 @@ async function testCompatModels(baseUrl: string, apiKey: string): Promise<{ ok: 
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: { provider?: string };
   try {
     body = await req.json();
@@ -102,7 +107,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Unknown provider: "${body.provider}". Must be one of ${PROVIDER_IDS.join(", ")}.` }, { status: 400 });
   }
 
-  const settings = await getSettings();
+  const settings = await getSettings(user.id);
 
   switch (body.provider) {
     case "ollama": {

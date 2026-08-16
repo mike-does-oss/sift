@@ -13,7 +13,9 @@ import {
   Settings,
   Moon,
   Sun,
+  LogOut,
 } from "lucide-react";
+import { signOutAction } from "@/app/dashboard/actions";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Extract", icon: Sparkles },
@@ -27,7 +29,10 @@ const NAV_ITEMS = [
 
 const THEME_STORAGE_KEY = "sift-theme";
 
-export function Sidebar() {
+// `accountEmail` is non-null only on the hosted profile (the dashboard layout
+// passes the Neon Auth session email); local passes null and gets no account
+// block — the local profile has no accounts at all.
+export function Sidebar({ accountEmail = null }: { accountEmail?: string | null }) {
   const pathname = usePathname();
   const [darkMode, setDarkMode] = useState(false);
 
@@ -92,14 +97,45 @@ export function Sidebar() {
       <div className="flex-shrink-0 px-3 py-3 border-t border-[var(--border-subtle)] space-y-1">
         {/* Provider badge lives in the workspace action bar only — it was
             duplicated here and removed on founder feedback. */}
-        <div className="flex items-center justify-end gap-1 px-2 pt-1">
-          <button
-            onClick={toggleDarkMode}
-            className="theme-toggle w-9 h-9 rounded-lg flex items-center justify-center"
-            aria-label="Toggle theme"
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+        <div
+          className={`flex items-center gap-1 px-2 pt-1 ${
+            accountEmail !== null ? "justify-between" : "justify-end"
+          }`}
+        >
+          {accountEmail !== null && (
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-xs font-medium text-[var(--accent)]">
+                {accountEmail.charAt(0).toUpperCase() || "?"}
+              </div>
+              <span
+                className="truncate text-xs text-[var(--text-secondary)]"
+                title={accountEmail}
+              >
+                {accountEmail}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {accountEmail !== null && (
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="theme-toggle w-9 h-9 rounded-lg flex items-center justify-center"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </form>
+            )}
+            <button
+              onClick={toggleDarkMode}
+              className="theme-toggle w-9 h-9 rounded-lg flex items-center justify-center"
+              aria-label="Toggle theme"
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       </div>
     </aside>

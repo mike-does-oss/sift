@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/user";
 import { maskedSettings, updateSettings, type SiftSettings } from "@/lib/settings";
 
 export async function GET() {
-  return NextResponse.json({ settings: await maskedSettings() });
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
+  return NextResponse.json({ settings: await maskedSettings(user.id) });
 }
 
 // Note: GET returns masked keys ("…xxxx" for a set key, "" for unset), so the
@@ -10,6 +15,10 @@ export async function GET() {
 // field when the user actually typed a new value — never round-trip the
 // masked value back as if it were real.
 export async function PATCH(request: Request) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: Partial<SiftSettings>;
   try {
     body = await request.json();
@@ -18,11 +27,11 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    await updateSettings(body);
+    await updateSettings(body, user.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid settings update.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  return NextResponse.json({ settings: await maskedSettings() });
+  return NextResponse.json({ settings: await maskedSettings(user.id) });
 }

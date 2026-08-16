@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { count, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { datasets, datasetRows } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { rowsForHeaders } from "@/lib/datasets";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -18,6 +19,10 @@ function validateHeaders(headers: unknown): headers is string[] {
 }
 
 export async function GET() {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   const rows = await db
     .select({
       id: datasets.id,
@@ -28,6 +33,7 @@ export async function GET() {
     })
     .from(datasets)
     .leftJoin(datasetRows, eq(datasetRows.datasetId, datasets.id))
+    .where(eq(datasets.userId, user.id))
     .groupBy(datasets.id)
     .orderBy(desc(datasets.createdAt));
 
@@ -35,6 +41,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: { name?: string; headers?: unknown; rows?: unknown };
   try {
     body = await req.json();
@@ -64,13 +74,13 @@ export async function POST(req: NextRequest) {
   // then rethrow.
   const [inserted] = await db
     .insert(datasets)
-    .values({ name: name.trim(), headers })
+    .values({ userId: user.id, name: name.trim(), headers })
     .returning();
   if (initialRows.length > 0) {
     try {
       await db
         .insert(datasetRows)
-        .values(initialRows.map((row) => ({ datasetId: inserted.id, row })));
+        .values(initialRows.map((row) => ({ userId: user.id, datasetId: inserted.id, row })));
     } catch (err) {
       await db.delete(datasets).where(eq(datasets.id, inserted.id));
       throw err;

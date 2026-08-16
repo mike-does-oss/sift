@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { documents, schedules } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { saveBuffer } from "@/lib/storage";
 import { detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
 
@@ -9,6 +10,10 @@ const MAX_DOC_SIZE_BYTES = 32 * 1024 * 1024;
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -44,7 +49,10 @@ export async function POST(request: Request) {
 
   let scheduleIdValue: string | null = null;
   if (typeof scheduleId === "string" && scheduleId.length > 0) {
-    const schedule = await db.query.schedules.findFirst({ where: eq(schedules.id, scheduleId) });
+    // Another tenant's schedule is indistinguishable from a nonexistent one.
+    const schedule = await db.query.schedules.findFirst({
+      where: and(eq(schedules.id, scheduleId), eq(schedules.userId, user.id)),
+    });
     if (!schedule) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
     }
@@ -56,6 +64,7 @@ export async function POST(request: Request) {
   const [document] = await db
     .insert(documents)
     .values({
+      userId: user.id,
       filename: file.name,
       filePath,
       sizeBytes,

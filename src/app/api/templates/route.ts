@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { templates } from "@/db/schema";
+import { requireUser } from "@/lib/user";
 import { validateExamples } from "@/lib/template-examples";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: { name?: string; fields?: unknown[]; prompt?: string; extractMultiple?: boolean; examples?: unknown };
   try {
     body = await req.json();
@@ -25,6 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const [template] = await db.insert(templates).values({
+    userId: user.id,
     name: name.trim(),
     fields,
     prompt: typeof prompt === "string" ? prompt : "",
@@ -36,6 +42,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const list = await db.query.templates.findMany({ orderBy: desc(templates.createdAt) });
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
+  const list = await db.query.templates.findMany({
+    where: eq(templates.userId, user.id),
+    orderBy: desc(templates.createdAt),
+  });
   return NextResponse.json({ templates: list });
 }

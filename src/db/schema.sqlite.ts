@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core";
 
 const id = () => text("id").primaryKey().$defaultFn(() => crypto.randomUUID());
 const createdAt = () => integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date());
@@ -97,12 +97,15 @@ export const schedules = sqliteTable("schedules", {
 });
 
 export const settings = sqliteTable("settings", {
-  key: text("key").primaryKey(),
-  // Cosmetic on local (key stays the sole PK); the pg schema keys settings by
-  // (user_id, key) instead.
+  key: text("key").notNull(),
   userId: userId(),
   value: text("value").notNull(),
-});
+}, (t) => [
+  // Composite PK matching the pg schema exactly, so the settings upsert can
+  // use the same `ON CONFLICT (user_id, key)` target on both dialects
+  // (sqlite rejects a conflict target that has no matching unique index).
+  primaryKey({ columns: [t.userId, t.key] }),
+]);
 
 export const datasets = sqliteTable("datasets", {
   id: id(),

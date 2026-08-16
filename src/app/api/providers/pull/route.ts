@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/user";
 import { getSettings } from "@/lib/settings";
 import { proxyOllamaPull, validateModelName } from "@/lib/ollama-pull";
 
@@ -8,6 +9,10 @@ import { proxyOllamaPull, validateModelName } from "@/lib/ollama-pull";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+  const { user } = auth;
+
   let body: unknown;
   try {
     body = await req.json();
@@ -21,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: validated.error }, { status: 400 });
   }
 
-  const settings = await getSettings();
+  const settings = await getSettings(user.id);
   const result = await proxyOllamaPull(settings.ollamaBaseUrl, validated.model);
   if (result.kind === "error") {
     return NextResponse.json({ error: result.error }, { status: result.status });
