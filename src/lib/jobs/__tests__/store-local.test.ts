@@ -82,7 +82,7 @@ describe("local store enqueueInbox", () => {
       { id: "d3", filename: "c.pdf", filePath: "files/c.pdf", sizeBytes: 1, scheduleId: "s1", processedAt: new Date() },
       { id: "d4", filename: "d.pdf", filePath: "files/d.pdf", sizeBytes: 1, scheduleId: "other" },
     ]);
-    const created = await store.enqueueInbox({ id: "s1", userId: "local" }, snapshot, "run-1");
+    const created = await store.enqueueInbox({ id: "s1", userId: "local" }, snapshot, "run-1", false);
     expect(created).toBe(2);
 
     const jobRows = await db.query.jobs.findMany();
@@ -94,10 +94,12 @@ describe("local store enqueueInbox", () => {
       expect(j.userId).toBe("local");
       expect(j.status).toBe("pending");
       expect(j.templateSnapshot).toEqual(snapshot);
+      // §T5: byo stamping is a hosted concept — local rows stay false.
+      expect(j.usedByoKey).toBe(false);
     }
     expect(new Set(jobRows.map((j) => j.documentId))).toEqual(new Set(["d1", "d2"]));
 
     // Claimed docs are marked; re-running enqueues nothing.
-    expect(await store.enqueueInbox({ id: "s1", userId: "local" }, snapshot, "run-2")).toBe(0);
+    expect(await store.enqueueInbox({ id: "s1", userId: "local" }, snapshot, "run-2", false)).toBe(0);
   });
 });

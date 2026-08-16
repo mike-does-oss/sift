@@ -43,19 +43,19 @@ export function claimSql(): SQL {
  * Raw SQL bypasses drizzle's app-level `$defaultFn` defaults — hence the
  * explicit `gen_random_uuid()::text` id and `now()` created_at. The snapshot
  * is passed as an object with a `::jsonb` cast (the driver serializes it);
- * status/attempts are written explicitly, `used_byo_key` stays on its DB
- * default (false) until §T5 freezes the per-owner decision at enqueue.
- * Exported for SQL-shape tests.
+ * status/attempts are written explicitly, and `used_byo_key` freezes the
+ * owner's BYO decision onto every row of the run (§T5 — computed once by
+ * core.enqueueInbox from the owner's user row). Exported for SQL-shape tests.
  */
-export function enqueueInboxSql(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string): SQL {
+export function enqueueInboxSql(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean): SQL {
   return sql`
     WITH claimed AS (
       UPDATE documents SET processed_at = now()
       WHERE schedule_id = ${schedule.id} AND processed_at IS NULL AND user_id = ${schedule.userId}
       RETURNING id
     )
-    INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at)
-    SELECT gen_random_uuid()::text, ${schedule.userId}, claimed.id, ${snapshot}::jsonb, 'schedule', ${schedule.id}, ${runId}, 'pending', 0, now()
+    INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at, used_byo_key)
+    SELECT gen_random_uuid()::text, ${schedule.userId}, claimed.id, ${snapshot}::jsonb, 'schedule', ${schedule.id}, ${runId}, 'pending', 0, now(), ${usedByoKey}
     FROM claimed
     RETURNING id
   `;
@@ -109,8 +109,8 @@ export const pgStore: JobStore = {
     }
   },
 
-  async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string) {
-    const res = await pgDb().execute(enqueueInboxSql(schedule, snapshot, runId));
+  async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean) {
+    const res = await pgDb().execute(enqueueInboxSql(schedule, snapshot, runId, usedByoKey));
     return res.rows.length;
   },
 };

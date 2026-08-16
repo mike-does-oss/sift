@@ -48,7 +48,7 @@ describe("pg inbox claim-and-enqueue CTE", () => {
 
   it("claims documents and inserts jobs in ONE statement with explicit ids and timestamps", async () => {
     const { enqueueInboxSql } = await import("../store.pg");
-    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1"));
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false));
     expect(q.sql).toContain("WITH claimed AS");
     expect(q.sql).toContain("UPDATE documents SET processed_at = now()");
     expect(q.sql).toMatch(/WHERE schedule_id = \$\d+ AND processed_at IS NULL AND user_id = \$\d+/);
@@ -56,21 +56,28 @@ describe("pg inbox claim-and-enqueue CTE", () => {
     // created_at must be explicit.
     expect(q.sql).toContain("gen_random_uuid()::text");
     expect(q.sql).toContain(
-      "INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at)"
+      "INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at, used_byo_key)"
     );
-    expect(q.sql).toContain("'pending', 0, now()");
+    expect(q.sql).toMatch(/'pending', 0, now\(\), \$\d+/);
     expect(q.sql).toContain("'schedule'");
     expect(q.sql).toContain("RETURNING id");
   });
 
   it("threads the schedule owner's user_id into both the claim and the inserted rows, and passes the snapshot as an object with a ::jsonb cast", async () => {
     const { enqueueInboxSql } = await import("../store.pg");
-    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1"));
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false));
     // claim filter + inserted rows: two occurrences of the owner id.
     expect(q.params.filter((p) => p === "user-1")).toHaveLength(2);
     expect(q.sql).toMatch(/\$\d+::jsonb/);
     // NOT manually JSON.stringify'd — the driver serializes the object.
     expect(q.params).toContain(snapshot);
-    expect(q.params).toEqual(["sched-1", "user-1", "user-1", snapshot, "sched-1", "run-1"]);
+    expect(q.params).toEqual(["sched-1", "user-1", "user-1", snapshot, "sched-1", "run-1", false]);
+  });
+
+  it("freezes the owner's BYO decision onto every inserted row (§T5)", async () => {
+    const { enqueueInboxSql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", true));
+    expect(q.sql).toContain("used_byo_key");
+    expect(q.params[q.params.length - 1]).toBe(true);
   });
 });

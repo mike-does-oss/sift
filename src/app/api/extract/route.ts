@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { jobs } from "@/db/schema";
 import { requireUser } from "@/lib/user";
 import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
+import { byoKeyActive, quotaGate } from "@/lib/gates";
+import { getMonthlyUsage } from "@/lib/usage";
 import { isProviderId } from "@/lib/api";
 import { parseDocument, detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
 import { validateExamples } from "@/lib/template-examples";
@@ -71,6 +73,23 @@ export async function POST(request: NextRequest) {
     override = { provider: providerField, model: modelField || undefined };
   }
 
+  // §SaaS-1 T5 hosted gates — the synthetic "local" plan bypasses them all
+  // (byoActive is false and quotaGate returns null for it, and getMonthlyUsage
+  // short-circuits to 0 off-hosted). On hosted, the provider/model pair is a
+  // billing decision made inside resolveProvider's hosted branch (plan
+  // tiering, BYO → opus), so any user-supplied override is discarded; a BYO
+  // key skips the quota check entirely (quota-exempt, stamped on the job row).
+  const byoActive = byoKeyActive(user);
+  if (user.plan !== "local") {
+    override = undefined;
+    if (!byoActive) {
+      const denial = quotaGate(user.plan, await getMonthlyUsage(user.id), 1);
+      if (denial) {
+        return NextResponse.json({ success: false, error: denial.error, code: denial.code }, { status: denial.status });
+      }
+    }
+  }
+
   const buf = Buffer.from(await file.arrayBuffer());
 
   let ext: string;
@@ -110,6 +129,7 @@ export async function POST(request: NextRequest) {
       source: "single",
       provider: null,
       model: null,
+      usedByoKey: byoActive,
       startedAt: new Date(),
       completedAt: new Date(),
     });
@@ -126,6 +146,7 @@ export async function POST(request: NextRequest) {
     source: "single",
     provider: result.provider,
     model: result.model,
+    usedByoKey: byoActive,
     startedAt: new Date(),
     completedAt: new Date(),
   });

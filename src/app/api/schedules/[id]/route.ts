@@ -3,6 +3,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules, jobs, documents } from "@/db/schema";
 import { requireUser } from "@/lib/user";
+import { scheduleGate } from "@/lib/gates";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 // Cross-tenant schedule ids 404 (existence not revealed).
@@ -31,6 +32,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { user } = auth;
+
+  // §SaaS-1 T5: create/update are plan-gated (no-op for "local"); a
+  // downgraded owner can still GET and DELETE their now-dormant schedules.
+  const denial = scheduleGate(user.plan);
+  if (denial) {
+    return NextResponse.json({ error: denial.error, code: denial.code }, { status: denial.status });
+  }
 
   const { id } = await params;
   if (!(await find(id, user.id))) return NextResponse.json({ error: "Not found" }, { status: 404 });

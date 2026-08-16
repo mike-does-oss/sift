@@ -17,6 +17,7 @@ export interface AppUser {
   encryptedAnthropicKey: string | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  subscriptionStatus: string | null;
 }
 
 export type AuthResult = { ok: true; user: AppUser } | { ok: false; response: Response };
@@ -32,6 +33,7 @@ const LOCAL_USER: AppUser = {
   encryptedAnthropicKey: null,
   stripeCustomerId: null,
   stripeSubscriptionId: null,
+  subscriptionStatus: null,
 };
 
 // The `users` table exists only in the pg schema, so this module talks to the
@@ -75,13 +77,24 @@ export async function requireUser(): Promise<AuthResult> {
       encryptedAnthropicKey: row.encryptedAnthropicKey,
       stripeCustomerId: row.stripeCustomerId,
       stripeSubscriptionId: row.stripeSubscriptionId,
+      subscriptionStatus: row.subscriptionStatus,
     },
   };
 }
 
 async function getOrCreateDbUser(authId: string, email: string): Promise<pgSchema.DbUser> {
   const existing = await pgDb().query.users.findFirst({ where: eq(users.authId, authId) });
-  if (existing) return existing;
+  if (existing) {
+    // Keep `users.email` in sync with the auth session on every hit — the
+    // row's email otherwise stays frozen at first provision, and billing
+    // (Stripe customer creation, receipts) needs the current address. Only
+    // a real, changed session email writes; never clobber with "".
+    if (email && existing.email !== email) {
+      const [updated] = await pgDb().update(users).set({ email }).where(eq(users.id, existing.id)).returning();
+      return updated ?? { ...existing, email };
+    }
+    return existing;
+  }
 
   const [created] = await pgDb()
     .insert(users)
@@ -91,4 +104,18 @@ async function getOrCreateDbUser(authId: string, email: string): Promise<pgSchem
   if (created) return created;
   // Lost the provisioning race — the winner's row is committed; re-read it.
   return (await pgDb().query.users.findFirst({ where: eq(users.authId, authId) }))!;
+}
+
+/**
+ * Hosted-only lookup of a `users` row by primary key — the billing/BYO-key
+ * seam for code paths that hold a userId but no session (the jobs worker's
+ * per-job key/model resolution, `resolveProvider`'s hosted branch). The
+ * `users` table only exists in the pg schema, so calling this on the local
+ * profile is a bug, not a fallback.
+ */
+export async function getDbUserById(id: string): Promise<pgSchema.DbUser | undefined> {
+  if (!isHosted()) {
+    throw new Error("getDbUserById is hosted-only (the local profile has no users table)");
+  }
+  return pgDb().query.users.findFirst({ where: eq(users.id, id) });
 }

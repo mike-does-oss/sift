@@ -3,6 +3,8 @@ import { and, eq, inArray, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { batches, documents, jobs } from "@/db/schema";
 import { requireUser } from "@/lib/user";
+import { byoKeyActive, batchGate, quotaGate } from "@/lib/gates";
+import { getMonthlyUsage } from "@/lib/usage";
 import { kickJobWorker } from "@/lib/jobs";
 import { validateExamples } from "@/lib/template-examples";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
@@ -35,6 +37,26 @@ export async function POST(req: NextRequest) {
   }
   if (!template?.fields?.length) {
     return NextResponse.json({ error: "template.fields required" }, { status: 400 });
+  }
+
+  // §SaaS-1 T5 hosted gates (all no-ops for the synthetic "local" plan):
+  // batch is a plan feature with a per-plan size cap, and a batch of N
+  // documents needs N extractions' worth of quota up front — unless the
+  // user's BYO key is active, which makes every job in the batch
+  // quota-exempt (frozen onto the rows below).
+  const featureDenial = batchGate(user.plan, documentIds.length);
+  if (featureDenial) {
+    return NextResponse.json(
+      { error: featureDenial.error, ...(featureDenial.code ? { code: featureDenial.code } : {}) },
+      { status: featureDenial.status },
+    );
+  }
+  const useByo = byoKeyActive(user);
+  if (!useByo) {
+    const denial = quotaGate(user.plan, await getMonthlyUsage(user.id), documentIds.length);
+    if (denial) {
+      return NextResponse.json({ error: denial.error, code: denial.code }, { status: denial.status });
+    }
   }
   // §T3: examples ride inside the client-supplied template snapshot — same
   // validation as the templates API, so a batch can't smuggle in a malformed
@@ -84,6 +106,7 @@ export async function POST(req: NextRequest) {
     templateSnapshot,
     source: "batch" as const,
     batchId: batch.id,
+    usedByoKey: useByo,
   })));
 
   // Local: in-process fire-and-forget; hosted: authorized fetch to the

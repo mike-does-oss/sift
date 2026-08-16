@@ -3,12 +3,19 @@ import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules, templates } from "@/db/schema";
 import { requireUser } from "@/lib/user";
+import { scheduleGate } from "@/lib/gates";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { user } = auth;
+
+  // §SaaS-1 T5: schedules are a plan feature (no-op for the "local" plan).
+  const denial = scheduleGate(user.plan);
+  if (denial) {
+    return NextResponse.json({ error: denial.error, code: denial.code }, { status: denial.status });
+  }
 
   let body: {
     name?: string;

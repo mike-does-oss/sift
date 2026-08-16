@@ -2,7 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs, documents, schedules, templates, batches } from "@/db/schema";
 import type { DbJob } from "@/db/schema";
-import { runExtraction } from "@/lib/extraction";
+import { runExtraction, type ExtractionOverride } from "@/lib/extraction";
 import { readDocument } from "@/lib/storage";
 import { parseDocument } from "@/lib/documents";
 import { isScheduleDue } from "@/lib/schedule";
@@ -33,8 +33,12 @@ export interface JobStore {
   countRemaining(): Promise<number>;
   incrementBatchCompleted(batchId: string): Promise<void>;
   incrementBatchFailed(batchId: string): Promise<void>;
-  /** Atomically claim a schedule's unprocessed inbox documents and insert their jobs; returns the number of jobs created. */
-  enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string): Promise<number>;
+  /**
+   * Atomically claim a schedule's unprocessed inbox documents and insert
+   * their jobs (stamped with `usedByoKey` — the owner's BYO decision frozen
+   * at enqueue, §T5); returns the number of jobs created.
+   */
+  enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean): Promise<number>;
   /** local-only: bracket an in-process run so the stale-reclaim arm can never re-claim a job this process is still running. */
   beginRun?(jobId: string): void;
   endRun?(jobId: string): void;
@@ -58,16 +62,22 @@ export async function getJobStore(): Promise<JobStore> {
 }
 
 /**
- * §SaaS-1 T5 SEAM — per-job BYO-key resolution. The worker processes ALL
- * users' jobs, so the decision is made from the JOB ROW (its `userId` /
- * `usedByoKey` frozen at enqueue), never from a session. T5 implements the
- * hosted branch (decrypt the owner's stored Anthropic key → opus,
- * quota-exempt); until then this returns undefined on both profiles and the
- * extraction runs on the tenant's configured/platform credentials.
+ * §SaaS-1 T5 — per-job BYO-key resolution. The worker processes ALL users'
+ * jobs, so the decision is made from the JOB ROW (its `userId` / `usedByoKey`
+ * frozen at enqueue), never from a session. Donor semantics (extracto
+ * jobs.ts): a job runs on the owner's key iff the row was stamped
+ * `usedByoKey` AND the owner still has a stored key — a key deleted after
+ * enqueue quietly falls back to platform credentials (the job stays
+ * quota-exempt either way; the stamp is what metering reads). Local profile:
+ * always undefined — there is no key vault and no `users` table.
  */
 export async function resolveJobApiKey(job: Pick<DbJob, "id" | "userId" | "usedByoKey">): Promise<string | undefined> {
-  void job; // T5 reads job.usedByoKey + job.userId here
-  return undefined;
+  if (!isHosted() || !job.usedByoKey) return undefined;
+  const { getDbUserById } = await import("@/lib/user");
+  const owner = await getDbUserById(job.userId);
+  if (!owner?.encryptedAnthropicKey) return undefined;
+  const { decryptSecret } = await import("@/lib/crypto");
+  return decryptSecret(owner.encryptedAnthropicKey);
 }
 
 async function runOne(store: JobStore, jobId: string): Promise<void> {
@@ -91,11 +101,24 @@ async function runOneInner(store: JobStore, jobId: string): Promise<void> {
       where: and(eq(documents.id, job.documentId), eq(documents.userId, job.userId)),
     });
     if (!doc) throw new Error("Document not found");
+    // §T5 hosted model/key resolution: pin the job's frozen decision as a
+    // trusted internal override (the `apiKey`-carrying form resolveProvider's
+    // hosted branch honors verbatim). BYO → opus on the owner's decrypted
+    // key; otherwise the owner's CURRENT plan model on the platform key
+    // (donor semantics — plan changes retier queued jobs, the BYO stamp
+    // doesn't unfreeze). Local profile: no override, behavior unchanged.
     const byoKey = await resolveJobApiKey(job);
-    if (byoKey !== undefined) {
-      // Unreachable until §SaaS-1 T5 wires BYO keys end-to-end; failing
-      // loudly beats silently billing a BYO job to platform credentials.
-      throw new Error("BYO-key extraction is not wired yet (SaaS-1 T5)");
+    let override: ExtractionOverride | undefined;
+    if (isHosted()) {
+      const { PLANS, BYO_KEY_MODEL } = await import("@/lib/plans");
+      if (byoKey !== undefined) {
+        override = { provider: "anthropic", model: BYO_KEY_MODEL, apiKey: byoKey };
+      } else {
+        const { getDbUserById } = await import("@/lib/user");
+        const owner = await getDbUserById(job.userId);
+        if (!owner) throw new Error("Job owner not found");
+        override = { provider: "anthropic", model: PLANS[owner.plan].model, apiKey: process.env.ANTHROPIC_API_KEY };
+      }
     }
     const buf = await readDocument(doc.filePath);
     const source = await parseDocument(buf, doc.filename);
@@ -104,7 +127,7 @@ async function runOneInner(store: JobStore, jobId: string): Promise<void> {
       source, filename: doc.filename,
       fields: snap.fields, prompt: snap.prompt, extractMultiple: snap.extractMultiple,
       examples: snap.examples,
-    }, undefined, job.userId);
+    }, override, job.userId);
     if (!result.success) throw Object.assign(new Error(result.error), { provider: result.provider, model: result.model });
     await db.update(jobs).set({
       status: "completed", result: result.data, error: null, completedAt: new Date(),
@@ -251,11 +274,30 @@ async function enqueueInbox(scheduleId: string): Promise<number> {
     extractMultiple: template.extractMultiple,
     examples: (template.examples as TemplateExample[] | null) ?? undefined,
   };
+  // §T5: freeze the owner's BYO decision onto the new job rows (a stored key
+  // on a BYO-eligible plan ⇒ quota-exempt, opus). Local: always false.
+  const usedByoKey = isHosted() ? await ownerUsesByoKey(schedule.userId) : false;
   const runId = crypto.randomUUID();
   const store = await getJobStore();
   // Atomicity lives in the store: sqlite transaction locally, a single
   // claim-and-insert CTE statement on pg (neon-http has no interactive tx).
-  return store.enqueueInbox(schedule, snapshot, runId);
+  return store.enqueueInbox(schedule, snapshot, runId, usedByoKey);
+}
+
+/** Hosted-only: whether new extractions for this owner run on their BYO key right now (`byoKeyActive` over the pg users row). */
+async function ownerUsesByoKey(userId: string): Promise<boolean> {
+  const { getDbUserById } = await import("@/lib/user");
+  const { byoKeyActive } = await import("@/lib/gates");
+  const owner = await getDbUserById(userId);
+  return owner ? byoKeyActive(owner) : false;
+}
+
+/** Hosted-only: whether the schedule owner's plan still includes schedules. */
+async function ownerHasSchedules(userId: string): Promise<boolean> {
+  const { getDbUserById } = await import("@/lib/user");
+  const { PLANS } = await import("@/lib/plans");
+  const owner = await getDbUserById(userId);
+  return Boolean(owner && PLANS[owner.plan].schedules);
 }
 
 export async function runDueSchedules(now = new Date()): Promise<{ schedulesChecked: number; jobsCreated: number }> {
@@ -264,6 +306,11 @@ export async function runDueSchedules(now = new Date()): Promise<{ schedulesChec
   for (const s of active) {
     try {
       if (!isScheduleDue(s, now)) continue;
+      // §T5 hosted downgrade-skip (donor semantics): a schedule whose owner's
+      // plan no longer includes schedules is silently skipped — it stays
+      // `active` and resumes on re-upgrade. `lastRunAt` is NOT advanced, so
+      // the cron re-checks (cheaply) every tick. Local: no plans, no skip.
+      if (isHosted() && !(await ownerHasSchedules(s.userId))) continue;
       jobsCreated += await enqueueInbox(s.id);
       await db.update(schedules).set({ lastRunAt: now }).where(eq(schedules.id, s.id));
     } catch (err) {

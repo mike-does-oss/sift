@@ -96,6 +96,10 @@ export const localStore: JobStore = {
     sqlite.prepare(`UPDATE jobs SET result = NULL WHERE run_id = ? AND status = 'completed'`).run(runId);
   },
 
+  // The interface's `usedByoKey` (§T5) is a hosted-billing concept: core
+  // always passes false on the local profile, which is exactly the sqlite
+  // column's default — the historical INSERT below stays byte-identical, and
+  // the param is simply not bound here.
   async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string) {
     // Atomic claim: transaction over sync driver
     const tx = sqlite.transaction(() => {
