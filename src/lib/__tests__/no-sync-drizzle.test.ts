@@ -9,14 +9,15 @@ import path from "path";
  * (the shared type anchor is the sqlite database type) but crash at runtime
  * on pg. All app code must stick to the dialect-shared async surface.
  *
- * Allowed exceptions: `src/db/` internals, `src/lib/jobs.ts` (raw-sqlite job
- * store — split into per-dialect stores in T3), and tests.
+ * Allowed exceptions: `src/db/` internals, `src/lib/jobs/store.local.ts`
+ * (the raw-sqlite local-profile job store — never loaded on hosted), and
+ * tests.
  */
 
 const SRC = path.resolve(__dirname, "../..");
 
 const EXCLUDED_DIRS = new Set(["__tests__"]);
-const EXCLUDED_PATHS = [path.join(SRC, "db") + path.sep, path.join(SRC, "lib", "jobs.ts")];
+const EXCLUDED_PATHS = [path.join(SRC, "db") + path.sep, path.join(SRC, "lib", "jobs", "store.local.ts")];
 
 function collectTsFiles(dir: string): string[] {
   const out: string[] = [];

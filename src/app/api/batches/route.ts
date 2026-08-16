@@ -3,7 +3,7 @@ import { and, eq, inArray, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { batches, documents, jobs } from "@/db/schema";
 import { requireUser } from "@/lib/user";
-import { processPendingJobs } from "@/lib/jobs";
+import { kickJobWorker } from "@/lib/jobs";
 import { validateExamples } from "@/lib/template-examples";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
     batchId: batch.id,
   })));
 
-  void processPendingJobs(240_000);
+  // Local: in-process fire-and-forget; hosted: authorized fetch to the
+  // worker route (a bare void promise dies with the serverless invocation).
+  kickJobWorker(req.nextUrl.origin);
 
   return NextResponse.json({ batchId: batch.id });
 }

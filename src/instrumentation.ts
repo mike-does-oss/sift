@@ -1,9 +1,11 @@
+import { isHosted } from "./lib/profile";
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  // Local-only: the in-process tick (and the raw-sqlite job store behind it)
-  // has no hosted analogue — hosted runs the worker via cron routes
-  // (§SaaS-1 T3). Importing ./lib/jobs on hosted would throw (getSqlite()).
-  if (process.env.SIFT_PROFILE === "hosted") return;
+  // Local-only: the in-process tick has no hosted analogue — hosted has no
+  // long-lived process, so cron routes (/api/jobs/process, /api/schedules/run)
+  // drive the worker there instead (§SaaS-1 T3).
+  if (isHosted()) return;
   const { runDueSchedules, processPendingJobs } = await import("./lib/jobs");
   let running = false;
   setInterval(async () => {

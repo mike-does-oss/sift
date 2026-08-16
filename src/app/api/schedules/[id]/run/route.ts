@@ -3,9 +3,9 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules } from "@/db/schema";
 import { requireUser } from "@/lib/user";
-import { enqueueScheduleNow, processPendingJobs } from "@/lib/jobs";
+import { enqueueScheduleNow, kickJobWorker } from "@/lib/jobs";
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { user } = auth;
@@ -19,7 +19,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!schedule) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const jobsCreated = await enqueueScheduleNow(id);
-  void processPendingJobs(240_000);
+  // Local: in-process fire-and-forget; hosted: authorized fetch to the
+  // worker route (a bare void promise dies with the serverless invocation).
+  kickJobWorker(req.nextUrl.origin);
 
   return NextResponse.json({ jobsCreated });
 }
