@@ -47,11 +47,21 @@ export function claimSql(): SQL {
  * owner's BYO decision onto every row of the run (§T5 — computed once by
  * core.enqueueInbox from the owner's user row). Exported for SQL-shape tests.
  */
-export function enqueueInboxSql(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean): SQL {
+export function enqueueInboxSql(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean, quotaLimit: number | null): SQL {
+  // §T8 quota gate: the claim runs through an id-subquery so it can carry a
+  // LIMIT (Postgres UPDATE has no LIMIT of its own). The outer WHERE re-checks
+  // `processed_at IS NULL` so a concurrent enqueue that raced the subquery
+  // claims nothing twice. Oldest docs first, so a capped run drains the inbox
+  // in upload order.
+  const cap = quotaLimit === null ? sql`` : sql` LIMIT ${quotaLimit}`;
   return sql`
     WITH claimed AS (
       UPDATE documents SET processed_at = now()
-      WHERE schedule_id = ${schedule.id} AND processed_at IS NULL AND user_id = ${schedule.userId}
+      WHERE processed_at IS NULL AND id IN (
+        SELECT id FROM documents
+        WHERE schedule_id = ${schedule.id} AND processed_at IS NULL AND user_id = ${schedule.userId}
+        ORDER BY created_at${cap}
+      )
       RETURNING id
     )
     INSERT INTO jobs (id, user_id, document_id, template_snapshot, source, schedule_id, run_id, status, attempts, created_at, used_byo_key)
@@ -109,8 +119,8 @@ export const pgStore: JobStore = {
     }
   },
 
-  async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean) {
-    const res = await pgDb().execute(enqueueInboxSql(schedule, snapshot, runId, usedByoKey));
+  async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean, quotaLimit: number | null) {
+    const res = await pgDb().execute(enqueueInboxSql(schedule, snapshot, runId, usedByoKey, quotaLimit));
     return res.rows.length;
   },
 };

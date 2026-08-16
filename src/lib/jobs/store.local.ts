@@ -100,6 +100,8 @@ export const localStore: JobStore = {
   // always passes false on the local profile, which is exactly the sqlite
   // column's default — the historical INSERT below stays byte-identical, and
   // the param is simply not bound here.
+  // quotaLimit is intentionally unbound here: the local profile has no plans
+  // or quotas (core always passes null off-hosted).
   async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string) {
     // Atomic claim: transaction over sync driver
     const tx = sqlite.transaction(() => {

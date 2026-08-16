@@ -48,7 +48,7 @@ describe("pg inbox claim-and-enqueue CTE", () => {
 
   it("claims documents and inserts jobs in ONE statement with explicit ids and timestamps", async () => {
     const { enqueueInboxSql } = await import("../store.pg");
-    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false));
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false, null));
     expect(q.sql).toContain("WITH claimed AS");
     expect(q.sql).toContain("UPDATE documents SET processed_at = now()");
     expect(q.sql).toMatch(/WHERE schedule_id = \$\d+ AND processed_at IS NULL AND user_id = \$\d+/);
@@ -65,7 +65,7 @@ describe("pg inbox claim-and-enqueue CTE", () => {
 
   it("threads the schedule owner's user_id into both the claim and the inserted rows, and passes the snapshot as an object with a ::jsonb cast", async () => {
     const { enqueueInboxSql } = await import("../store.pg");
-    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false));
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false, null));
     // claim filter + inserted rows: two occurrences of the owner id.
     expect(q.params.filter((p) => p === "user-1")).toHaveLength(2);
     expect(q.sql).toMatch(/\$\d+::jsonb/);
@@ -76,8 +76,23 @@ describe("pg inbox claim-and-enqueue CTE", () => {
 
   it("freezes the owner's BYO decision onto every inserted row (§T5)", async () => {
     const { enqueueInboxSql } = await import("../store.pg");
-    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", true));
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", true, null));
     expect(q.sql).toContain("used_byo_key");
     expect(q.params[q.params.length - 1]).toBe(true);
+  });
+
+  it("§T8 quota cap: a numeric quotaLimit becomes a bound LIMIT on an ordered id-subquery, with a raced-claim recheck", async () => {
+    const { enqueueInboxSql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", false, 7));
+    expect(q.sql).toMatch(/ORDER BY created_at LIMIT \$\d+/);
+    expect(q.params).toContain(7);
+    // Outer recheck so two concurrent enqueues can't claim the same doc twice.
+    expect(q.sql).toMatch(/UPDATE documents SET processed_at = now\(\)\s+WHERE processed_at IS NULL AND id IN/);
+  });
+
+  it("§T8 quota cap: null quotaLimit emits no LIMIT (BYO owners / local are uncapped)", async () => {
+    const { enqueueInboxSql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(enqueueInboxSql(schedule, snapshot, "run-1", true, null));
+    expect(q.sql).not.toContain("LIMIT");
   });
 });

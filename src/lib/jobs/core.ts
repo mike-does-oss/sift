@@ -36,9 +36,11 @@ export interface JobStore {
   /**
    * Atomically claim a schedule's unprocessed inbox documents and insert
    * their jobs (stamped with `usedByoKey` — the owner's BYO decision frozen
-   * at enqueue, §T5); returns the number of jobs created.
+   * at enqueue, §T5); returns the number of jobs created. `quotaLimit` caps
+   * how many docs may be claimed this call (§T8 quota gate; null = no cap —
+   * BYO owners and the local profile).
    */
-  enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean): Promise<number>;
+  enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean, quotaLimit: number | null): Promise<number>;
   /** local-only: bracket an in-process run so the stale-reclaim arm can never re-claim a job this process is still running. */
   beginRun?(jobId: string): void;
   endRun?(jobId: string): void;
@@ -286,20 +288,31 @@ async function enqueueInbox(scheduleId: string): Promise<number> {
   };
   // §T5: freeze the owner's BYO decision onto the new job rows (a stored key
   // on a BYO-eligible plan ⇒ quota-exempt, opus). Local: always false.
-  const usedByoKey = isHosted() ? await ownerUsesByoKey(schedule.userId) : false;
+  // §T8 final-review fix: schedule enqueue takes the quota gate too — these
+  // jobs are metered, so without a cap an inbox could enqueue arbitrarily far
+  // past the monthly quota on the platform key. Non-BYO owners get at most
+  // `remainingQuota` jobs per enqueue; excess inbox docs simply stay
+  // unprocessed (not failed) and are picked up after an upgrade/next month.
+  let usedByoKey = false;
+  let quotaLimit: number | null = null;
+  if (isHosted()) {
+    const { getDbUserById } = await import("@/lib/user");
+    const { byoKeyActive } = await import("@/lib/gates");
+    const owner = await getDbUserById(schedule.userId);
+    if (!owner) return 0;
+    usedByoKey = byoKeyActive(owner);
+    if (!usedByoKey) {
+      const { remainingQuota } = await import("@/lib/plans");
+      const { getMonthlyUsage } = await import("@/lib/usage");
+      quotaLimit = remainingQuota(owner.plan, await getMonthlyUsage(schedule.userId));
+      if (quotaLimit <= 0) return 0;
+    }
+  }
   const runId = crypto.randomUUID();
   const store = await getJobStore();
   // Atomicity lives in the store: sqlite transaction locally, a single
   // claim-and-insert CTE statement on pg (neon-http has no interactive tx).
-  return store.enqueueInbox(schedule, snapshot, runId, usedByoKey);
-}
-
-/** Hosted-only: whether new extractions for this owner run on their BYO key right now (`byoKeyActive` over the pg users row). */
-async function ownerUsesByoKey(userId: string): Promise<boolean> {
-  const { getDbUserById } = await import("@/lib/user");
-  const { byoKeyActive } = await import("@/lib/gates");
-  const owner = await getDbUserById(userId);
-  return owner ? byoKeyActive(owner) : false;
+  return store.enqueueInbox(schedule, snapshot, runId, usedByoKey, quotaLimit);
 }
 
 /** Hosted-only: whether the schedule owner's plan still includes schedules. */
