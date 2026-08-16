@@ -66,16 +66,20 @@ export async function getJobStore(): Promise<JobStore> {
  * jobs, so the decision is made from the JOB ROW (its `userId` / `usedByoKey`
  * frozen at enqueue), never from a session. Donor semantics (extracto
  * jobs.ts): a job runs on the owner's key iff the row was stamped
- * `usedByoKey` AND the owner still has a stored key — a key deleted after
- * enqueue quietly falls back to platform credentials (the job stays
- * quota-exempt either way; the stamp is what metering reads). Local profile:
- * always undefined — there is no key vault and no `users` table.
+ * `usedByoKey` AND the owner still has a stored key. Unlike the donor, a key
+ * deleted after enqueue does NOT fall back to platform credentials — the row
+ * is quota-exempt (`usedByoKey` is what metering reads), so a fallback would
+ * burn unmetered platform credits; this fn throws instead and the worker
+ * records a terminal failure. Local
+ * profile: always undefined — there is no key vault and no `users` table.
  */
 export async function resolveJobApiKey(job: Pick<DbJob, "id" | "userId" | "usedByoKey">): Promise<string | undefined> {
   if (!isHosted() || !job.usedByoKey) return undefined;
   const { getDbUserById } = await import("@/lib/user");
   const owner = await getDbUserById(job.userId);
-  if (!owner?.encryptedAnthropicKey) return undefined;
+  if (!owner?.encryptedAnthropicKey) {
+    throw new Error("BYO key was removed before this job ran");
+  }
   const { decryptSecret } = await import("@/lib/crypto");
   return decryptSecret(owner.encryptedAnthropicKey);
 }
@@ -114,6 +118,9 @@ async function runOneInner(store: JobStore, jobId: string): Promise<void> {
       if (byoKey !== undefined) {
         override = { provider: "anthropic", model: BYO_KEY_MODEL, apiKey: byoKey };
       } else {
+        // Only non-BYO-stamped jobs reach here: a stamped job with a missing
+        // key throws in resolveJobApiKey (quota-exempt row on the platform
+        // key would be unmetered spend), which fails the job terminally.
         const { getDbUserById } = await import("@/lib/user");
         const owner = await getDbUserById(job.userId);
         if (!owner) throw new Error("Job owner not found");
@@ -137,7 +144,10 @@ async function runOneInner(store: JobStore, jobId: string): Promise<void> {
     await writeOutputsIfDone(store, job);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    const terminal = (job.attempts >= MAX_ATTEMPTS) || message.includes("declined to process");
+    const terminal = (job.attempts >= MAX_ATTEMPTS)
+      || message.includes("declined to process")
+      // Retrying can't bring a removed BYO key back — don't spin the attempts.
+      || message.includes("BYO key was removed");
     try {
       await db.update(jobs).set({
         status: "failed", error: message, completedAt: terminal ? new Date() : null,

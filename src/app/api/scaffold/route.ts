@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/user";
 import { scaffoldSchema, validateScaffoldDescription } from "@/lib/extraction/scaffold";
 import { isProviderId } from "@/lib/api";
+import { byoKeyActive, quotaGate } from "@/lib/gates";
+import { getMonthlyUsage } from "@/lib/usage";
 import type { ExtractionOverride } from "@/lib/extraction/provider-resolution";
 
 export async function POST(req: NextRequest) {
@@ -32,6 +34,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Unknown provider "${String(providerField)}"` }, { status: 400 });
     }
     override = { provider: providerField, model: typeof modelField === "string" && modelField ? modelField : undefined };
+  }
+
+  // §SaaS-1 hosted gates (T5 reviewer finding): scaffolding is a real LLM
+  // call on the platform key, so it takes the same quota gate as /api/extract
+  // — otherwise a free tenant gets unlimited unmetered platform calls. It
+  // gates only (never counts toward usage: no job row). BYO users are exempt,
+  // and their scaffold runs on their own key via the hosted resolution path.
+  // The synthetic "local" plan bypasses everything, and on hosted the
+  // provider/model pair is a billing decision, so the override is discarded.
+  if (user.plan !== "local") {
+    override = undefined;
+    if (!byoKeyActive(user)) {
+      const denial = quotaGate(user.plan, await getMonthlyUsage(user.id), 1);
+      if (denial) {
+        return NextResponse.json({ error: denial.error, code: denial.code }, { status: denial.status });
+      }
+    }
   }
 
   const result = await scaffoldSchema(validated.description, override, user.id);

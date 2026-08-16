@@ -36,12 +36,23 @@ describe("resolveJobApiKey", () => {
     expect(getDbUserById).toHaveBeenCalledWith("user-1");
   });
 
-  it("hosted + stamped BYO but the owner deleted their key → undefined (platform fallback)", async () => {
+  it("hosted + stamped BYO but the owner deleted their key → THROWS (never a platform fallback: the row is quota-exempt, so falling back would be unmetered platform spend)", async () => {
     vi.stubEnv("SIFT_PROFILE", "hosted");
     vi.stubEnv("DATABASE_URL", "");
     getDbUserById.mockResolvedValue({ plan: "starter", encryptedAnthropicKey: null });
     const { resolveJobApiKey } = await import("../core");
-    expect(await resolveJobApiKey(job(true))).toBeUndefined();
+    await expect(resolveJobApiKey(job(true))).rejects.toThrow("BYO key was removed before this job ran");
+  });
+
+  it("the removed-key failure is terminal (no pointless retries)", async () => {
+    // The worker marks a failure terminal when the message matches the
+    // removed-key error — pin that the two strings stay in sync.
+    vi.stubEnv("SIFT_PROFILE", "hosted");
+    vi.stubEnv("DATABASE_URL", "");
+    getDbUserById.mockResolvedValue({ plan: "starter", encryptedAnthropicKey: null });
+    const core = await import("../core");
+    const message = await core.resolveJobApiKey(job(true)).then(() => "", (e: Error) => e.message);
+    expect(message).toContain("BYO key was removed");
   });
 
   it("hosted + NOT stamped BYO → undefined without even looking up the owner (the stamp is frozen)", async () => {
