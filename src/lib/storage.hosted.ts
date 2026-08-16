@@ -46,7 +46,8 @@ export async function readDocumentHosted(filePath: string): Promise<Buffer> {
   if (url.protocol !== "https:" || !url.hostname.endsWith(BLOB_HOST_SUFFIX)) {
     throw new Error("Invalid document URL: untrusted host");
   }
-  const res = await fetch(url);
+  // No redirects: the allowlist check above must be the final word on where bytes come from.
+  const res = await fetch(url, { redirect: "error" });
   if (!res.ok) throw new Error(`Failed to fetch document from blob storage (status ${res.status})`);
   return Buffer.from(await res.arrayBuffer());
 }

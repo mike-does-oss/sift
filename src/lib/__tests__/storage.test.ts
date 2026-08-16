@@ -113,6 +113,9 @@ describe("hosted profile", () => {
     for (const bad of [
       "https://evil.com/doc.pdf",
       "https://vercel-storage.com.evil.com/doc.pdf", // suffix spoof
+      // Real blob host as a *prefix* of an attacker domain — pins that the
+      // check anchors at the END of the hostname (an includes() would pass this).
+      "https://abc.public.blob.vercel-storage.com.evil.com/doc.pdf",
       "https://foovercel-storage.com/doc.pdf", // missing dot boundary
       "http://abc.public.blob.vercel-storage.com/doc.pdf", // not https
       "files/abc.pdf", // local-style relative path in a hosted row
