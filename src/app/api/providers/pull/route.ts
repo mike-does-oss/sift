@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/user";
 import { getSettings } from "@/lib/settings";
+import { isHosted } from "@/lib/profile";
 import { proxyOllamaPull, validateModelName } from "@/lib/ollama-pull";
 
 // Streams a real download for a while on a slow connection — Node runtime
@@ -9,6 +10,11 @@ import { proxyOllamaPull, validateModelName } from "@/lib/ollama-pull";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // Hosted (§SaaS-1 T6, decision 8): there is no Ollama, and proxying a pull
+  // to a tenant-supplied `ollamaBaseUrl` would be an SSRF hole — the route
+  // doesn't exist on the hosted profile.
+  if (isHosted()) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { user } = auth;

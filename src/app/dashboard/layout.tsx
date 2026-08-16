@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { ProfileProvider } from "@/components/ProfileContext";
 import { isHosted } from "@/lib/profile";
 
 // Hosted: this layout reads the session cookie (`getSession()`), so it must
@@ -14,17 +15,20 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // request carries a valid session. The session is fetched here only to put
   // the signed-in email in the Sidebar's account block. Local profile: no
   // auth exists; `null` hides the account block entirely.
+  const hosted = isHosted();
   let accountEmail: string | null = null;
-  if (isHosted()) {
+  if (hosted) {
     const { getAuth } = await import("@/lib/auth/server");
     const { data: session } = await getAuth().getSession();
     accountEmail = session?.user.email ?? "";
   }
 
   return (
-    <div className="flex min-h-screen bg-[var(--surface-base)] grain-overlay">
-      <Sidebar accountEmail={accountEmail} />
-      <main className="flex-1 min-w-0">{children}</main>
-    </div>
+    <ProfileProvider hosted={hosted}>
+      <div className="flex min-h-screen bg-[var(--surface-base)] grain-overlay">
+        <Sidebar accountEmail={accountEmail} />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+    </ProfileProvider>
   );
 }

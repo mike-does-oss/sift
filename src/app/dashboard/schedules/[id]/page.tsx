@@ -8,6 +8,7 @@ import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Play, Setting
 import { uploadDocument } from "@/lib/upload-client";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
 import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
+import { useHosted } from "@/components/ProfileContext";
 
 interface Schedule {
   id: string;
@@ -89,6 +90,10 @@ function groupByRun(jobs: JobRow[]): { key: string; label: string; rows: JobRow[
 }
 
 export default function ScheduleDetailPage() {
+  // §SaaS-1 T6: output folders are a local-filesystem feature — the whole
+  // OUTPUT card (view + edit) is hidden on hosted (the server also rejects
+  // any outputDir there). Local rendering is unchanged.
+  const hosted = useHosted();
   const { id } = useParams<{ id: string }>();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
@@ -315,6 +320,7 @@ export default function ScheduleDetailPage() {
       )}
       {runError && <p className="text-sm text-[var(--error)]">{runError}</p>}
 
+      {!hosted && (
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
@@ -369,6 +375,7 @@ export default function ScheduleDetailPage() {
           </p>
         )}
       </section>
+      )}
 
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">

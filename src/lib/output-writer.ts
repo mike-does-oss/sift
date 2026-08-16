@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "fs";
 import os from "os";
 import path from "path";
 import { toCsv } from "@/lib/export";
+import { isHosted } from "@/lib/profile";
 
 /**
  * Expands a leading `~` (home dir) and requires the result to be an absolute
@@ -73,6 +74,10 @@ export function parseOutputDirInput(raw: unknown): { value: string | null } | { 
   if (raw === undefined || raw === null) return { value: null };
   if (typeof raw !== "string") return { error: "outputDir must be a string." };
   if (raw.trim() === "") return { value: null };
+  // Hosted (§SaaS-1 T6, decision 10): there is no server filesystem to write
+  // to — a non-empty output folder is rejected outright (the hosted forms
+  // hide the OUTPUT section, so only a hand-crafted request lands here).
+  if (isHosted()) return { error: "Output folders aren't available on the hosted service." };
   try {
     return { value: resolveOutputDir(raw) };
   } catch (err) {

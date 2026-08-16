@@ -92,18 +92,24 @@ export async function resolveProvider(override?: ExtractionOverride, userId?: st
 }
 
 /**
- * Hosted resolution (§SaaS-1 T5, donor: extracto-app semantics):
+ * Hosted resolution (§SaaS-1 T5/T6, donor: extracto-app semantics):
  *
  * - A trusted internal override (carries `apiKey` — only the jobs worker
  *   builds these) is honored verbatim: the worker pins each job's frozen
  *   `usedByoKey` decision (BYO → opus on the owner's key, else the owner's
  *   plan model on the platform key) at claim time.
  * - Any other override is untrusted request input: non-"anthropic" providers
- *   are refused outright and `model` is ignored — the model tier comes from
- *   the plan, and BYO always means `BYO_KEY_MODEL`.
+ *   are refused outright and `model` is ignored — the only models a request
+ *   can ever run on hosted are `PLANS[plan].model` and (BYO) `BYO_KEY_MODEL`,
+ *   so an arbitrary string like "gpt-4o" never reaches an engine.
+ * - Tenant `settings` rows are NEVER read here (§T6 SSRF closure): this
+ *   branch returns before `getSettings`, so `settings.provider`,
+ *   `ollamaBaseUrl`, and `compatBaseUrl` are unreachable on hosted.
  * - Default: load the user's row — a stored key on a BYO-eligible plan runs
  *   opus on that key (quota-exempt, stamped at enqueue); otherwise the plan's
- *   model on the platform `ANTHROPIC_API_KEY`.
+ *   model on the platform key, passed EXPLICITLY. A missing platform
+ *   `ANTHROPIC_API_KEY` throws a config error (fail loud) rather than
+ *   resolving keyless and leaving room for an SDK env fallback.
  */
 async function resolveHostedProvider(override?: ExtractionOverride, userId?: string): Promise<ProviderResolution> {
   if (override?.apiKey !== undefined && override.provider === "anthropic" && override.model) {
@@ -129,7 +135,9 @@ async function resolveHostedProvider(override?: ExtractionOverride, userId?: str
   }
   const platformKey = process.env.ANTHROPIC_API_KEY;
   if (!platformKey) {
-    return { ok: false, provider: "anthropic", model: plan.model, error: "Extraction service is not configured — missing platform API key." };
+    // Deployment misconfiguration, not a user error: throw (fail loud) so no
+    // caller can degrade into an un-metered or env-fallback extraction path.
+    throw new Error("Hosted extraction is not configured: the platform ANTHROPIC_API_KEY is missing.");
   }
   return { ok: true, provider: "anthropic", model: plan.model, apiKey: platformKey };
 }

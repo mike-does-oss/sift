@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Trash2 } from "lucide-react";
 import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
+import { LockedFeature } from "@/components/dashboard/LockedFeature";
+import { useHosted } from "@/components/ProfileContext";
+import { PLANS, type Plan } from "@/lib/plans";
 
 interface Template {
   id: string;
@@ -31,9 +34,15 @@ function describeCadence(s: Schedule): string {
 }
 
 export default function SchedulesPage() {
+  // §SaaS-1 T6 hosted gating: schedules are a plan feature
+  // (PLANS[plan].schedules — Business). The server's scheduleGate (403
+  // UPGRADE_REQUIRED) stays the real enforcement; this is the friendly face.
+  // Local profile: `hosted` is false and none of this renders or fetches.
+  const hosted = useHosted();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [locked, setLocked] = useState(false);
 
   const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState("");
@@ -51,18 +60,25 @@ export default function SchedulesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [templatesRes, schedulesRes] = await Promise.all([
+      const [templatesRes, schedulesRes, usageRes] = await Promise.all([
         fetch("/api/templates"),
         fetch("/api/schedules"),
+        hosted ? fetch("/api/usage") : Promise.resolve(null),
       ]);
       if (templatesRes.ok) setTemplates((await templatesRes.json()).templates ?? []);
       if (schedulesRes.ok) setSchedules((await schedulesRes.json()).schedules ?? []);
+      if (usageRes?.ok) {
+        const usage = await usageRes.json();
+        if (!usage.unlimited && usage.plan) {
+          setLocked(!PLANS[usage.plan as Plan].schedules);
+        }
+      }
     } catch {
       // transient network failure — the page renders with whatever loaded
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [hosted]);
 
   useEffect(() => {
     (async () => {
@@ -93,13 +109,22 @@ export default function SchedulesPage() {
           cadence,
           hourUtc,
           dayOfWeek: cadence === "weekly" ? dayOfWeek : undefined,
-          outputDir: output.outputDir.trim() || undefined,
-          outputFormat: output.outputFormat,
-          keepResults: output.keepResults,
+          // Output folders are a local-filesystem feature; the hosted form
+          // hides the section and sends nothing (the server rejects any
+          // outputDir on hosted regardless).
+          ...(hosted
+            ? {}
+            : {
+                outputDir: output.outputDir.trim() || undefined,
+                outputFormat: output.outputFormat,
+                keepResults: output.keepResults,
+              }),
         }),
       });
       const data = await response.json();
       if (!response.ok) {
+        // Plan downgrades land server-side first — flip to the locked card.
+        if (data.code === "UPGRADE_REQUIRED") setLocked(true);
         setError(data.error || "Failed to create schedule");
         return;
       }
@@ -144,6 +169,13 @@ export default function SchedulesPage() {
         </p>
       </div>
 
+      {locked ? (
+        <LockedFeature
+          title="Schedules are a Business feature"
+          description="Drop documents into an inbox and have them extracted automatically on a daily or weekly cadence. Available on the Business plan."
+          requiredPlan={PLANS.business.name}
+        />
+      ) : (
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
           New schedule
@@ -230,7 +262,7 @@ export default function SchedulesPage() {
           )}
         </div>
 
-        <OutputSettingsFields value={output} onChange={setOutput} />
+        {!hosted && <OutputSettingsFields value={output} onChange={setOutput} />}
 
         {error && <p className="text-sm text-[var(--error)]">{error}</p>}
 
@@ -242,6 +274,7 @@ export default function SchedulesPage() {
           {isSubmitting ? "Creating…" : "Create schedule"}
         </button>
       </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">

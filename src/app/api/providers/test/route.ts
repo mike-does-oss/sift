@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { requireUser } from "@/lib/user";
 import { getSettings } from "@/lib/settings";
+import { isHosted } from "@/lib/profile";
 import { PROVIDER_IDS, isProviderId, type ProviderId } from "@/lib/api";
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
@@ -105,6 +106,24 @@ export async function POST(req: NextRequest) {
 
   if (!isProvider(body.provider)) {
     return NextResponse.json({ error: `Unknown provider: "${body.provider}". Must be one of ${PROVIDER_IDS.join(", ")}.` }, { status: 400 });
+  }
+
+  // Hosted (§SaaS-1 T6, decision 8): anthropic is the only testable provider,
+  // and the only key it can test is the user's stored BYO key — never the
+  // settings table (whose base URLs are tenant-supplied and would make this
+  // route an SSRF proxy) and never the platform key (its health is not a
+  // tenant concern). Returns before any settings read.
+  if (isHosted()) {
+    if (body.provider !== "anthropic") {
+      return NextResponse.json({ error: "Only the Claude engine is available on the hosted service." }, { status: 400 });
+    }
+    if (!user.encryptedAnthropicKey) {
+      return NextResponse.json({ error: "No bring-your-own key stored — add one in Settings." }, { status: 400 });
+    }
+    const { decryptSecret } = await import("@/lib/crypto");
+    const { BYO_KEY_MODEL } = await import("@/lib/plans");
+    const result = await testAnthropic(decryptSecret(user.encryptedAnthropicKey), BYO_KEY_MODEL);
+    return NextResponse.json(result);
   }
 
   const settings = await getSettings(user.id);

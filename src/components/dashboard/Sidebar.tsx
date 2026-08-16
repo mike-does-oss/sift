@@ -35,6 +35,29 @@ const THEME_STORAGE_KEY = "sift-theme";
 export function Sidebar({ accountEmail = null }: { accountEmail?: string | null }) {
   const pathname = usePathname();
   const [darkMode, setDarkMode] = useState(false);
+  // Hosted-only usage mini-bar (§SaaS-1 T6): monthly used/limit under the
+  // account block, linking to Settings for the full plan card. Local profile
+  // (`accountEmail === null`) never fetches — the sidebar stays byte-identical.
+  const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
+
+  useEffect(() => {
+    if (accountEmail === null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/usage");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || data.unlimited || typeof data.used !== "number") return;
+        setUsage({ used: data.used, limit: data.limit });
+      } catch {
+        // convenience readout — the settings page has the authoritative meter
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountEmail, pathname]);
 
   useEffect(() => {
     // One-time sync from browser storage/media-query (external systems) on mount,
@@ -137,6 +160,30 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
             </button>
           </div>
         </div>
+
+        {usage && (
+          <Link
+            href="/dashboard/settings"
+            className="block px-2 pt-2 pb-1 group"
+            title="Monthly extractions — manage your plan in Settings"
+          >
+            <div className="h-1.5 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+              <div
+                className={`h-full ${
+                  usage.limit > 0 && usage.used / usage.limit >= 0.8
+                    ? "bg-[var(--error)]"
+                    : "bg-[var(--accent)]"
+                }`}
+                style={{
+                  width: `${usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-[var(--text-tertiary)] tabular-nums group-hover:text-[var(--text-secondary)] transition-colors">
+              {usage.used.toLocaleString()} / {usage.limit.toLocaleString()} extractions
+            </p>
+          </Link>
+        )}
       </div>
     </aside>
   );

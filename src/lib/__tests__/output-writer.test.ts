@@ -1,8 +1,32 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import os from "os";
 import path from "path";
-import { resolveOutputDir, writeOutputs } from "../output-writer";
+import { resolveOutputDir, parseOutputDirInput, writeOutputs } from "../output-writer";
+
+describe("parseOutputDirInput on the hosted profile", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("rejects any non-empty output folder — no server filesystem exists there (§SaaS-1 T6)", () => {
+    vi.stubEnv("SIFT_PROFILE", "hosted");
+    expect(parseOutputDirInput("/tmp/sift-out")).toEqual({
+      error: "Output folders aren't available on the hosted service.",
+    });
+    expect(parseOutputDirInput("~/Documents/sift-exports")).toEqual({
+      error: "Output folders aren't available on the hosted service.",
+    });
+  });
+
+  it("still treats absent/empty as 'no output folder' (the hosted forms send nothing)", () => {
+    vi.stubEnv("SIFT_PROFILE", "hosted");
+    expect(parseOutputDirInput(undefined)).toEqual({ value: null });
+    expect(parseOutputDirInput("")).toEqual({ value: null });
+  });
+
+  it("keeps accepting absolute paths on local", () => {
+    expect(parseOutputDirInput("/tmp/sift-out")).toEqual({ value: path.resolve("/tmp/sift-out") });
+  });
+});
 
 describe("resolveOutputDir", () => {
   it("expands a leading ~/ against the real home dir", () => {

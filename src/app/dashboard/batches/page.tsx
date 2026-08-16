@@ -6,6 +6,9 @@ import Link from "next/link";
 import { Layers, UploadCloud, X, FileText } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
 import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
+import { LockedFeature } from "@/components/dashboard/LockedFeature";
+import { useHosted } from "@/components/ProfileContext";
+import { PLANS, type Plan } from "@/lib/plans";
 import type { TemplateExample } from "@/types";
 
 interface Template {
@@ -53,9 +56,16 @@ function batchStatus(b: Batch): "processing" | "completed" | "failed" {
 }
 
 export default function BatchesPage() {
+  // §SaaS-1 T6 hosted gating: batches are a plan feature (PLANS[plan].batch,
+  // sized by batchLimit). The plan comes from /api/usage; the server's
+  // batchGate (403 UPGRADE_REQUIRED / 400 size) stays the real enforcement.
+  // Local profile: `hosted` is false and none of this renders or fetches.
+  const hosted = useHosted();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [locked, setLocked] = useState(false);
 
   const [files, setFiles] = useState<File[]>([]);
   const [name, setName] = useState("");
@@ -71,18 +81,26 @@ export default function BatchesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [templatesRes, batchesRes] = await Promise.all([
+      const [templatesRes, batchesRes, usageRes] = await Promise.all([
         fetch("/api/templates"),
         fetch("/api/batches"),
+        hosted ? fetch("/api/usage") : Promise.resolve(null),
       ]);
       if (templatesRes.ok) setTemplates((await templatesRes.json()).templates ?? []);
       if (batchesRes.ok) setBatches((await batchesRes.json()).batches ?? []);
+      if (usageRes?.ok) {
+        const usage = await usageRes.json();
+        if (!usage.unlimited && usage.plan) {
+          setPlan(usage.plan as Plan);
+          setLocked(!PLANS[usage.plan as Plan].batch);
+        }
+      }
     } catch {
       // transient network failure — the page renders with whatever loaded
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [hosted]);
 
   useEffect(() => {
     (async () => {
@@ -99,7 +117,9 @@ export default function BatchesPage() {
   }
 
   const selectedTemplate = templates.find((t) => t.id === templateId) ?? null;
-  const canSubmit = files.length > 0 && templateId && name.trim() && !isSubmitting;
+  const batchLimit = hosted && plan ? PLANS[plan].batchLimit : null;
+  const overLimit = batchLimit !== null && files.length > batchLimit;
+  const canSubmit = files.length > 0 && templateId && name.trim() && !isSubmitting && !overLimit;
 
   const handleFilesSelected = (fileList: FileList | null) => {
     if (!fileList) return;
@@ -135,13 +155,23 @@ export default function BatchesPage() {
             extractMultiple: selectedTemplate.extractMultiple,
             examples: selectedTemplate.examples,
           },
-          outputDir: output.outputDir.trim() || undefined,
-          outputFormat: output.outputFormat,
-          keepResults: output.keepResults,
+          // Output folders are a local-filesystem feature; the hosted form
+          // hides the section and sends nothing (the server rejects any
+          // outputDir on hosted regardless).
+          ...(hosted
+            ? {}
+            : {
+                outputDir: output.outputDir.trim() || undefined,
+                outputFormat: output.outputFormat,
+                keepResults: output.keepResults,
+              }),
         }),
       });
       const data = await response.json();
       if (!response.ok) {
+        // The plan can change server-side mid-session (downgrade in the
+        // billing portal) — a 403 UPGRADE_REQUIRED flips to the locked card.
+        if (data.code === "UPGRADE_REQUIRED") setLocked(true);
         setError(data.error || "Failed to create batch");
         return;
       }
@@ -166,6 +196,13 @@ export default function BatchesPage() {
         </p>
       </div>
 
+      {locked ? (
+        <LockedFeature
+          title="Batches are a Pro feature"
+          description="Upload a folder of documents and extract from all of them in one run. Available on the Pro plan and higher."
+          requiredPlan={PLANS.pro.name}
+        />
+      ) : (
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
           New batch
@@ -240,7 +277,19 @@ export default function BatchesPage() {
           </p>
         )}
 
-        <OutputSettingsFields value={output} onChange={setOutput} />
+        {!hosted && <OutputSettingsFields value={output} onChange={setOutput} />}
+
+        {overLimit && batchLimit !== null && plan && (
+          <p className="text-sm text-[var(--text-secondary)]">
+            Your {PLANS[plan].name} plan allows up to {batchLimit} files per batch — you&apos;ve
+            selected {files.length}. Remove {files.length - batchLimit} file
+            {files.length - batchLimit === 1 ? "" : "s"} or upgrade in{" "}
+            <Link href="/dashboard/settings" className="text-[var(--accent)] font-medium">
+              Settings
+            </Link>
+            .
+          </p>
+        )}
 
         {error && <p className="text-sm text-[var(--error)]">{error}</p>}
 
@@ -254,6 +303,7 @@ export default function BatchesPage() {
             : `Run batch (${files.length} file${files.length === 1 ? "" : "s"})`}
         </button>
       </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">

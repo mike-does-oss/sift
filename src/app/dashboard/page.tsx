@@ -18,6 +18,7 @@ import type { ExtractionField, ExtractionData, ExtractionResult, TemplateExample
 import type { ScaffoldResponse } from "@/lib/api";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo, type ProviderOverride, type ProviderId } from "@/lib/api";
+import { useHosted } from "@/components/ProfileContext";
 import { createPullProgressTracker } from "@/lib/pull-progress";
 import type { ModelRec } from "@/lib/model-recommend";
 import type { Quotes } from "@/lib/highlight";
@@ -101,6 +102,11 @@ function defaultProviderKey(providers: ProviderInfo[], settings: DefaultSettings
 }
 
 export default function DashboardPage() {
+  // §SaaS-1 T6: on hosted the provider/model pair is a billing decision made
+  // server-side (resolveProvider's hosted branch) — the picker collapses to
+  // an info label, no override is ever sent, and the Ollama onboarding
+  // affordances never render. Local behavior is untouched.
+  const hosted = useHosted();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extractionPrompt, setExtractionPrompt] = useState("");
   const [extractMultiple, setExtractMultiple] = useState(false);
@@ -215,6 +221,12 @@ export default function DashboardPage() {
   useEffect(() => {
     (async () => {
       try {
+        // Hosted: the single anthropic entry (plan/BYO model) backs the info
+        // label — no settings read, no picker default to compute.
+        if (hosted) {
+          setProviders(await webSiftApi.listProviders());
+          return;
+        }
         const [providerList, settingsBody] = await Promise.all([
           webSiftApi.listProviders(),
           fetch("/api/settings")
@@ -234,9 +246,10 @@ export default function DashboardPage() {
         setProvidersLoaded(true);
       }
     })();
-  }, []);
+  }, [hosted]);
 
   useEffect(() => {
+    if (hosted) return; // /api/system doesn't exist on hosted (no Ollama downloads)
     (async () => {
       try {
         const info = await webSiftApi.getSystemInfo();
@@ -246,7 +259,7 @@ export default function DashboardPage() {
         // DEFAULT_OLLAMA_MODEL when this hasn't loaded (or failed).
       }
     })();
-  }, []);
+  }, [hosted]);
 
   const [selProviderId, selModel] = useMemo(() => {
     const [id, model] = providerKey.split("::");
@@ -259,9 +272,12 @@ export default function DashboardPage() {
   // "Build fields from description" action used to silently ignore this and
   // always run against the configured default provider instead of whatever
   // the picker shows).
+  // On hosted there is nothing to override — the server resolves the model
+  // from the plan/BYO key and discards request overrides anyway (defense in
+  // depth at both layers).
   const providerOverride: ProviderOverride | undefined = useMemo(
-    () => (selProviderId ? { provider: selProviderId as ProviderId, model: selModel || undefined } : undefined),
-    [selProviderId, selModel]
+    () => (!hosted && selProviderId ? { provider: selProviderId as ProviderId, model: selModel || undefined } : undefined),
+    [hosted, selProviderId, selModel]
   );
 
   // §T3 — examples ride along silently with whatever saved template is
@@ -283,7 +299,13 @@ export default function DashboardPage() {
   // Ollama reachable but nothing installed yet (post-onboarding state) —
   // `note` is only set when the provider is unreachable, so its absence
   // here means the "no models" affordance below applies.
-  const showOllamaPullAffordance = providersLoaded && !!localProvider && localProvider.models.length === 0 && !localProvider.note;
+  const showOllamaPullAffordance =
+    !hosted && providersLoaded && !!localProvider && localProvider.models.length === 0 && !localProvider.note;
+
+  // Hosted info label replacing the picker: the one model this account's
+  // extractions run on right now (plan tier, or opus with an active BYO key)
+  // as reported by /api/providers' anthropic-only hosted response.
+  const hostedModel = hosted ? (providers.find((p) => p.id === "anthropic")?.models[0] ?? "") : "";
 
   // Aborting on unmount stops the in-flight fetch/stream read if the user
   // navigates away mid-download. Ollama caches layers it has already
@@ -510,10 +532,11 @@ export default function DashboardPage() {
   const canExtract =
     Boolean(selectedFile) &&
     fields.some((f) => f.name.trim() !== "") &&
+    // Hosted sends no override at all — the server picks the plan/BYO model.
     // If the provider list failed to load, fall back to a plain (no-override)
     // extraction request — the server still applies its own configured
     // default. Don't hard-block the core workflow on a transient fetch failure.
-    (providersFailed || (Boolean(selProviderId) && (selProviderId !== "ollama" || Boolean(selModel))));
+    (hosted || providersFailed || (Boolean(selProviderId) && (selProviderId !== "ollama" || Boolean(selModel))));
 
   const extractedWithLabel = extractedWith
     ? (providers.find((p) => p.id === extractedWith.provider)?.label ?? extractedWith.provider)
@@ -528,40 +551,55 @@ export default function DashboardPage() {
     <div className="lg:flex lg:h-screen lg:flex-col">
       {/* Action bar — provider/model picker, privacy badge, Run extraction */}
       <div className="lg:flex-shrink-0 sticky top-0 z-10 flex flex-wrap items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]/80 backdrop-blur-sm">
-        <select
-          value={providerKey}
-          onChange={(e) => setProviderKey(e.target.value)}
-          className="px-3 py-2 rounded-lg input-base text-sm min-w-[220px]"
-          aria-label="Extraction provider and model"
-        >
-          {!providersLoaded && <option value="">Loading providers…</option>}
-          {providersLoaded && !providerKey && <option value="">Select a provider…</option>}
-          <optgroup label="Local">
-            {localProvider && localProvider.models.length > 0 ? (
-              localProvider.models.map((model) => (
-                <option key={model} value={`ollama::${model}`}>
-                  Ollama · {model}
+        {hosted ? (
+          // No picker on hosted: the model is a plan decision, shown as info.
+          <div
+            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+            title={hostedModel ? `Claude · ${hostedModel}` : "Claude"}
+          >
+            <span aria-hidden="true" className="not-italic">
+              ☁
+            </span>
+            <span className="truncate max-w-[240px]">
+              {hostedModel ? `Claude · ${hostedModel}` : "Claude"}
+            </span>
+          </div>
+        ) : (
+          <select
+            value={providerKey}
+            onChange={(e) => setProviderKey(e.target.value)}
+            className="px-3 py-2 rounded-lg input-base text-sm min-w-[220px]"
+            aria-label="Extraction provider and model"
+          >
+            {!providersLoaded && <option value="">Loading providers…</option>}
+            {providersLoaded && !providerKey && <option value="">Select a provider…</option>}
+            <optgroup label="Local">
+              {localProvider && localProvider.models.length > 0 ? (
+                localProvider.models.map((model) => (
+                  <option key={model} value={`ollama::${model}`}>
+                    Ollama · {model}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>
+                  {localProvider?.note ?? "No local models installed"}
                 </option>
-              ))
-            ) : (
-              <option value="" disabled>
-                {localProvider?.note ?? "No local models installed"}
-              </option>
-            )}
-          </optgroup>
-          <optgroup label="Cloud">
-            {cloudProviders.map((provider) => {
-              const model = provider.models[0] ?? "";
-              return (
-                <option key={provider.id} value={`${provider.id}::${model}`} disabled={!provider.configured}>
-                  {provider.configured ? `${provider.label} · ${model}` : `${provider.label} — configure in Settings`}
-                </option>
-              );
-            })}
-          </optgroup>
-        </select>
+              )}
+            </optgroup>
+            <optgroup label="Cloud">
+              {cloudProviders.map((provider) => {
+                const model = provider.models[0] ?? "";
+                return (
+                  <option key={provider.id} value={`${provider.id}::${model}`} disabled={!provider.configured}>
+                    {provider.configured ? `${provider.label} · ${model}` : `${provider.label} — configure in Settings`}
+                  </option>
+                );
+              })}
+            </optgroup>
+          </select>
+        )}
 
-        {providersFailed && (
+        {!hosted && providersFailed && (
           <p className="text-xs text-[var(--text-tertiary)]">Couldn&apos;t load providers — using your saved settings</p>
         )}
 
