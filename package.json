@@ -18,6 +18,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@neondatabase/auth": "^0.5.0-beta",
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/blob": "^2.8.0",
     "better-sqlite3": "^13.0.1",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.42.2",

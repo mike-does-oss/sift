@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     scheduleIdValue = scheduleId;
   }
 
-  const { filePath, sizeBytes } = saveBuffer(buf, ext);
+  const { filePath, sizeBytes } = await saveBuffer(buf, file.name, ext);
 
   const [document] = await db
     .insert(documents)

@@ -1,20 +1,27 @@
-import { writeFileSync, readFileSync } from "fs";
-import path from "path";
-import { DATA_DIR } from "./dataDir";
+import { isHosted } from "./profile";
+import { readDocumentLocal, saveBufferLocal } from "./storage.local";
+import { readDocumentHosted, saveBufferHosted } from "./storage.hosted";
 
-export function saveBuffer(buf: Buffer, ext: string = "pdf"): { filePath: string; sizeBytes: number } {
-  const rel = path.join("files", `${crypto.randomUUID()}.${ext}`);
-  writeFileSync(path.join(DATA_DIR, rel), buf);
-  return { filePath: rel, sizeBytes: buf.length };
+/**
+ * Profile-split document storage facade. Local (default) stores files on
+ * disk under DATA_DIR with a relative `filePath`; hosted (`SIFT_PROFILE=
+ * hosted`) stores them in Vercel Blob with the blob URL as `filePath`.
+ * The profile is resolved per call, not at module load, so the backends
+ * stay swappable under test.
+ *
+ * @param filename the client's original filename — used (sanitized) for the
+ *   hosted blob pathname; ignored by the local backend.
+ * @param ext the magic-byte-detected extension (see `detectExtension`) —
+ *   names the stored object with its real type on both backends.
+ */
+export async function saveBuffer(
+  buf: Buffer,
+  filename: string,
+  ext: string = "pdf"
+): Promise<{ filePath: string; sizeBytes: number }> {
+  return isHosted() ? saveBufferHosted(buf, filename, ext) : saveBufferLocal(buf, ext);
 }
 
-export async function saveUpload(file: File, ext?: string): Promise<{ filePath: string; sizeBytes: number }> {
-  const buf = Buffer.from(await file.arrayBuffer());
-  return saveBuffer(buf, ext);
-}
-
-export function readDocument(filePath: string): Buffer {
-  const abs = path.resolve(DATA_DIR, filePath);
-  if (!abs.startsWith(path.resolve(DATA_DIR) + path.sep)) throw new Error("Invalid file path");
-  return readFileSync(abs);
+export async function readDocument(filePath: string): Promise<Buffer> {
+  return isHosted() ? readDocumentHosted(filePath) : readDocumentLocal(filePath);
 }
