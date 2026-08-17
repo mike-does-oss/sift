@@ -8,8 +8,13 @@ export function toCsv(rows: Record<string, unknown>[]): string {
     // feeds spreadsheet apps (dataset CSV route, digest attachments, client
     // downloads, local output files). A leading =, +, -, @, tab, or CR would
     // be interpreted as a formula by Excel/Sheets — neutralize with a
-    // leading apostrophe (the standard OWASP mitigation).
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    // leading apostrophe (the standard OWASP mitigation). EXCEPTION: a
+    // leading +/- on a plain number ("-86.40", "+4,210.00") is ordinary
+    // data on a document-extraction product, is inert in spreadsheets, and
+    // prefixing it would corrupt every negative amount we export — so
+    // number-shaped values pass through untouched.
+    const numberShaped = /^[+-]?[\d,.\s]*\d[\d,.\s]*%?$/.test(s);
+    if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !numberShaped)) s = `'${s}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");

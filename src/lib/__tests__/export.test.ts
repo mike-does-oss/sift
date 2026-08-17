@@ -38,5 +38,16 @@ describe("toCsv", () => {
     it("escapes a joined array whose first item starts a formula", () => {
       expect(toCsv([{ a: ["=x", "y"] }])).toBe("a\n'=x; y");
     });
+
+    it("does NOT mangle signed plain numbers — the product's bread and butter", () => {
+      // Negative amounts off bank statements must round-trip exactly.
+      expect(toCsv([{ a: "-86.40", b: "+4,210.00", c: "-500", d: "-9.8 %".replace(" ", "") }])).toBe(
+        "a,b,c,d\n-86.40,\"+4,210.00\",-500,-9.8%"
+      );
+    });
+
+    it("still escapes +/- values that are not number-shaped", () => {
+      expect(toCsv([{ a: "-Total()", b: "+cmd|x", c: "-2+3" }])).toBe("a,b,c\n'-Total(),'+cmd|x,'-2+3");
+    });
   });
 });
