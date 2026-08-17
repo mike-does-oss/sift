@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
+import {
+  OutputSettingsFields,
+  type OutputSettingsValue,
+  DeliverySettingsFields,
+  type DeliverySettingsValue,
+  type DatasetOption,
+} from "@/components";
 import { LockedFeature } from "@/components/dashboard/LockedFeature";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
@@ -26,6 +32,16 @@ interface Schedule {
 }
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// §INBOX T3: fresh-form delivery defaults — mirror the schema defaults
+// (ingest mode "auto", digest on).
+const DEFAULT_DELIVERY: DeliverySettingsValue = {
+  ingestMode: "auto",
+  processOnArrival: false,
+  allowedSenders: "",
+  datasetId: "",
+  notifyEmail: true,
+};
 
 function describeCadence(s: Schedule): string {
   const hour = `${String(s.hourUtc).padStart(2, "0")}:00 UTC`;
@@ -57,19 +73,24 @@ export function SchedulesPanel() {
     outputFormat: "csv",
     keepResults: true,
   });
+  // §INBOX T3: hosted-only delivery settings + the dataset picker's options.
+  const [delivery, setDelivery] = useState<DeliverySettingsValue>(DEFAULT_DELIVERY);
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [templatesRes, schedulesRes, usageRes] = await Promise.all([
+      const [templatesRes, schedulesRes, usageRes, datasetsRes] = await Promise.all([
         fetch("/api/templates"),
         fetch("/api/schedules"),
         hosted ? fetch("/api/usage") : Promise.resolve(null),
+        hosted ? fetch("/api/datasets") : Promise.resolve(null),
       ]);
       if (templatesRes.ok) setTemplates((await templatesRes.json()).templates ?? []);
       if (schedulesRes.ok) setSchedules((await schedulesRes.json()).schedules ?? []);
+      if (datasetsRes?.ok) setDatasets((await datasetsRes.json()).datasets ?? []);
       if (usageRes?.ok) {
         const usage = await usageRes.json();
         if (!usage.unlimited && usage.plan) {
@@ -110,9 +131,17 @@ export function SchedulesPanel() {
           dayOfWeek: cadence === "weekly" ? dayOfWeek : undefined,
           // Output folders are a local-filesystem feature; the hosted form
           // hides the section and sends nothing (the server rejects any
-          // outputDir on hosted regardless).
+          // outputDir on hosted regardless). Hosted sends the email-in
+          // delivery settings instead — null for unset senders/dataset so
+          // the server stores a clean absence.
           ...(hosted
-            ? {}
+            ? {
+                ingestMode: delivery.ingestMode,
+                processOnArrival: delivery.processOnArrival,
+                allowedSenders: delivery.allowedSenders.trim() || null,
+                datasetId: delivery.datasetId || null,
+                notifyEmail: delivery.notifyEmail,
+              }
             : {
                 outputDir: output.outputDir.trim() || undefined,
                 outputFormat: output.outputFormat,
@@ -131,6 +160,7 @@ export function SchedulesPanel() {
       setName("");
       setTemplateId("");
       setOutput({ outputDir: "", outputFormat: "csv", keepResults: true });
+      setDelivery(DEFAULT_DELIVERY);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -255,6 +285,7 @@ export function SchedulesPanel() {
           )}
         </div>
 
+        {hosted && <DeliverySettingsFields value={delivery} onChange={setDelivery} datasets={datasets} />}
         {!hosted && <OutputSettingsFields value={output} onChange={setOutput} />}
 
         {error && <p className="text-sm text-[var(--error)]">{error}</p>}

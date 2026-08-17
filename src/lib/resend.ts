@@ -54,6 +54,17 @@ async function resendFetch(url: URL): Promise<Response> {
   return res;
 }
 
+/**
+ * §INBOX T3: the inbound domain for rendering schedule email-in addresses in
+ * the UI — non-null only when every env the ingestion pipeline needs is set,
+ * so the client never shows an address that can't actually receive. Read
+ * server-side per request (never NEXT_PUBLIC-baked at build time).
+ */
+export function configuredInboundDomain(): string | null {
+  const { RESEND_API_KEY, RESEND_WEBHOOK_SECRET, RESEND_INBOUND_DOMAIN } = process.env;
+  return RESEND_API_KEY && RESEND_WEBHOOK_SECRET && RESEND_INBOUND_DOMAIN ? RESEND_INBOUND_DOMAIN : null;
+}
+
 export interface ReceivedAttachmentMeta {
   id: string;
   filename: string;

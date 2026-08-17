@@ -36,6 +36,27 @@ Locally, a background worker ticks once a minute while the app is running, so a 
 
 On hosted, scheduled runs are metered like everything else: if your remaining quota can't cover the whole inbox, only that many documents are queued and the rest simply stay unprocessed (not failed) until quota frees up — unless your BYO key is active, in which case runs are quota-exempt. If your plan is downgraded below Business, existing schedules stop firing (and Run now is refused) but aren't deleted; they resume if you upgrade again.
 
+### Email-in inbox (hosted)
+
+On the hosted service, every schedule also gets its own email address, shown at the top of the schedule's inbox with a copy button. Email documents (or forward emails) to it and they land in the inbox like a manual upload. What an email turns into is the schedule's **ingest mode**:
+
+- **Smart** (the default) — every supported attachment becomes a document; if an email has no usable attachments, the email itself is ingested as a `.eml` file, for data that lives in the body.
+- **Attachments only** — attachments become documents; emails without any are dropped.
+- **Email content only** — the email itself is ingested as `.eml`; attachments are ignored.
+- **Both** — the attachments and the `.eml`.
+
+Emailed-in content goes through the same checks as manual uploads — supported types only, 32MB per document (8MB per image) — and at most 10 attachments per email are taken. Anything unsupported, oversize, or over the cap is skipped, never failed. A redelivered email creates nothing: deliveries are deduplicated on the provider's message id.
+
+The address is unguessable, and it's the only credential a sender needs. To narrow that, set **allowed senders**: a comma-separated list where an entry with a full address (`billing@xero.com`) matches exactly that sender, and a domain entry (`@acme.com` or `acme.com`) matches any sender whose domain contains it. Matching is case-insensitive; an empty list accepts any sender. Email from anyone else is silently dropped.
+
+Three delivery settings round it out:
+
+- **Process on arrival** — extract each emailed-in document as it arrives instead of waiting for the schedule. Manually dropped documents still wait for the cadence, and arrival extractions are metered under the same quota rules as scheduled runs.
+- **Dataset** — append each run's completed results to one of your datasets. The dataset's headers must match the template's fields; a mismatch skips the append (with a logged reason) and never fails the run.
+- **Run summary email** (on by default) — when a run finishes, you get one digest email: how many documents were processed, completed and failed counts, failure one-liners, a link back to the schedule, and the results attached as a CSV when they fit in 1MB.
+
+The local edition has no email-in: its schedule inboxes are manual-upload only, and none of these settings appear there.
+
 ## Output folders (local only)
 
 Batches and schedules can auto-write their results to a folder on disk — useful when a schedule is feeding another tool. Not available on hosted (there's no server filesystem to write to), so the hosted forms don't show these options.

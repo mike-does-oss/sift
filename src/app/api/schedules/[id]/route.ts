@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { schedules, jobs, documents } from "@/db/schema";
 import { requireUser } from "@/lib/user";
 import { scheduleGate } from "@/lib/gates";
+import { isHosted } from "@/lib/profile";
+import { configuredInboundDomain } from "@/lib/resend";
+import { parseDeliverySettingsInput } from "@/lib/delivery-settings";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 // Cross-tenant schedule ids 404 (existence not revealed).
@@ -25,7 +28,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .leftJoin(documents, and(eq(jobs.documentId, documents.id), eq(documents.userId, user.id)))
     .where(and(eq(jobs.scheduleId, id), eq(jobs.userId, user.id)))
     .orderBy(desc(jobs.createdAt));
-  return NextResponse.json({ schedule, jobs: runs });
+  return NextResponse.json({
+    schedule,
+    jobs: runs,
+    // §INBOX T3: same contract as the list GET — the email-in domain for
+    // rendering the schedule's address; null when local or unconfigured.
+    inboundDomain: isHosted() ? configuredInboundDomain() : null,
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,6 +58,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     outputDir?: unknown;
     outputFormat?: unknown;
     keepResults?: unknown;
+    ingestMode?: unknown;
+    processOnArrival?: unknown;
+    allowedSenders?: unknown;
+    datasetId?: unknown;
+    notifyEmail?: unknown;
   };
   try {
     body = await req.json();
@@ -79,6 +93,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: 400 });
     patch.keepResults = result.value;
   }
+
+  // §INBOX T3: email-in delivery settings — same partial-update contract
+  // (only keys present in the request are touched); datasetId is
+  // ownership-checked inside (cross-tenant ids get "Dataset not found").
+  const deliveryResult = await parseDeliverySettingsInput(body, user.id);
+  if ("error" in deliveryResult) {
+    return NextResponse.json({ error: deliveryResult.error }, { status: 400 });
+  }
+  Object.assign(patch, deliveryResult.value);
 
   const [updated] = await db.update(schedules).set(patch)
     .where(and(eq(schedules.id, id), eq(schedules.userId, user.id)))

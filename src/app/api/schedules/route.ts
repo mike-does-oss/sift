@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/user";
 import { scheduleGate } from "@/lib/gates";
 import { isHosted } from "@/lib/profile";
 import { generateInboundToken } from "@/lib/inbound-token";
+import { configuredInboundDomain } from "@/lib/resend";
+import { parseDeliverySettingsInput } from "@/lib/delivery-settings";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
@@ -28,6 +30,11 @@ export async function POST(req: NextRequest) {
     outputDir?: unknown;
     outputFormat?: unknown;
     keepResults?: unknown;
+    ingestMode?: unknown;
+    processOnArrival?: unknown;
+    allowedSenders?: unknown;
+    datasetId?: unknown;
+    notifyEmail?: unknown;
   };
   try {
     body = await req.json();
@@ -65,6 +72,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: keepResultsResult.error }, { status: 400 });
   }
 
+  // §INBOX T3: email-in delivery settings (ingest mode, on-arrival, allowed
+  // senders, dataset append, run digest) — validated like the output
+  // settings above; datasetId is ownership-checked inside.
+  const deliveryResult = await parseDeliverySettingsInput(body, user.id);
+  if ("error" in deliveryResult) {
+    return NextResponse.json({ error: deliveryResult.error }, { status: 400 });
+  }
+
   const [schedule] = await db.insert(schedules).values({
     userId: user.id,
     name, templateId, cadence: cadence as "daily" | "weekly", hourUtc,
@@ -72,6 +87,7 @@ export async function POST(req: NextRequest) {
     outputDir: outputDirResult.value,
     outputFormat: outputFormatResult.value,
     keepResults: keepResultsResult.value,
+    ...deliveryResult.value,
     // §INBOX: every hosted schedule gets an email-in address at create
     // (<token>@RESEND_INBOUND_DOMAIN). Local profile has no inbound surface.
     inboundToken: isHosted() ? generateInboundToken() : null,
@@ -88,5 +104,12 @@ export async function GET() {
     where: eq(schedules.userId, user.id),
     orderBy: desc(schedules.createdAt),
   });
-  return NextResponse.json({ schedules: list });
+  return NextResponse.json({
+    schedules: list,
+    // §INBOX T3: the email-in domain rides along so the client can render
+    // `<inboundToken>@<domain>`. Null when the profile is local or the
+    // RESEND envs aren't configured on this deployment — the UI shows a
+    // quiet "not configured" line instead of a broken address.
+    inboundDomain: isHosted() ? configuredInboundDomain() : null,
+  });
 }

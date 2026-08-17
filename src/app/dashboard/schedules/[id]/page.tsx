@@ -4,10 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UPLOAD_ACCEPT_ATTR, filterSupportedFiles } from "@/lib/upload-accept";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Play, Settings2 } from "lucide-react";
+import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Copy, Mail, Play, Settings2 } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
-import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
+import {
+  OutputSettingsFields,
+  type OutputSettingsValue,
+  DeliverySettingsFields,
+  type DeliverySettingsValue,
+  type DatasetOption,
+  INGEST_MODE_SUMMARIES,
+} from "@/components";
 import { useHosted } from "@/components/ProfileContext";
 
 interface Schedule {
@@ -21,6 +28,12 @@ interface Schedule {
   outputDir: string | null;
   outputFormat: "csv" | "json" | "both";
   keepResults: boolean;
+  inboundToken: string | null;
+  ingestMode: "auto" | "attachments" | "email" | "both";
+  processOnArrival: boolean;
+  allowedSenders: string | null;
+  datasetId: string | null;
+  notifyEmail: boolean;
 }
 
 interface Job {
@@ -114,12 +127,29 @@ export default function ScheduleDetailPage() {
   });
   const [isSavingOutput, setIsSavingOutput] = useState(false);
   const [outputSaveError, setOutputSaveError] = useState<string | null>(null);
+  // §INBOX T3: hosted-only email-in state — the server-provided inbound
+  // domain (null when unconfigured), the dataset picker's options, the
+  // copy-address affordance, and the DELIVERY card's edit flow.
+  const [inboundDomain, setInboundDomain] = useState<string | null>(null);
+  const [datasets, setDatasets] = useState<DatasetOption[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [isEditingDelivery, setIsEditingDelivery] = useState(false);
+  const [deliveryDraft, setDeliveryDraft] = useState<DeliverySettingsValue>({
+    ingestMode: "auto",
+    processOnArrival: false,
+    allowedSenders: "",
+    datasetId: "",
+    notifyEmail: true,
+  });
+  const [isSavingDelivery, setIsSavingDelivery] = useState(false);
+  const [deliverySaveError, setDeliverySaveError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [scheduleRes, docsRes] = await Promise.all([
+      const [scheduleRes, docsRes, datasetsRes] = await Promise.all([
         fetch(`/api/schedules/${id}`),
         fetch(`/api/documents?scheduleId=${id}`),
+        hosted ? fetch("/api/datasets") : Promise.resolve(null),
       ]);
       if (scheduleRes.status === 404) {
         setNotFound(true);
@@ -132,8 +162,10 @@ export default function ScheduleDetailPage() {
       const data = await scheduleRes.json();
       setSchedule(data.schedule);
       setJobs(data.jobs ?? []);
+      setInboundDomain(data.inboundDomain ?? null);
       setLoadError(null);
       if (docsRes.ok) setDocs((await docsRes.json()).documents ?? []);
+      if (datasetsRes?.ok) setDatasets((await datasetsRes.json()).datasets ?? []);
     } catch {
       // Network failure. Before the schedule first loads this drives the
       // inline error state below; after that the page keeps its data and the
@@ -142,7 +174,7 @@ export default function ScheduleDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, hosted]);
 
   useEffect(() => {
     (async () => {
@@ -234,6 +266,48 @@ export default function ScheduleDetailPage() {
     }
   };
 
+  const startEditingDelivery = () => {
+    if (!schedule) return;
+    setDeliveryDraft({
+      ingestMode: schedule.ingestMode,
+      processOnArrival: schedule.processOnArrival,
+      allowedSenders: schedule.allowedSenders ?? "",
+      datasetId: schedule.datasetId ?? "",
+      notifyEmail: schedule.notifyEmail,
+    });
+    setDeliverySaveError(null);
+    setIsEditingDelivery(true);
+  };
+
+  const handleSaveDelivery = async () => {
+    setIsSavingDelivery(true);
+    setDeliverySaveError(null);
+    try {
+      const response = await fetch(`/api/schedules/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ingestMode: deliveryDraft.ingestMode,
+          processOnArrival: deliveryDraft.processOnArrival,
+          allowedSenders: deliveryDraft.allowedSenders.trim() || null,
+          datasetId: deliveryDraft.datasetId || null,
+          notifyEmail: deliveryDraft.notifyEmail,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setDeliverySaveError(data.error || "Couldn't save delivery settings.");
+        return;
+      }
+      setSchedule(data.schedule);
+      setIsEditingDelivery(false);
+    } catch {
+      setDeliverySaveError("Couldn't save delivery settings. Check your connection.");
+    } finally {
+      setIsSavingDelivery(false);
+    }
+  };
+
   const downloadRunCsv = (run: { label: string; rows: JobRow[] }) => {
     const rows = jobsToRows(
       run.rows
@@ -279,6 +353,28 @@ export default function ScheduleDetailPage() {
       </div>
     );
   }
+
+  // The full email-in address, or null when it can't work (local profile,
+  // RESEND envs missing on the server, or a schedule without a token).
+  const inboundAddress =
+    hosted && inboundDomain && schedule.inboundToken
+      ? `${schedule.inboundToken}@${inboundDomain}`
+      : null;
+
+  const copyAddress = async () => {
+    if (!inboundAddress) return;
+    try {
+      await navigator.clipboard.writeText(inboundAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — the address stays selectable as text.
+    }
+  };
+
+  const datasetName = schedule.datasetId
+    ? datasets.find((d) => d.id === schedule.datasetId)?.name ?? "a saved dataset"
+    : null;
 
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-8">
@@ -377,10 +473,128 @@ export default function ScheduleDetailPage() {
       </section>
       )}
 
+      {/* §INBOX T3: hosted counterpart of the OUTPUT card — how emailed-in
+          documents are ingested and where results go. Local never renders it. */}
+      {hosted && (
+      <section className="card-elevated rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
+            Delivery
+          </h2>
+          {!isEditingDelivery && (
+            <button
+              onClick={startEditingDelivery}
+              className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
+        </div>
+
+        {isEditingDelivery ? (
+          <div className="space-y-4">
+            <DeliverySettingsFields
+              value={deliveryDraft}
+              onChange={setDeliveryDraft}
+              datasets={datasets}
+              showHeading={false}
+            />
+            {deliverySaveError && <p className="text-sm text-[var(--error)]">{deliverySaveError}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveDelivery}
+                disabled={isSavingDelivery}
+                className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+              >
+                {isSavingDelivery ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditingDelivery(false);
+                  setDeliverySaveError(null);
+                }}
+                disabled={isSavingDelivery}
+                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-sm text-[var(--text-secondary)]">
+              Ingesting {INGEST_MODE_SUMMARIES[schedule.ingestMode]}.{" "}
+              {schedule.processOnArrival
+                ? "Emailed-in documents are extracted as they arrive."
+                : "Documents wait for the next scheduled run."}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {schedule.allowedSenders ? (
+                <>
+                  Accepting email from{" "}
+                  <span className="font-mono text-[var(--text-tertiary)]">{schedule.allowedSenders}</span>.
+                </>
+              ) : (
+                "Accepting email from any sender."
+              )}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)]">
+              {datasetName ? (
+                <>
+                  Results append to the <span className="font-medium">{datasetName}</span> dataset.
+                </>
+              ) : (
+                "Results stay in the run history."
+              )}{" "}
+              {schedule.notifyEmail ? "A summary email goes out after each run." : "No summary email."}
+            </p>
+          </div>
+        )}
+      </section>
+      )}
+
       <section className="card-elevated rounded-xl p-5 space-y-4">
         <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
           Inbox
         </h2>
+
+        {/* §INBOX T3: the schedule's email-in address — hosted-only. */}
+        {hosted && (
+          <div className="rounded-lg bg-[var(--surface-inset)] px-3.5 py-3 space-y-1">
+            {inboundAddress ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" strokeWidth={1.5} />
+                  <span className="flex-1 min-w-0 truncate font-mono text-sm text-[var(--text-primary)]">
+                    {inboundAddress}
+                  </span>
+                  <button
+                    onClick={copyAddress}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
+                    aria-label="Copy email-in address"
+                  >
+                    {copied ? (
+                      <Check className="w-3.5 h-3.5 text-[var(--success)]" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  Email documents (or forward emails) here — attachments and email content land in
+                  this inbox. Ingesting {INGEST_MODE_SUMMARIES[schedule.ingestMode]}.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-[var(--text-tertiary)]">
+                Email-in isn&apos;t configured on this deployment.
+              </p>
+            )}
+          </div>
+        )}
+
         <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--border-default)] rounded-xl cursor-pointer hover:border-[var(--accent-muted)] hover:bg-[var(--surface-elevated)] transition-all">
           <input
             type="file"

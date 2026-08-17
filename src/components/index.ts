@@ -13,3 +13,5 @@ export { SaveToDatasetPanel } from "./SaveToDatasetPanel";
 export { PaginationBar } from "./PaginationBar";
 export { OutputSettingsFields } from "./OutputSettingsFields";
 export type { OutputSettingsValue } from "./OutputSettingsFields";
+export { DeliverySettingsFields, INGEST_MODE_SUMMARIES } from "./DeliverySettingsFields";
+export type { DeliverySettingsValue, DatasetOption } from "./DeliverySettingsFields";
