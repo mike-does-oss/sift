@@ -8,6 +8,13 @@
       "when": 1786869241105,
       "tag": "0000_lying_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786932680601,
+      "tag": "0001_inbox_email",
+      "breakpoints": true
     }
   ]
 }

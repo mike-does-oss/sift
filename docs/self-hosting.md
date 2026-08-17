@@ -46,6 +46,9 @@ The reference deployment shape is Vercel + Neon:
 | `STRIPE_SECRET_KEY` | Stripe API key |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for `/api/stripe/webhook` |
 | `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | Price IDs printed by `scripts/setup-stripe.ts` |
+| `RESEND_API_KEY` | Resend API key — fetches inbound email content/attachments and sends digest emails |
+| `RESEND_WEBHOOK_SECRET` | Signing secret (`whsec_…`) for the `email.received` webhook at `/api/inbox/email` |
+| `RESEND_INBOUND_DOMAIN` | Domain of schedule email-in addresses (`<token>@<this domain>`), e.g. `abc123.resend.app` |
 
 Local-profile variables (`SIFT_DATA_DIR`, `SIFT_MIGRATIONS_DIR`) don't apply on hosted.
 

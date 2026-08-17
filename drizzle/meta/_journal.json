@@ -43,6 +43,13 @@
       "when": 1786870233485,
       "tag": "0005_settings_user_key_pk",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786932680160,
+      "tag": "0006_inbox_email",
+      "breakpoints": true
     }
   ]
 }

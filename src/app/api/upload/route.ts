@@ -4,10 +4,8 @@ import { db } from "@/db";
 import { documents, schedules } from "@/db/schema";
 import { requireUser } from "@/lib/user";
 import { saveBuffer } from "@/lib/storage";
-import { detectExtension, IMAGE_EXTENSIONS } from "@/lib/documents";
-
-const MAX_DOC_SIZE_BYTES = 32 * 1024 * 1024;
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+import { detectExtension } from "@/lib/documents";
+import { sizeLimitFor } from "@/lib/upload-limits";
 
 export async function POST(request: Request) {
   const auth = await requireUser();
@@ -40,11 +38,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const isImage = IMAGE_EXTENSIONS.has(ext);
-  const maxSize = isImage ? MAX_IMAGE_SIZE_BYTES : MAX_DOC_SIZE_BYTES;
-  if (file.size > maxSize) {
-    const limit = isImage ? "8MB" : "32MB";
-    return NextResponse.json({ error: `File must be ${limit} or smaller.` }, { status: 400 });
+  const { maxBytes, label } = sizeLimitFor(ext);
+  if (file.size > maxBytes) {
+    return NextResponse.json({ error: `File must be ${label} or smaller.` }, { status: 400 });
   }
 
   let scheduleIdValue: string | null = null;

@@ -27,6 +27,10 @@ export const documents = sqliteTable("documents", {
   filePath: text("file_path").notNull().unique(),
   sizeBytes: integer("size_bytes").notNull(),
   scheduleId: text("schedule_id"),
+  // §INBOX: Resend provider email id the document was ingested from —
+  // idempotency key for webhook redelivery (checked per schedule). Null for
+  // manual uploads.
+  sourceMessageId: text("source_message_id"),
   processedAt: integer("processed_at", { mode: "timestamp_ms" }),
   createdAt: createdAt(),
 });
@@ -93,6 +97,23 @@ export const schedules = sqliteTable("schedules", {
   outputDir: outputDir(),
   outputFormat: outputFormat(),
   keepResults: keepResults(),
+  // §INBOX email-in (hosted-only feature; columns exist on both dialects per
+  // the SaaS-1 parity rule — local rows keep the defaults/null).
+  // `inboundToken` is the local part of the schedule's email-in address
+  // (<token>@RESEND_INBOUND_DOMAIN); null on local / pre-feature rows.
+  inboundToken: text("inbound_token").unique(),
+  // What an inbound email turns into: attachments, the raw email (.eml),
+  // or both; `auto` = attachments when present, else the .eml.
+  ingestMode: text("ingest_mode", { enum: ["auto", "attachments", "email", "both"] }).notNull().default("auto"),
+  // T2: enqueue ingested docs immediately instead of waiting for cadence.
+  processOnArrival: integer("process_on_arrival", { mode: "boolean" }).notNull().default(false),
+  // Comma list; entry with "@" = exact address match, otherwise matched
+  // against the sender's domain (case-insensitive). Null = accept any sender.
+  allowedSenders: text("allowed_senders"),
+  // T2: dataset to auto-append completed run results to.
+  datasetId: text("dataset_id"),
+  // T2: send the owner a digest email when a run completes.
+  notifyEmail: integer("notify_email", { mode: "boolean" }).notNull().default(true),
   createdAt: createdAt(),
 });
 

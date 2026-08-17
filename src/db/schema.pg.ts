@@ -49,6 +49,10 @@ export const documents = pgTable("documents", {
   filePath: text("file_path").notNull().unique(),
   sizeBytes: integer("size_bytes").notNull(),
   scheduleId: text("schedule_id"),
+  // §INBOX: Resend provider email id the document was ingested from —
+  // idempotency key for webhook redelivery (checked per schedule). Null for
+  // manual uploads.
+  sourceMessageId: text("source_message_id"),
   processedAt: timestamp("processed_at", { withTimezone: true, mode: "date" }),
   createdAt: createdAt(),
 });
@@ -111,6 +115,13 @@ export const schedules = pgTable("schedules", {
   outputDir: outputDir(),
   outputFormat: outputFormat(),
   keepResults: keepResults(),
+  // §INBOX email-in — see schema.sqlite.ts for per-column docs.
+  inboundToken: text("inbound_token").unique(),
+  ingestMode: text("ingest_mode", { enum: ["auto", "attachments", "email", "both"] }).notNull().default("auto"),
+  processOnArrival: boolean("process_on_arrival").notNull().default(false),
+  allowedSenders: text("allowed_senders"),
+  datasetId: text("dataset_id"),
+  notifyEmail: boolean("notify_email").notNull().default(true),
   createdAt: createdAt(),
 });
 

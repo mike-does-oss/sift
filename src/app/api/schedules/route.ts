@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { schedules, templates } from "@/db/schema";
 import { requireUser } from "@/lib/user";
 import { scheduleGate } from "@/lib/gates";
+import { isHosted } from "@/lib/profile";
+import { generateInboundToken } from "@/lib/inbound-token";
 import { parseOutputDirInput, parseOutputFormatInput, parseKeepResultsInput } from "@/lib/output-writer";
 
 export async function POST(req: NextRequest) {
@@ -70,6 +72,9 @@ export async function POST(req: NextRequest) {
     outputDir: outputDirResult.value,
     outputFormat: outputFormatResult.value,
     keepResults: keepResultsResult.value,
+    // §INBOX: every hosted schedule gets an email-in address at create
+    // (<token>@RESEND_INBOUND_DOMAIN). Local profile has no inbound surface.
+    inboundToken: isHosted() ? generateInboundToken() : null,
   }).returning();
   return NextResponse.json({ schedule });
 }
