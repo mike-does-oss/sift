@@ -283,7 +283,13 @@ const DOC_RENDERERS: Record<DocDef["id"], typeof StatementDoc> = {
 /* ---------------------------------------------------------------- showcase */
 
 export function ExtractionShowcase() {
-  const reduced = useReducedMotion() ?? false;
+  // The server can't know the visitor's motion preference, so SSR always
+  // renders the reduced=false tree; honoring the media query before mount
+  // would make the first client render disagree with it (hydration error).
+  const prefersReduced = useReducedMotion() ?? false;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const reduced = mounted && prefersReduced;
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
 

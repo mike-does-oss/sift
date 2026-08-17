@@ -27,7 +27,8 @@ vi.mock("@/lib/user", () => ({ getDbUserById }));
 const getMonthlyUsage = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/usage", () => ({ getMonthlyUsage }));
 
-const pgEnqueue = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => 3));
+// Typed rest param so mock.calls is unknown[] (destructurable), not [].
+const pgEnqueue = vi.hoisted(() => vi.fn(async (...args: unknown[]) => { void args; return 3; }));
 vi.mock("../store.pg", () => ({ pgStore: { dialect: "pg", enqueueInbox: pgEnqueue } }));
 
 const SCHEDULE = { id: "s1", userId: "u1", templateId: "t1" };
