@@ -9,7 +9,7 @@ import * as pgSchema from "./schema.pg";
 // (e.g. auth) imports `./schema.pg` directly for the `users` table.
 const active = (isHosted() ? pgSchema : sqliteSchema) as unknown as typeof sqliteSchema;
 
-export const { templates, documents, batches, jobs, schedules, settings, datasets, datasetRows } = active;
+export const { templates, documents, batches, jobs, schedules, settings, datasets, datasetRows, runDeliveries } = active;
 
 export type {
   DbTemplate,
@@ -19,4 +19,5 @@ export type {
   DbSchedule,
   DbDataset,
   DbDatasetRow,
+  DbRunDelivery,
 } from "./schema.sqlite";

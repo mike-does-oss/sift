@@ -8,6 +8,7 @@ import { saveBuffer } from "@/lib/storage";
 import { detectExtension } from "@/lib/documents";
 import { sizeLimitFor } from "@/lib/upload-limits";
 import * as resend from "@/lib/resend";
+import { enqueueScheduleArrival, kickJobWorker } from "@/lib/jobs";
 
 // §INBOX: Resend `email.received` webhook — the ingestion door for schedule
 // email-in addresses (<inboundToken>@RESEND_INBOUND_DOMAIN).
@@ -244,5 +245,21 @@ export async function POST(request: Request) {
   if (ingested === 0 && skipped === 0) {
     console.log(`[inbox/email] nothing to ingest for ${emailId} (mode ${mode}, no matching content)`);
   }
+
+  // §T2 process-on-arrival: enqueue the just-ingested docs immediately via
+  // the quota-capped path (`enqueueScheduleArrival` — deliberately does NOT
+  // stamp lastRunAt, so the cadence contract stays intact) and kick the
+  // worker. Best-effort by design: ingestion has already succeeded, so an
+  // enqueue failure logs and still 200s — the docs simply wait in the inbox
+  // for the next cadence run.
+  if (ingested > 0 && schedule.processOnArrival) {
+    try {
+      const jobsCreated = await enqueueScheduleArrival(schedule.id);
+      if (jobsCreated > 0) kickJobWorker(new URL(request.url).origin);
+    } catch (err) {
+      console.log(`[inbox/email] process-on-arrival enqueue failed for schedule ${schedule.id}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   return NextResponse.json({ ingested, skipped });
 }

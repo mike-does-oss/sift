@@ -136,6 +136,17 @@ export const datasets = sqliteTable("datasets", {
   createdAt: createdAt(),
 });
 
+// §INBOX T2: one row per schedule run that has had its results DELIVERED
+// (dataset auto-append + digest email — hosted-only behavior, but the table
+// exists on both dialects per the SaaS-1 parity rule). The all-terminal
+// delivery hook can fire from several jobs' terminal transitions at once;
+// an insert-on-conflict-do-nothing into this table is the atomic claim —
+// whoever inserts the row delivers, everyone else walks away.
+export const runDeliveries = sqliteTable("run_deliveries", {
+  runId: text("run_id").primaryKey(),
+  deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});
+
 export const datasetRows = sqliteTable("dataset_rows", {
   id: id(),
   userId: userId(),
@@ -152,3 +163,4 @@ export type DbJob = typeof jobs.$inferSelect;
 export type DbSchedule = typeof schedules.$inferSelect;
 export type DbDataset = typeof datasets.$inferSelect;
 export type DbDatasetRow = typeof datasetRows.$inferSelect;
+export type DbRunDelivery = typeof runDeliveries.$inferSelect;

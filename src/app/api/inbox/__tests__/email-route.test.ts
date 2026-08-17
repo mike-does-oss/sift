@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   fetchReceivedAttachment: vi.fn(),
   fetchReceivedRawMime: vi.fn(),
   saveBuffer: vi.fn(),
+  enqueueScheduleArrival: vi.fn(),
+  kickJobWorker: vi.fn(),
 }));
 
 vi.mock("@/db", () => ({
@@ -39,6 +41,13 @@ vi.mock("@/lib/resend", () => ({
 }));
 
 vi.mock("@/lib/storage", () => ({ saveBuffer: state.saveBuffer }));
+
+// §T2: the arrival-enqueue seam — mocked so the worker core (and its heavy
+// import graph) never loads in these route tests.
+vi.mock("@/lib/jobs", () => ({
+  enqueueScheduleArrival: state.enqueueScheduleArrival,
+  kickJobWorker: state.kickJobWorker,
+}));
 
 import { POST } from "../email/route";
 
@@ -107,6 +116,8 @@ beforeEach(() => {
     filePath: `blob/${filename}`,
     sizeBytes: buf.length,
   }));
+  state.enqueueScheduleArrival.mockReset().mockResolvedValue(1);
+  state.kickJobWorker.mockReset();
 });
 
 afterEach(() => {
@@ -345,6 +356,44 @@ describe("attachment guards", () => {
     const res = await deliver(receivedEvent({ attachments: payloadAttachments(12) }));
     expect(await res.json()).toEqual({ ingested: 10, skipped: 2 });
     expect(state.fetchReceivedAttachment).toHaveBeenCalledTimes(10);
+  });
+});
+
+describe("process on arrival (§T2)", () => {
+  it("does NOT enqueue when the schedule's flag is off (default)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    expect(await (await deliver(receivedEvent())).json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.enqueueScheduleArrival).not.toHaveBeenCalled();
+    expect(state.kickJobWorker).not.toHaveBeenCalled();
+  });
+
+  it("enqueues via the arrival path and kicks the worker when the flag is set and something ingested", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email", processOnArrival: true });
+    expect(await (await deliver(receivedEvent())).json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.enqueueScheduleArrival).toHaveBeenCalledExactlyOnceWith("sch_1");
+    expect(state.kickJobWorker).toHaveBeenCalledExactlyOnceWith("http://localhost:4215");
+  });
+
+  it("does not enqueue when nothing was ingested (bodiless drop)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments", processOnArrival: true });
+    expect(await (await deliver(receivedEvent())).json()).toEqual({ ingested: 0, skipped: 0 });
+    expect(state.enqueueScheduleArrival).not.toHaveBeenCalled();
+  });
+
+  it("does not kick the worker when the enqueue created no jobs", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email", processOnArrival: true });
+    state.enqueueScheduleArrival.mockResolvedValue(0);
+    expect(await (await deliver(receivedEvent())).json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.kickJobWorker).not.toHaveBeenCalled();
+  });
+
+  it("still 200s with the ingest counts when the enqueue fails — docs stay in the inbox for the next run", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email", processOnArrival: true });
+    state.enqueueScheduleArrival.mockRejectedValue(new Error("quota lookup exploded"));
+    const res = await deliver(receivedEvent());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.kickJobWorker).not.toHaveBeenCalled();
   });
 });
 

@@ -26,8 +26,11 @@ describe("job store selection by profile", () => {
     // pg is multi-instance: no in-process bookkeeping, but it must sweep.
     expect(store.beginRun).toBeUndefined();
     expect(store.sweepStale).toBeTypeOf("function");
-    // Output flows are local-only; the pg store must not implement them.
-    expect(store.runTerminalCounts).toBeUndefined();
+    // §INBOX T2: both all-terminal hooks need run counts, and hosted
+    // delivery needs the idempotency claim.
+    expect(store.runTerminalCounts).toBeTypeOf("function");
+    expect(store.claimRunDelivery).toBeTypeOf("function");
+    // Output-folder flows are local-only; the pg store must not implement them.
     expect(store.clearBatchResults).toBeUndefined();
     expect(store.clearRunResults).toBeUndefined();
   });

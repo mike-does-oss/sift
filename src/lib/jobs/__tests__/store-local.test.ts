@@ -103,3 +103,22 @@ describe("local store enqueueInbox", () => {
     expect(await store.enqueueInbox({ id: "s1", userId: "local" }, snapshot, "run-2", false, null)).toBe(0);
   });
 });
+
+describe("local store claimRunDelivery (§INBOX T2)", () => {
+  it("exactly one of two concurrent claims for the same run wins", async () => {
+    const results = await Promise.all([store.claimRunDelivery!("run-1"), store.claimRunDelivery!("run-1")]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    // And the claim is durable: any later transition loses too.
+    expect(await store.claimRunDelivery!("run-1")).toBe(false);
+    const rows = await db.query.runDeliveries.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].runId).toBe("run-1");
+    expect(rows[0].deliveredAt).toBeInstanceOf(Date);
+  });
+
+  it("claims are per-run — a different run is an independent slot", async () => {
+    expect(await store.claimRunDelivery!("run-1")).toBe(true);
+    expect(await store.claimRunDelivery!("run-2")).toBe(true);
+    expect(await db.query.runDeliveries.findMany()).toHaveLength(2);
+  });
+});

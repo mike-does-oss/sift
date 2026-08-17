@@ -15,6 +15,13 @@
       "when": 1786932680601,
       "tag": "0001_inbox_email",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786933487896,
+      "tag": "0002_run_deliveries",
+      "breakpoints": true
     }
   ]
 }

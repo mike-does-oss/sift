@@ -139,6 +139,12 @@ export const datasets = pgTable("datasets", {
   createdAt: createdAt(),
 });
 
+// §INBOX T2: delivery claim table — see schema.sqlite.ts for the full note.
+export const runDeliveries = pgTable("run_deliveries", {
+  runId: text("run_id").primaryKey(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "date" }).notNull().$defaultFn(() => new Date()),
+});
+
 export const datasetRows = pgTable("dataset_rows", {
   id: id(),
   userId: userId(),

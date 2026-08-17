@@ -88,6 +88,17 @@ export const localStore: JobStore = {
     `).get(runId) as { total: number; terminal: number };
   },
 
+  // §INBOX T2: the conflict target is the primary key, so exactly one caller
+  // per run ever sees changes === 1. Delivery itself is a hosted behavior —
+  // the local implementation exists for dialect parity and real-database
+  // testing of the claim semantics.
+  async claimRunDelivery(runId: string) {
+    const res = sqlite
+      .prepare(`INSERT INTO run_deliveries (run_id, delivered_at) VALUES (?, ?) ON CONFLICT(run_id) DO NOTHING`)
+      .run(runId, Date.now());
+    return res.changes === 1;
+  },
+
   async clearBatchResults(batchId: string) {
     sqlite.prepare(`UPDATE jobs SET result = NULL WHERE batch_id = ? AND status = 'completed'`).run(batchId);
   },

@@ -7,6 +7,7 @@ export {
   processPendingJobs,
   runDueSchedules,
   enqueueScheduleNow,
+  enqueueScheduleArrival,
   kickJobWorker,
   getJobStore,
   resolveJobApiKey,

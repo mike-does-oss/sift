@@ -71,6 +71,35 @@ export function enqueueInboxSql(schedule: { id: string; userId: string }, snapsh
   `;
 }
 
+/**
+ * §INBOX T2: the delivery-claim statement — insert-on-conflict-do-nothing on
+ * `run_deliveries`' primary key. `RETURNING run_id` yields a row ONLY when
+ * this statement performed the insert, so `rows.length === 1` is "we won the
+ * claim" even across concurrent serverless instances. Exported for SQL-shape
+ * tests.
+ */
+export function claimRunDeliverySql(runId: string): SQL {
+  return sql`
+    INSERT INTO run_deliveries (run_id, delivered_at) VALUES (${runId}, now())
+    ON CONFLICT (run_id) DO NOTHING
+    RETURNING run_id
+  `;
+}
+
+/**
+ * §INBOX T2: terminal/total counts for a schedule run — the same terminal
+ * definition as the local store (completed, or failed with completed_at set).
+ * Exported for SQL-shape tests.
+ */
+export function runTerminalCountsSql(runId: string): SQL {
+  return sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE status = 'completed' OR (status = 'failed' AND completed_at IS NOT NULL))::int AS terminal
+    FROM jobs WHERE run_id = ${runId}
+  `;
+}
+
 export const pgStore: JobStore = {
   dialect: "pg",
 
@@ -122,5 +151,15 @@ export const pgStore: JobStore = {
   async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean, quotaLimit: number | null) {
     const res = await pgDb().execute(enqueueInboxSql(schedule, snapshot, runId, usedByoKey, quotaLimit));
     return res.rows.length;
+  },
+
+  async runTerminalCounts(runId: string) {
+    const res = await pgDb().execute(runTerminalCountsSql(runId));
+    return res.rows[0] as { total: number; terminal: number };
+  },
+
+  async claimRunDelivery(runId: string) {
+    const res = await pgDb().execute(claimRunDeliverySql(runId));
+    return res.rows.length === 1;
   },
 };

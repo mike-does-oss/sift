@@ -96,3 +96,28 @@ describe("pg inbox claim-and-enqueue CTE", () => {
     expect(q.sql).not.toContain("LIMIT");
   });
 });
+
+describe("pg run-delivery claim (§INBOX T2)", () => {
+  it("is an insert-on-conflict-do-nothing on run_deliveries' PK, RETURNING only on a win", async () => {
+    const { claimRunDeliverySql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(claimRunDeliverySql("run-1"));
+    expect(q.sql).toContain("INSERT INTO run_deliveries (run_id, delivered_at)");
+    expect(q.sql).toContain("ON CONFLICT (run_id) DO NOTHING");
+    // The winner-detection contract: a returned row exists iff THIS statement
+    // inserted — rows.length === 1 means "we deliver".
+    expect(q.sql).toContain("RETURNING run_id");
+    expect(q.sql).toContain("now()");
+    expect(q.params).toEqual(["run-1"]);
+  });
+});
+
+describe("pg run terminal counts (§INBOX T2)", () => {
+  it("counts total and terminal jobs with the local store's exact terminal definition", async () => {
+    const { runTerminalCountsSql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(runTerminalCountsSql("run-1"));
+    expect(q.sql).toContain("count(*)::int AS total");
+    expect(q.sql).toMatch(/FILTER \(WHERE status = 'completed' OR \(status = 'failed' AND completed_at IS NOT NULL\)\)::int AS terminal/);
+    expect(q.sql).toContain("FROM jobs WHERE run_id = ");
+    expect(q.params).toEqual(["run-1"]);
+  });
+});
