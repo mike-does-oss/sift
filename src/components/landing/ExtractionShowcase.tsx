@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { fieldColorVars } from "@/lib/fieldColors";
 
@@ -282,13 +282,18 @@ const DOC_RENDERERS: Record<DocDef["id"], typeof StatementDoc> = {
 
 /* ---------------------------------------------------------------- showcase */
 
+// "Am I hydrated yet?" via useSyncExternalStore: the server snapshot is false,
+// the client snapshot is true, so SSR and the first client render agree.
+const subscribeNoop = () => () => {};
+const snapshotTrue = () => true;
+const snapshotFalse = () => false;
+
 export function ExtractionShowcase() {
   // The server can't know the visitor's motion preference, so SSR always
   // renders the reduced=false tree; honoring the media query before mount
   // would make the first client render disagree with it (hydration error).
   const prefersReduced = useReducedMotion() ?? false;
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(subscribeNoop, snapshotTrue, snapshotFalse);
   const reduced = mounted && prefersReduced;
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
