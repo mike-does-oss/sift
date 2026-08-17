@@ -93,12 +93,6 @@ function senderAllowed(allowedSenders: string | null, from: string): boolean {
     .some((entry) => (entry.includes("@") ? sender === entry : domain === entry || domain.endsWith("." + entry)));
 }
 
-function localPartOf(recipient: string): string {
-  const address = extractAddress(recipient);
-  const at = address.indexOf("@");
-  return at === -1 ? address : address.slice(0, at);
-}
-
 /** `.eml` filename from the subject (sanitized) or the provider email id. */
 function emlFilename(subject: string | undefined, emailId: string): string {
   const base = (subject ?? "")
@@ -114,8 +108,39 @@ interface ReceivedEventData {
   email_id?: string;
   from?: string;
   to?: string[] | string;
+  cc?: string[] | string;
+  bcc?: string[] | string;
+  /** Envelope recipients from the Received headers — how a FORWARDED email
+   *  names the inbox alias (its To: still shows the original recipient). */
+  received_for?: string[] | string;
   subject?: string;
   attachments?: Array<{ id?: string; filename?: string; content_type?: string }>;
+}
+
+function asList(v: string[] | string | undefined): string[] {
+  return Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+}
+
+/**
+ * Mixup guardrail #1 — candidate recipients are the union of To/Cc/Bcc AND
+ * `received_for` (forwarding rules deliver the alias in the envelope, not the
+ * visible To: header). Guardrail #2 — an address is only a token candidate
+ * when its DOMAIN is exactly this deployment's inbound domain: a forwarded
+ * email's original recipient (`billing@customer.com`) must never be looked up
+ * as a token, no matter what its local part is. Guardrail #3 — subaddress
+ * tags (`token+march@…`) are stripped, so tagged forwards still route.
+ */
+function candidateTokens(data: ReceivedEventData, inboundDomain: string): string[] {
+  const domain = inboundDomain.trim().toLowerCase();
+  const tokens: string[] = [];
+  for (const recipient of [...asList(data.to), ...asList(data.cc), ...asList(data.bcc), ...asList(data.received_for)]) {
+    const address = extractAddress(recipient);
+    const at = address.indexOf("@");
+    if (at === -1 || address.slice(at + 1) !== domain) continue;
+    const token = address.slice(0, at).split("+")[0];
+    if (token && !tokens.includes(token)) tokens.push(token);
+  }
+  return tokens;
 }
 
 function ignored(reason: string, detail?: string): NextResponse {
@@ -154,28 +179,32 @@ export async function POST(request: Request) {
   const emailId = data.email_id;
   if (!emailId) return ignored("payload missing email_id");
 
-  // Resolve the schedule from the recipient token. Everything about the
-  // tenant comes from the matched row — never from the payload.
-  const recipients = Array.isArray(data.to) ? data.to : typeof data.to === "string" ? [data.to] : [];
-  let schedule = null;
-  for (const recipient of recipients) {
-    const token = localPartOf(recipient);
-    if (!token) continue;
-    schedule = (await db.query.schedules.findFirst({ where: eq(schedules.inboundToken, token) })) ?? null;
-    if (schedule) break;
+  // Self-loop guard: our own run digests come from notifications@<inbound
+  // domain>. A user who blanket-forwards their mailbox to a schedule address
+  // would otherwise ingest each digest — and with process-on-arrival, every
+  // digest would trigger a run that sends the next digest (metered spend
+  // loop). From: is spoofable, so the worst an attacker gets from this check
+  // is suppressing their own forged email — acceptable.
+  const inboundDomain = (process.env.RESEND_INBOUND_DOMAIN ?? "").trim().toLowerCase();
+  if (!inboundDomain) {
+    console.log("[inbox/email] RESEND_INBOUND_DOMAIN is not set — cannot anchor recipients; ignoring delivery");
+    return ignored("inbound domain not configured");
   }
-  if (!schedule) return ignored("no schedule for recipient");
-
-  if (!senderAllowed(schedule.allowedSenders, data.from ?? "")) {
-    return ignored("sender not in allowedSenders", `schedule ${schedule.id}`);
+  if (extractAddress(data.from ?? "") === `notifications@${inboundDomain}`) {
+    return ignored("self-notification loop guard", `email ${emailId}`);
   }
 
-  // Idempotency: a redelivered webhook (same provider email id, same
-  // schedule) creates nothing.
-  const existing = await db.query.documents.findFirst({
-    where: and(eq(documents.sourceMessageId, emailId), eq(documents.scheduleId, schedule.id)),
-  });
-  if (existing) return ignored("duplicate delivery", `email ${emailId}`);
+  // Resolve EVERY schedule addressed by this email (mixup guardrail #4: an
+  // email cc'd to two inbox addresses feeds both — first-match-only would
+  // silently starve the second, possibly another tenant's). Everything about
+  // each tenant comes from its own matched row — never from the payload.
+  const tokens = candidateTokens(data, inboundDomain);
+  const matched: Array<typeof schedules.$inferSelect> = [];
+  for (const token of tokens) {
+    const s = await db.query.schedules.findFirst({ where: eq(schedules.inboundToken, token) });
+    if (s && !matched.some((m) => m.id === s.id)) matched.push(s);
+  }
+  if (matched.length === 0) return ignored("no schedule for any recipient");
 
   let ingested = 0;
   let skipped = 0;
@@ -206,80 +235,131 @@ export async function POST(request: Request) {
     return err instanceof Error && err.name === "AttachmentTooLargeError";
   }
 
-  async function ingest(buf: Buffer, filename: string, ext: string): Promise<void> {
+  // Shared content fetchers, memoized across matched schedules: an email
+  // cc'd to two inboxes downloads each attachment (and the raw MIME) exactly
+  // once. A rejected promise is memoized too — every schedule sees the same
+  // transport failure, which is the truthful outcome.
+  const memo: {
+    metas?: Promise<resend.ReceivedAttachmentMeta[]>;
+    bufs: Map<string, Promise<Buffer>>;
+    raw?: Promise<Buffer>;
+  } = { bufs: new Map() };
+  const getMetas = () => (memo.metas ??= resend.listReceivedAttachments(emailId));
+  const getAttachment = (meta: resend.ReceivedAttachmentMeta) => {
+    let p = memo.bufs.get(meta.downloadUrl);
+    if (!p) {
+      p = resend.fetchReceivedAttachment(meta.downloadUrl, MAX_ATTACHMENT_FETCH_BYTES);
+      p.catch(() => {}); // memoized rejection must not become an unhandled rejection
+      memo.bufs.set(meta.downloadUrl, p);
+    }
+    return p;
+  };
+  const getRaw = () => {
+    if (!memo.raw) {
+      memo.raw = resend.fetchReceivedRawMime(emailId);
+      memo.raw.catch(() => {});
+    }
+    return memo.raw;
+  };
+
+  async function ingest(schedule: typeof schedules.$inferSelect, buf: Buffer, filename: string, ext: string): Promise<void> {
     const { filePath, sizeBytes } = await saveBuffer(buf, filename, ext);
     await db.insert(documents).values({
-      userId: schedule!.userId, // tenant stamp: from the schedule row ONLY
+      userId: schedule.userId, // tenant stamp: from THIS schedule's row ONLY
       filename,
       filePath,
       sizeBytes,
-      scheduleId: schedule!.id,
+      scheduleId: schedule.id,
       sourceMessageId: emailId!,
     });
     ingested++;
   }
 
-  // Content policy (plan §3): what this email turns into.
-  const mode = schedule.ingestMode;
-  const wantsAttachments = mode === "auto" || mode === "attachments" || mode === "both";
-  const hasAttachments = (data.attachments?.length ?? 0) > 0;
+  const arrivals: Array<typeof schedules.$inferSelect> = [];
 
-  if (wantsAttachments && hasAttachments) {
-    let metas: resend.ReceivedAttachmentMeta[] = [];
-    try {
-      metas = await resend.listReceivedAttachments(emailId);
-    } catch (err) {
-      skipTransport(data.attachments!.length, "attachment list failed", err);
+  for (const schedule of matched) {
+    if (!senderAllowed(schedule.allowedSenders, data.from ?? "")) {
+      console.log(`[inbox/email] sender not in allowedSenders (schedule ${schedule.id})`);
+      continue;
     }
-    if (metas.length > MAX_ATTACHMENTS_PER_EMAIL) {
-      skipPolicy(metas.length - MAX_ATTACHMENTS_PER_EMAIL, `${metas.length - MAX_ATTACHMENTS_PER_EMAIL} attachments over the ${MAX_ATTACHMENTS_PER_EMAIL}-per-email cap`);
-      metas = metas.slice(0, MAX_ATTACHMENTS_PER_EMAIL);
+    // Idempotency is PER SCHEDULE: a redelivered webhook creates nothing for
+    // inboxes that already ingested this email, while a schedule that missed
+    // out (e.g. earlier transport failure) can still catch up on retry.
+    const existing = await db.query.documents.findFirst({
+      where: and(eq(documents.sourceMessageId, emailId), eq(documents.scheduleId, schedule.id)),
+    });
+    if (existing) {
+      console.log(`[inbox/email] duplicate delivery for schedule ${schedule.id} (email ${emailId})`);
+      continue;
     }
-    for (const meta of metas) {
-      let buf: Buffer;
+
+    // Content policy (plan §3): what this email turns into, per schedule.
+    const mode = schedule.ingestMode;
+    const wantsAttachments = mode === "auto" || mode === "attachments" || mode === "both";
+    const hasAttachments = (data.attachments?.length ?? 0) > 0;
+    let scheduleIngested = 0;
+
+    if (wantsAttachments && hasAttachments) {
+      let metas: resend.ReceivedAttachmentMeta[] = [];
       try {
-        buf = await resend.fetchReceivedAttachment(meta.downloadUrl, MAX_ATTACHMENT_FETCH_BYTES);
+        metas = await getMetas();
       } catch (err) {
-        if (isTooLarge(err)) skipPolicy(1, `attachment "${meta.filename}": ${(err as Error).message}`);
-        else skipTransport(1, `attachment "${meta.filename}" download failed`, err);
-        continue;
+        skipTransport(data.attachments!.length, "attachment list failed", err);
       }
-      try {
-        const ext = detectExtension(buf, meta.filename); // magic bytes first; throws on unsupported
-        const { maxBytes, label } = sizeLimitFor(ext);
-        if (buf.length > maxBytes) {
-          skipPolicy(1, `attachment "${meta.filename}": larger than ${label}`);
+      if (metas.length > MAX_ATTACHMENTS_PER_EMAIL) {
+        skipPolicy(metas.length - MAX_ATTACHMENTS_PER_EMAIL, `${metas.length - MAX_ATTACHMENTS_PER_EMAIL} attachments over the ${MAX_ATTACHMENTS_PER_EMAIL}-per-email cap`);
+        metas = metas.slice(0, MAX_ATTACHMENTS_PER_EMAIL);
+      }
+      for (const meta of metas) {
+        let buf: Buffer;
+        try {
+          buf = await getAttachment(meta);
+        } catch (err) {
+          if (isTooLarge(err)) skipPolicy(1, `attachment "${meta.filename}": ${(err as Error).message}`);
+          else skipTransport(1, `attachment "${meta.filename}" download failed`, err);
           continue;
         }
-        await ingest(buf, meta.filename, ext);
-      } catch (err) {
-        skipPolicy(1, `attachment "${meta.filename}": ${err instanceof Error ? err.message : err}`);
-      }
-    }
-  }
-
-  // The email itself as .eml: always for `email`/`both`; for `auto` only
-  // when no attachment made it in (body-borne data).
-  const wantsEml = mode === "email" || mode === "both" || (mode === "auto" && ingested === 0);
-  if (wantsEml) {
-    let raw: Buffer | null = null;
-    try {
-      raw = await resend.fetchReceivedRawMime(emailId);
-    } catch (err) {
-      skipTransport(1, `.eml fetch for ${emailId} failed`, err);
-    }
-    if (raw) {
-      try {
-        const { maxBytes, label } = sizeLimitFor("eml");
-        if (raw.length > maxBytes) {
-          skipPolicy(1, `.eml for ${emailId}: larger than ${label}`);
-        } else {
-          await ingest(raw, emlFilename(data.subject, emailId), "eml");
+        try {
+          const ext = detectExtension(buf, meta.filename); // magic bytes first; throws on unsupported
+          const { maxBytes, label } = sizeLimitFor(ext);
+          if (buf.length > maxBytes) {
+            skipPolicy(1, `attachment "${meta.filename}": larger than ${label}`);
+            continue;
+          }
+          await ingest(schedule, buf, meta.filename, ext);
+          scheduleIngested++;
+        } catch (err) {
+          skipPolicy(1, `attachment "${meta.filename}": ${err instanceof Error ? err.message : err}`);
         }
-      } catch (err) {
-        skipPolicy(1, `.eml for ${emailId}: ${err instanceof Error ? err.message : err}`);
       }
     }
+
+    // The email itself as .eml: always for `email`/`both`; for `auto` only
+    // when no attachment made it into THIS schedule (body-borne data).
+    const wantsEml = mode === "email" || mode === "both" || (mode === "auto" && scheduleIngested === 0);
+    if (wantsEml) {
+      let raw: Buffer | null = null;
+      try {
+        raw = await getRaw();
+      } catch (err) {
+        skipTransport(1, `.eml fetch for ${emailId} failed`, err);
+      }
+      if (raw) {
+        try {
+          const { maxBytes, label } = sizeLimitFor("eml");
+          if (raw.length > maxBytes) {
+            skipPolicy(1, `.eml for ${emailId}: larger than ${label}`);
+          } else {
+            await ingest(schedule, raw, emlFilename(data.subject, emailId), "eml");
+            scheduleIngested++;
+          }
+        } catch (err) {
+          skipPolicy(1, `.eml for ${emailId}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    }
+
+    if (scheduleIngested > 0 && schedule.processOnArrival) arrivals.push(schedule);
   }
 
   // Nothing made it in AND at least one skip was a transport failure: 500 so
@@ -293,23 +373,24 @@ export async function POST(request: Request) {
   }
 
   if (ingested === 0 && skipped === 0) {
-    console.log(`[inbox/email] nothing to ingest for ${emailId} (mode ${mode}, no matching content)`);
+    console.log(`[inbox/email] nothing to ingest for ${emailId} (no matching content for any schedule)`);
   }
 
-  // §T2 process-on-arrival: enqueue the just-ingested docs immediately via
-  // the quota-capped path (`enqueueScheduleArrival` — deliberately does NOT
-  // stamp lastRunAt, so the cadence contract stays intact) and kick the
-  // worker. Best-effort by design: ingestion has already succeeded, so an
-  // enqueue failure logs and still 200s — the docs simply wait in the inbox
-  // for the next cadence run.
-  if (ingested > 0 && schedule.processOnArrival) {
+  // §T2 process-on-arrival: enqueue each arrival schedule's just-ingested
+  // docs immediately via the quota-capped path (`enqueueScheduleArrival` —
+  // deliberately does NOT stamp lastRunAt, so the cadence contract stays
+  // intact) and kick the worker once. Best-effort by design: ingestion has
+  // already succeeded, so an enqueue failure logs and still 200s — the docs
+  // simply wait in the inbox for the next cadence run.
+  let jobsCreated = 0;
+  for (const schedule of arrivals) {
     try {
-      const jobsCreated = await enqueueScheduleArrival(schedule.id);
-      if (jobsCreated > 0) kickJobWorker(new URL(request.url).origin);
+      jobsCreated += await enqueueScheduleArrival(schedule.id);
     } catch (err) {
       console.log(`[inbox/email] process-on-arrival enqueue failed for schedule ${schedule.id}: ${err instanceof Error ? err.message : err}`);
     }
   }
+  if (jobsCreated > 0) kickJobWorker(new URL(request.url).origin);
 
   return NextResponse.json({ ingested, skipped });
 }

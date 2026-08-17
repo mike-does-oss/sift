@@ -170,6 +170,10 @@ export async function sendEmail({ to, subject, html, attachments }: SendEmailInp
       to: [to],
       subject,
       html,
+      // Marks our own notifications so the inbound webhook's self-loop guard
+      // (blanket mailbox forwarding → schedule inbox → digest → …) has a
+      // second signal beyond the From address.
+      headers: { "X-Sift-Notification": "run-digest" },
       ...(attachments && attachments.length > 0 ? { attachments } : {}),
     }),
   });

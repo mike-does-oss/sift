@@ -45,7 +45,9 @@ On the hosted service, every schedule also gets its own email address, shown at 
 - **Email content only** — the email itself is ingested as `.eml`; attachments are ignored.
 - **Both** — the attachments and the `.eml`.
 
-Emailed-in content goes through the same checks as manual uploads — supported types only, 32MB per document (8MB per image) — and at most 10 attachments per email are taken. Anything unsupported, oversize, or over the cap is skipped, never failed. A redelivered email creates nothing: deliveries are deduplicated on the provider's message id.
+Routing understands how email actually arrives: the address works in To, Cc, or Bcc, **and through forwarding rules** (where the visible To: still shows the original recipient — sift reads the delivery envelope). Tagged forms of the address (`<address-part>+anything@…`) route to the same inbox. An email addressed to two schedule addresses feeds both inboxes independently — each applies its own ingest mode, sender rules, and deduplication — and only addresses at sift's own inbound domain are ever treated as inbox addresses, so the other recipients on a forwarded thread can never be misread as one. Sift's own notification emails are recognized and never ingested, so a blanket forward-everything rule can't loop.
+
+Emailed-in content goes through the same checks as manual uploads — supported types only, 32MB per document (8MB per image) — and at most 10 attachments per email are taken. Anything unsupported, oversize, or over the cap is skipped, never failed. A redelivered email creates nothing: deliveries are deduplicated on the provider's message id, per schedule.
 
 The address is unguessable, and it's the only credential a sender needs. To narrow that, set **allowed senders**: a comma-separated list where an entry with a full address (`billing@xero.com`) matches exactly that sender, and a domain entry (`acme.com`) matches any sender from exactly that domain or one of its subdomains (`mail.acme.com` matches; `acme.com.evil.net` does not). Matching is case-insensitive; an empty list accepts any sender. Email from anyone else is silently dropped.
 

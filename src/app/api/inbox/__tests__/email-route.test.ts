@@ -67,6 +67,9 @@ interface EventOverrides {
   emailId?: string;
   from?: string;
   to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  received_for?: string[];
   subject?: string;
   attachments?: Array<{ id: string; filename: string; content_type?: string }>;
   type?: string;
@@ -76,11 +79,18 @@ function receivedEvent({
   emailId = "em_1",
   from = "sender@acme.com",
   to = ["tokentokentokent@abc123.resend.app"],
+  cc,
+  bcc,
+  received_for,
   subject = "July invoices",
   attachments = [],
   type = "email.received",
 }: EventOverrides = {}): string {
-  return JSON.stringify({ type, created_at: new Date().toISOString(), data: { email_id: emailId, from, to, subject, attachments } });
+  return JSON.stringify({
+    type,
+    created_at: new Date().toISOString(),
+    data: { email_id: emailId, from, to, cc, bcc, received_for, subject, attachments },
+  });
 }
 
 async function deliver(payload: string, headers?: Record<string, string>) {
@@ -106,6 +116,8 @@ const payloadAttachments = (n: number) => Array.from({ length: n }, (_, i) => ({
 beforeEach(() => {
   vi.stubEnv("SIFT_PROFILE", "hosted");
   vi.stubEnv("RESEND_WEBHOOK_SECRET", SECRET);
+  // Mixup guardrails: recipients only resolve as tokens at THIS domain.
+  vi.stubEnv("RESEND_INBOUND_DOMAIN", "abc123.resend.app");
   state.scheduleFindFirst.mockReset().mockResolvedValue({ ...SCHEDULE });
   state.documentFindFirst.mockReset().mockResolvedValue(undefined);
   state.inserts.length = 0;
@@ -235,7 +247,11 @@ describe("allowedSenders", () => {
     if (allowed) {
       expect(body).toEqual({ ingested: 1, skipped: 0 });
     } else {
-      expect(body).toEqual({ ignored: true });
+      // Guardrail fan-out change: a rejected sender is a PER-SCHEDULE skip
+      // (an email cc'd to a second schedule must still process there), so
+      // the route reports zero ingestion rather than a top-level ignore.
+      // The load-bearing assertion is unchanged: nothing was inserted.
+      expect(body).toEqual({ ingested: 0, skipped: 0 });
       expect(state.inserts).toEqual([]);
     }
   });
@@ -245,7 +261,9 @@ describe("idempotency", () => {
   it("a redelivered email (same provider id, same schedule) ingests 0", async () => {
     state.documentFindFirst.mockResolvedValue({ id: "doc_1" });
     const res = await deliver(receivedEvent());
-    expect(await res.json()).toEqual({ ignored: true });
+    // Per-schedule skip under the fan-out (see allowedSenders note): the
+    // dedupe's real guarantees are below — no insert, no content fetches.
+    expect(await res.json()).toEqual({ ingested: 0, skipped: 0 });
     expect(state.inserts).toEqual([]);
     expect(state.fetchReceivedRawMime).not.toHaveBeenCalled();
     expect(state.listReceivedAttachments).not.toHaveBeenCalled();
@@ -490,5 +508,91 @@ describe("tenant stamping", () => {
       expect(row.scheduleId).toBe("sch_1");
       expect(row.sourceMessageId).toBe("em_42");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mixup guardrails: the routing layer must never confuse inboxes — not across
+// tenants, not across a user's own schedules, not for forwarded mail.
+describe("mixup guardrails", () => {
+  const DOMAIN = "abc123.resend.app";
+  const B_SCHEDULE = { id: "sch_2", userId: "user_7", inboundToken: "othertokenother1", ingestMode: "email" as string, allowedSenders: null as string | null };
+
+  it("routes a FORWARDED email via received_for (To: still shows the original recipient)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    const res = await deliver(receivedEvent({
+      to: ["mike@meridian.co"], // the pre-forwarding recipient — foreign domain
+      received_for: [`tokentokentokent@${DOMAIN}`],
+    }));
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+  });
+
+  it("routes an inbox address that only appears in Cc", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    const res = await deliver(receivedEvent({ to: ["team@meridian.co"], cc: [`tokentokentokent@${DOMAIN}`] }));
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+  });
+
+  it("NEVER token-looks-up a foreign-domain address, even with a token-shaped local part", async () => {
+    const res = await deliver(receivedEvent({ to: ["tokentokentokent@evil.example"] }));
+    expect(await res.json()).toEqual({ ignored: true });
+    expect(state.scheduleFindFirst).not.toHaveBeenCalled();
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("routes subaddress tags to the base token", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    const res = await deliver(receivedEvent({ to: [`TokenTokenTokenT+march@${DOMAIN.toUpperCase()}`] }));
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+  });
+
+  it("fans out to EVERY addressed schedule, each stamped with its own tenant", async () => {
+    state.scheduleFindFirst
+      .mockResolvedValueOnce({ ...SCHEDULE, ingestMode: "email" })
+      .mockResolvedValueOnce({ ...B_SCHEDULE });
+    const res = await deliver(receivedEvent({
+      to: [`tokentokentokent@${DOMAIN}`],
+      cc: [`othertokenother1@${DOMAIN}`],
+    }));
+    expect(await res.json()).toEqual({ ingested: 2, skipped: 0 });
+    const stamps = state.inserts.map((r) => `${r.userId}/${r.scheduleId}`).sort();
+    expect(stamps).toEqual(["user_7/sch_2", "user_9/sch_1"]);
+  });
+
+  it("one schedule's sender rejection doesn't starve the other", async () => {
+    state.scheduleFindFirst
+      .mockResolvedValueOnce({ ...SCHEDULE, ingestMode: "email", allowedSenders: "only@elsewhere.io" })
+      .mockResolvedValueOnce({ ...B_SCHEDULE });
+    const res = await deliver(receivedEvent({
+      to: [`tokentokentokent@${DOMAIN}`, `othertokenother1@${DOMAIN}`],
+    }));
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.inserts.map((r) => r.scheduleId)).toEqual(["sch_2"]);
+  });
+
+  it("the same address in To and Cc resolves once, not twice", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    const res = await deliver(receivedEvent({
+      to: [`tokentokentokent@${DOMAIN}`],
+      cc: [`Tokentokentokent@${DOMAIN}`],
+    }));
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 0 });
+    expect(state.scheduleFindFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops our own run digests (self-notification loop guard)", async () => {
+    const res = await deliver(receivedEvent({
+      from: `Sift <notifications@${DOMAIN}>`,
+      to: [`tokentokentokent@${DOMAIN}`],
+    }));
+    expect(await res.json()).toEqual({ ignored: true });
+    expect(state.scheduleFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("missing RESEND_INBOUND_DOMAIN cannot anchor recipients — ignored, no lookups", async () => {
+    vi.stubEnv("RESEND_INBOUND_DOMAIN", "");
+    const res = await deliver(receivedEvent());
+    expect(await res.json()).toEqual({ ignored: true });
+    expect(state.scheduleFindFirst).not.toHaveBeenCalled();
   });
 });
