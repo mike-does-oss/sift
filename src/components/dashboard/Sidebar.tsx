@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  LayoutDashboard,
   Sparkles,
   Layers,
-  CalendarClock,
   FileJson,
   Database,
-  History,
   Settings,
   Moon,
   Sun,
@@ -18,15 +17,35 @@ import {
 import { signOutAction } from "@/app/dashboard/actions";
 import { SiftWordmark } from "@/components/brand/SiftWordmark";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Extract", icon: Sparkles },
-  { href: "/dashboard/batches", label: "Batches", icon: Layers },
-  { href: "/dashboard/schedules", label: "Schedules", icon: CalendarClock },
+// UI-2 U1 consolidated nav: Batches/Schedules/History collapsed into "Runs"
+// (tabs at /dashboard/runs); /dashboard is the overview home and the extract
+// workspace lives at /dashboard/extract. `alsoActiveOn` covers routes that
+// belong to a section without living under its href — the batch/schedule
+// detail pages (and the legacy list routes, which redirect into the tabs).
+const NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: typeof Sparkles;
+  alsoActiveOn?: readonly string[];
+}> = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/extract", label: "Extract", icon: Sparkles },
   { href: "/dashboard/templates", label: "Templates", icon: FileJson },
+  {
+    href: "/dashboard/runs",
+    label: "Runs",
+    icon: Layers,
+    alsoActiveOn: ["/dashboard/batches", "/dashboard/schedules", "/dashboard/history"],
+  },
   { href: "/dashboard/datasets", label: "Datasets", icon: Database },
-  { href: "/dashboard/history", label: "History", icon: History },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
-] as const;
+];
+
+function isNavItemActive(item: (typeof NAV_ITEMS)[number], pathname: string): boolean {
+  if (item.href === "/dashboard") return pathname === item.href;
+  const prefixes = [item.href, ...(item.alsoActiveOn ?? [])];
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 const THEME_STORAGE_KEY = "sift-theme";
 
@@ -91,10 +110,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/dashboard"
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isActive = isNavItemActive(item, pathname);
           const Icon = item.icon;
           return (
             <Link

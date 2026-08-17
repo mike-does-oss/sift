@@ -255,7 +255,7 @@ export default function ScheduleDetailPage() {
     return (
       <div className="p-8 max-w-3xl mx-auto">
         <p className="text-sm text-[var(--text-tertiary)]">Schedule not found.</p>
-        <Link href="/dashboard/schedules" className="text-sm text-[var(--accent)] font-medium">
+        <Link href="/dashboard/runs?tab=schedules" className="text-sm text-[var(--accent)] font-medium">
           Back to schedules
         </Link>
       </div>
@@ -272,7 +272,7 @@ export default function ScheduleDetailPage() {
           <button onClick={load} className="px-3 py-2 rounded-lg btn-primary text-xs">
             Retry
           </button>
-          <Link href="/dashboard/schedules" className="text-sm text-[var(--accent)] font-medium">
+          <Link href="/dashboard/runs?tab=schedules" className="text-sm text-[var(--accent)] font-medium">
             Back to schedules
           </Link>
         </div>
@@ -283,7 +283,7 @@ export default function ScheduleDetailPage() {
   return (
     <div className="p-8 max-w-3xl mx-auto space-y-8">
       <Link
-        href="/dashboard/schedules"
+        href="/dashboard/runs?tab=schedules"
         className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />

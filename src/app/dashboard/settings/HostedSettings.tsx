@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { PLANS, planFeatures, cheapestByoKeyPlan, type Plan } from "@/lib/plans";
+import { UsageMeter } from "@/components/dashboard/UsageMeter";
 
 // §SaaS-1 T6 hosted Settings (plan decision 10, donor: extracto-app
 // settings). Three sections — Account, Plan & usage, Bring your own key —
@@ -34,24 +35,6 @@ type KeyState =
   | { status: "none" }
   | { status: "stored"; masked: string }
   | { status: "locked" };
-
-function UsageMeter({ used, limit }: { used: number; limit: number }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const nearLimit = pct >= 80;
-  return (
-    <div className="space-y-1.5">
-      <div className="h-2 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
-        <div
-          className={`h-full transition-all ${nearLimit ? "bg-[var(--error)]" : "bg-[var(--accent)]"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="text-xs text-[var(--text-tertiary)] tabular-nums">
-        {used.toLocaleString()} of {limit.toLocaleString()} extractions used this month
-      </p>
-    </div>
-  );
-}
 
 export default function HostedSettingsPage({ email }: { email: string }) {
   const [usage, setUsage] = useState<UsageInfo | null>(null);
