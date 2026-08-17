@@ -6,9 +6,24 @@
 
 ![AGPL-3.0 License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
 
-Open-source, self-hostable document extractor that runs fully local by default (Ollama) and never marks up your tokens (BYO cloud key).
+Sift is an open-source, self-hostable document extractor. Upload a PDF, Word, PowerPoint, email, image, or text file, define the fields you want in plain language, and get structured data back — reviewed, edited, and exported on your terms. It runs fully local by default (Ollama, documents never leave your machine) and never marks up your tokens: bring your own Anthropic, OpenAI, or Gemini key, or point it at any OpenAI-compatible endpoint.
+
+- **Local-first and private** — an always-visible 🔒 Local / ☁ Cloud badge tells you exactly where each extraction runs.
+- **No-code extraction** — fields are a name, a type, and a description; a model can even scaffold them from a task description. Grounded mode backs every value with the exact source quote.
+- **Human-in-the-loop** — review and edit every value in place; exports and datasets always use your edits.
+- **Scales past one document** — templates (with 9 ready-made presets), batch runs, recurring schedules with document inboxes, datasets that merge results into one CSV.
 
 ## Quick start
+
+**macOS desktop app (Apple Silicon), one command:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mike-does-oss/sift/main/install.sh | sh
+```
+
+Downloads the latest release to /Applications and launches it. The build is unsigned for now — the script clears the quarantine flag for you (you're choosing to trust an open-source build you can read right here). Or grab an installer from [Releases](https://github.com/mike-does-oss/sift/releases) and right-click → Open on first launch.
+
+**Or run from source (Node 20+):**
 
 ```bash
 git clone https://github.com/mike-does-oss/sift && cd sift
@@ -16,84 +31,23 @@ npm install
 npm run dev
 ```
 
-Requires Node 20+. SQLite auto-creates at `./data/sift.db` on first run — no separate database setup. The app is at http://localhost:3000. Set `SIFT_DATA_DIR` to point the database and uploaded-file storage at a different directory (defaults to `./data`); `SIFT_MIGRATIONS_DIR` similarly overrides where the Drizzle migration files are read from (defaults to `./drizzle`).
+The app is at http://localhost:3000, bound to localhost only. SQLite auto-creates on first run — no database setup. Then install [Ollama](https://ollama.com) and `ollama pull gemma3:4b`, or add a cloud API key in Settings.
 
-### Localhost only, by default
+## Documentation
 
-There is no auth. `npm run dev` / `npm start` bind to `127.0.0.1` only, so the app is reachable from this machine alone. If you want LAN access anyway, run `next dev -H 0.0.0.0` (or `next start -H 0.0.0.0`, or your own interface) — at your own risk, since anyone who can reach that address can read your extraction history, spend your BYO API key, and edit your settings.
+Full guides live in [`docs/`](docs/README.md):
 
-## Provider setup
-
-### Ollama (default, local)
-
-1. [Install Ollama](https://ollama.com).
-2. `ollama pull gemma3:4b`.
-3. If Ollama isn't running on the default `http://localhost:11434`, set the base URL in Settings.
-
-Vision-capable models (gemma3 is one) also read images locally. Text-layer PDFs extract locally with any model; scanned PDFs need a vision path (local vision model for images, or a cloud provider for PDFs).
-
-### Anthropic / OpenAI / Gemini (BYO key)
-
-Add your API key and model in Settings. Keys are stored in your local SQLite database on this machine — plaintext, single-user; treat `./data` as sensitive.
-
-### Any OpenAI-compatible endpoint
-
-Point the OpenAI-compatible provider at a base URL — Groq, vLLM, LM Studio, or Ollama's own `/v1` endpoint all work. API key optional (many local servers don't need one).
-
-## Desktop app
-
-**One-command install (macOS, Apple Silicon):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mike-does-oss/sift/main/install.sh | sh
-```
-
-Downloads the latest release to /Applications and launches it. The build is unsigned for now — the script clears the quarantine flag for you (you're choosing to trust an open-source build you can read right here). Or grab the `.dmg` from [Releases](https://github.com/mike-does-oss/sift/releases) and right-click → Open on first launch.
-
-**Or build it yourself:**
-
-```bash
-npm run desktop:build
-```
-
-Produces an unsigned `Sift.app` (plus `.dmg`/`.zip`) in `dist-desktop/` — a native window around the same app, with your data in `~/Library/Application Support/Sift/`. On first launch macOS Gatekeeper will warn because the build is unsigned: right-click the app → Open. If Ollama isn't running, the app walks you through installing it (or lets you continue with cloud keys). Signed installers and auto-update are on the roadmap.
-
-`npm run desktop:dev` runs the desktop shell against the dev server.
-
-## Privacy
-
-In local (Ollama) mode, documents never leave your machine. With a cloud provider, document content goes to that provider only — there is no third-party server of ours involved.
-
-## Formats
-
-PDF, Word (`.docx`), PowerPoint (`.pptx`), email (`.eml`), images (PNG/JPEG/WEBP, via vision models), and plain text (`.txt`/`.md`/`.csv`).
-
-## Features
-
-- Two-pane workspace: document on the left, fields and results on the right — extracted values are highlighted where they appear in the source text
-- Grounded mode (opt-in): every value comes with the exact source quote it was lifted from — highlights anchor precisely, and values the model couldn't ground are flagged for review
-- Build fields from a plain-language description: describe the task, and the model scaffolds the field definitions, types, and prompt for you (grounded mode)
-- Per-template few-shot examples that guide the extraction model
-- Per-field descriptions the model reads as extraction guidance
-- Review and edit every value before export; exports use your edits
-- Datasets: append matching extraction results into a durable local table and export one merged CSV
-- Per-extraction provider/model picker with an always-on 🔒 Local / ☁ Cloud badge
-- 9 preset templates (invoices, receipts, bank statements, pay stubs, purchase orders, utility bills, résumés, contracts)
-- Batches and recurring schedules with document inboxes and Run now
-- History with provider/model recorded per job
-- CSV/JSON export
-- Provider settings with test-connection
-
-## Comparison
-
-| | Parseur / Parserr / Docparser | **Sift** |
-|---|---|---|
-| Hosting | Cloud only | Self-host or (later) hosted |
-| Data locality | Leaves your infra | **Stays local** with Ollama |
-| Pricing | Per-page toll (~3–10¢) | At-cost inference / free self-host |
-| Model choice | Vendor-locked | **Any** — Ollama, Anthropic, OpenAI, Gemini, and any OpenAI-compatible endpoint |
-| Source | Closed | **Open** |
-| Setup for non-tech users | Strong | Parity target for v1 |
+| | |
+|---|---|
+| [Getting started](docs/getting-started.md) | Install and your first extraction |
+| [Desktop app](docs/desktop.md) | Install, data location, Ollama onboarding |
+| [Providers and models](docs/providers.md) | Ollama, cloud keys, hardware recommendations |
+| [Extraction](docs/extraction.md) | Fields, grounded mode, scaffolding, formats and caps |
+| [Templates, batches, and schedules](docs/automation.md) | Automation and output folders |
+| [Datasets](docs/datasets.md) | Durable result tables and merged CSV export |
+| [Hosted service](docs/hosted.md) | Plans, metering, billing, BYO key |
+| [Self-hosting](docs/self-hosting.md) | Plain local server or your own hosted deployment |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and fixes |
 
 ## Screenshots
 
@@ -112,6 +66,17 @@ PDF, Word (`.docx`), PowerPoint (`.pptx`), email (`.eml`), images (PNG/JPEG/WEBP
 **Schedules** — a document inbox processed on a daily or weekly cadence:
 
 ![Schedule detail](docs/screenshots/sift-schedule-detail.png)
+
+## Comparison
+
+| | Parseur / Parserr / Docparser | **Sift** |
+|---|---|---|
+| Hosting | Cloud only | Self-host or (later) hosted |
+| Data locality | Leaves your infra | **Stays local** with Ollama |
+| Pricing | Per-page toll (~3–10¢) | At-cost inference / free self-host |
+| Model choice | Vendor-locked | **Any** — Ollama, Anthropic, OpenAI, Gemini, and any OpenAI-compatible endpoint |
+| Source | Closed | **Open** |
+| Setup for non-tech users | Strong | Parity target for v1 |
 
 ## License
 
