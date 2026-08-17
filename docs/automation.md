@@ -47,7 +47,7 @@ On the hosted service, every schedule also gets its own email address, shown at 
 
 Emailed-in content goes through the same checks as manual uploads — supported types only, 32MB per document (8MB per image) — and at most 10 attachments per email are taken. Anything unsupported, oversize, or over the cap is skipped, never failed. A redelivered email creates nothing: deliveries are deduplicated on the provider's message id.
 
-The address is unguessable, and it's the only credential a sender needs. To narrow that, set **allowed senders**: a comma-separated list where an entry with a full address (`billing@xero.com`) matches exactly that sender, and a domain entry (`@acme.com` or `acme.com`) matches any sender whose domain contains it. Matching is case-insensitive; an empty list accepts any sender. Email from anyone else is silently dropped.
+The address is unguessable, and it's the only credential a sender needs. To narrow that, set **allowed senders**: a comma-separated list where an entry with a full address (`billing@xero.com`) matches exactly that sender, and a domain entry (`acme.com`) matches any sender from exactly that domain or one of its subdomains (`mail.acme.com` matches; `acme.com.evil.net` does not). Matching is case-insensitive; an empty list accepts any sender. Email from anyone else is silently dropped.
 
 Three delivery settings round it out:
 

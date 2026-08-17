@@ -51,14 +51,16 @@ describe("assertResendUrl (SSRF allowlist)", () => {
 });
 
 describe("fetchReceivedAttachment", () => {
+  const CAP = 32 * 1024 * 1024;
+
   it("never calls fetch for an untrusted host", async () => {
-    await expect(fetchReceivedAttachment("https://attacker.example/payload.pdf")).rejects.toThrow(/untrusted host/);
+    await expect(fetchReceivedAttachment("https://attacker.example/payload.pdf", CAP)).rejects.toThrow(/untrusted host/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("fetches an allowlisted URL with API-key auth, no redirects", async () => {
     fetchMock.mockResolvedValue(new Response(Buffer.from("%PDF-1.4")));
-    const buf = await fetchReceivedAttachment("https://inbound-cdn.resend.com/em_1/attachments/att_1?sig=x");
+    const buf = await fetchReceivedAttachment("https://inbound-cdn.resend.com/em_1/attachments/att_1?sig=x", CAP);
     expect(buf.toString("latin1")).toBe("%PDF-1.4");
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("inbound-cdn.resend.com");
@@ -68,8 +70,50 @@ describe("fetchReceivedAttachment", () => {
 
   it("throws a clear error when RESEND_API_KEY is missing — before any fetch", async () => {
     vi.stubEnv("RESEND_API_KEY", "");
-    await expect(fetchReceivedAttachment("https://inbound-cdn.resend.com/x")).rejects.toThrow(/RESEND_API_KEY/);
+    await expect(fetchReceivedAttachment("https://inbound-cdn.resend.com/x", CAP)).rejects.toThrow(/RESEND_API_KEY/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe("byte cap (review round)", () => {
+    it("aborts on an oversize Content-Length WITHOUT reading the body", async () => {
+      // A hand-rolled response: a real undici Response pipes its source
+      // stream internally, which would muddy the "never read" probe.
+      const cancel = vi.fn(async () => {});
+      const getReader = vi.fn();
+      fetchMock.mockResolvedValue({
+        ok: true,
+        headers: new Headers({ "content-length": String(CAP + 1) }),
+        body: { cancel, getReader },
+      });
+      await expect(fetchReceivedAttachment("https://inbound-cdn.resend.com/x", CAP)).rejects.toMatchObject({
+        name: "AttachmentTooLargeError",
+      });
+      expect(getReader).not.toHaveBeenCalled(); // aborted before buffering anything
+      expect(cancel).toHaveBeenCalledTimes(1); // and the connection is released
+    });
+
+    it("a Content-Length exactly at the cap is not pre-rejected", async () => {
+      const bytes = Buffer.alloc(64, 7);
+      fetchMock.mockResolvedValue(new Response(bytes, { headers: { "content-length": "64" } }));
+      const buf = await fetchReceivedAttachment("https://inbound-cdn.resend.com/x", 64);
+      expect(buf.length).toBe(64);
+    });
+
+    it("caps a stream with no Content-Length: cancels mid-flight instead of buffering it all", async () => {
+      let pulls = 0;
+      const chunk = new Uint8Array(1024);
+      const endless = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls++;
+          controller.enqueue(chunk); // never closes — a lying/absent header must not buffer forever
+        },
+      });
+      fetchMock.mockResolvedValue(new Response(endless));
+      await expect(fetchReceivedAttachment("https://inbound-cdn.resend.com/x", 4 * 1024)).rejects.toMatchObject({
+        name: "AttachmentTooLargeError",
+      });
+      expect(pulls).toBeLessThan(20); // aborted right past the cap, not later
+    });
   });
 });
 

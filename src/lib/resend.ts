@@ -88,10 +88,60 @@ export async function listReceivedAttachments(emailId: string): Promise<Received
     }));
 }
 
-/** Downloads one attachment's bytes from its (allowlist-checked) signed URL. */
-export async function fetchReceivedAttachment(downloadUrl: string): Promise<Buffer> {
+/**
+ * Thrown when an attachment download exceeds the caller's byte cap — a
+ * DETERMINISTIC oversize condition, not a transport failure. The webhook
+ * route classifies on `.name` (not instanceof — the module is mocked in
+ * route tests) to keep oversize a policy skip (200) rather than a
+ * retryable 500.
+ */
+export class AttachmentTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AttachmentTooLargeError";
+  }
+}
+
+/**
+ * Downloads one attachment's bytes from its (allowlist-checked) signed URL.
+ * `maxBytes` caps how much this will ever buffer: a `Content-Length` header
+ * over the cap aborts before reading the body at all, and a missing/lying
+ * header is caught by a capped stream read that cancels mid-flight the
+ * moment the cap is crossed. Oversize throws `AttachmentTooLargeError`.
+ */
+export async function fetchReceivedAttachment(downloadUrl: string, maxBytes: number): Promise<Buffer> {
   const url = assertResendUrl(downloadUrl);
-  return Buffer.from(await (await resendFetch(url)).arrayBuffer());
+  const res = await resendFetch(url);
+
+  const contentLength = res.headers.get("content-length");
+  if (contentLength !== null) {
+    const declared = Number(contentLength);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      await res.body?.cancel().catch(() => {});
+      throw new AttachmentTooLargeError(`Attachment is ${declared} bytes — over the ${maxBytes}-byte fetch cap`);
+    }
+  }
+
+  if (!res.body) {
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > maxBytes) throw new AttachmentTooLargeError(`Attachment exceeds the ${maxBytes}-byte fetch cap`);
+    return buf;
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new AttachmentTooLargeError(`Attachment exceeds the ${maxBytes}-byte fetch cap`);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
 }
 
 /** Fetches the raw MIME of a received email (for `.eml` ingestion). */

@@ -111,6 +111,20 @@ describe("pg run-delivery claim (§INBOX T2)", () => {
   });
 });
 
+describe("pg stale sweep (review round)", () => {
+  it("terminalizes out-of-attempts stale jobs and RETURNS their batch/run/schedule identity", async () => {
+    const { sweepStaleSql } = await import("../store.pg");
+    const q = dialect.sqlToQuery(sweepStaleSql());
+    expect(q.sql).toContain("UPDATE jobs SET status = 'failed', error = 'Worker timed out', completed_at = now()");
+    expect(q.sql).toMatch(/status = 'processing' AND started_at < now\(\) - interval '10 minutes' AND attempts >= \$\d+/);
+    // The RETURNING is what lets the core fire the run-delivery hook for
+    // runs the sweep just made all-terminal (defect: swept runs never
+    // delivered their digest/dataset append).
+    expect(q.sql).toContain("RETURNING batch_id, run_id, schedule_id");
+    expect(q.params).toEqual([3]);
+  });
+});
+
 describe("pg run terminal counts (§INBOX T2)", () => {
   it("counts total and terminal jobs with the local store's exact terminal definition", async () => {
     const { runTerminalCountsSql } = await import("../store.pg");

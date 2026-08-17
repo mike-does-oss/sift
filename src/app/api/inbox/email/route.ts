@@ -30,6 +30,10 @@ import { enqueueScheduleArrival, kickJobWorker } from "@/lib/jobs";
 
 const MAX_ATTACHMENTS_PER_EMAIL = 10;
 const TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
+// Byte cap handed to the Resend attachment download (pre-checked against
+// Content-Length, enforced by a capped stream read) — matches the largest
+// per-type ingestion limit, so nothing this would abort could ever ingest.
+const MAX_ATTACHMENT_FETCH_BYTES = 32 * 1024 * 1024;
 
 /**
  * Svix-convention webhook signature (Resend signs with Svix): HMAC-SHA256
@@ -72,9 +76,11 @@ function extractAddress(from: string): string {
 
 /**
  * Plan §2 sender rule: comma list, case-insensitive; an entry containing "@"
- * must match the full address exactly, otherwise it matches as a substring
- * of the sender's domain. Empty/null list = accept any sender (the token is
- * the credential).
+ * must match the full address exactly, otherwise it matches the sender's
+ * domain exactly or as a dot-boundary suffix (subdomain). A bare substring
+ * match would let `x@acme.com.evil.net` (or `x@notacme.com`) satisfy an
+ * `acme.com` entry. Empty/null list = accept any sender (the token is the
+ * credential).
  */
 function senderAllowed(allowedSenders: string | null, from: string): boolean {
   if (!allowedSenders?.trim()) return true;
@@ -84,7 +90,7 @@ function senderAllowed(allowedSenders: string | null, from: string): boolean {
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
-    .some((entry) => (entry.includes("@") ? sender === entry : domain.includes(entry)));
+    .some((entry) => (entry.includes("@") ? sender === entry : domain === entry || domain.endsWith("." + entry)));
 }
 
 function localPartOf(recipient: string): string {
@@ -173,6 +179,32 @@ export async function POST(request: Request) {
 
   let ingested = 0;
   let skipped = 0;
+  // Skip classification (review round): every skip is either
+  //   - POLICY: a deterministic condition (oversize, unsupported type,
+  //     bodiless-with-attachments-mode, per-email cap) — retrying can never
+  //     change the outcome, so these must stay 200s (no retry storms), or
+  //   - TRANSPORT: a throw from the Resend fetches (list / raw MIME /
+  //     attachment bytes) — network/API failures a retry CAN fix. When
+  //     nothing ingested and at least one transport failure fired, the route
+  //     500s so Resend redelivers; the (sourceMessageId, scheduleId)
+  //     idempotency check makes the eventual successful retry safe.
+  let transportFailures = 0;
+
+  function skipPolicy(count: number, detail: string): void {
+    skipped += count;
+    console.log(`[inbox/email] policy skip: ${detail}`);
+  }
+
+  function skipTransport(count: number, detail: string, err: unknown): void {
+    skipped += count;
+    transportFailures += count;
+    console.log(`[inbox/email] transport failure: ${detail} (${err instanceof Error ? err.message : err})`);
+  }
+
+  /** Deterministic oversize abort from the capped download — policy, not transport. */
+  function isTooLarge(err: unknown): boolean {
+    return err instanceof Error && err.name === "AttachmentTooLargeError";
+  }
 
   async function ingest(buf: Buffer, filename: string, ext: string): Promise<void> {
     const { filePath, sizeBytes } = await saveBuffer(buf, filename, ext);
@@ -197,28 +229,31 @@ export async function POST(request: Request) {
     try {
       metas = await resend.listReceivedAttachments(emailId);
     } catch (err) {
-      skipped += data.attachments!.length;
-      console.log(`[inbox/email] skipped all attachments: list failed (${err instanceof Error ? err.message : err})`);
+      skipTransport(data.attachments!.length, "attachment list failed", err);
     }
     if (metas.length > MAX_ATTACHMENTS_PER_EMAIL) {
-      skipped += metas.length - MAX_ATTACHMENTS_PER_EMAIL;
-      console.log(`[inbox/email] skipped ${metas.length - MAX_ATTACHMENTS_PER_EMAIL} attachments: over the ${MAX_ATTACHMENTS_PER_EMAIL}-per-email cap`);
+      skipPolicy(metas.length - MAX_ATTACHMENTS_PER_EMAIL, `${metas.length - MAX_ATTACHMENTS_PER_EMAIL} attachments over the ${MAX_ATTACHMENTS_PER_EMAIL}-per-email cap`);
       metas = metas.slice(0, MAX_ATTACHMENTS_PER_EMAIL);
     }
     for (const meta of metas) {
+      let buf: Buffer;
       try {
-        const buf = await resend.fetchReceivedAttachment(meta.downloadUrl);
+        buf = await resend.fetchReceivedAttachment(meta.downloadUrl, MAX_ATTACHMENT_FETCH_BYTES);
+      } catch (err) {
+        if (isTooLarge(err)) skipPolicy(1, `attachment "${meta.filename}": ${(err as Error).message}`);
+        else skipTransport(1, `attachment "${meta.filename}" download failed`, err);
+        continue;
+      }
+      try {
         const ext = detectExtension(buf, meta.filename); // magic bytes first; throws on unsupported
         const { maxBytes, label } = sizeLimitFor(ext);
         if (buf.length > maxBytes) {
-          skipped++;
-          console.log(`[inbox/email] skipped attachment "${meta.filename}": larger than ${label}`);
+          skipPolicy(1, `attachment "${meta.filename}": larger than ${label}`);
           continue;
         }
         await ingest(buf, meta.filename, ext);
       } catch (err) {
-        skipped++;
-        console.log(`[inbox/email] skipped attachment "${meta.filename}": ${err instanceof Error ? err.message : err}`);
+        skipPolicy(1, `attachment "${meta.filename}": ${err instanceof Error ? err.message : err}`);
       }
     }
   }
@@ -227,19 +262,34 @@ export async function POST(request: Request) {
   // when no attachment made it in (body-borne data).
   const wantsEml = mode === "email" || mode === "both" || (mode === "auto" && ingested === 0);
   if (wantsEml) {
+    let raw: Buffer | null = null;
     try {
-      const raw = await resend.fetchReceivedRawMime(emailId);
-      const { maxBytes, label } = sizeLimitFor("eml");
-      if (raw.length > maxBytes) {
-        skipped++;
-        console.log(`[inbox/email] skipped .eml for ${emailId}: larger than ${label}`);
-      } else {
-        await ingest(raw, emlFilename(data.subject, emailId), "eml");
-      }
+      raw = await resend.fetchReceivedRawMime(emailId);
     } catch (err) {
-      skipped++;
-      console.log(`[inbox/email] skipped .eml for ${emailId}: ${err instanceof Error ? err.message : err}`);
+      skipTransport(1, `.eml fetch for ${emailId} failed`, err);
     }
+    if (raw) {
+      try {
+        const { maxBytes, label } = sizeLimitFor("eml");
+        if (raw.length > maxBytes) {
+          skipPolicy(1, `.eml for ${emailId}: larger than ${label}`);
+        } else {
+          await ingest(raw, emlFilename(data.subject, emailId), "eml");
+        }
+      } catch (err) {
+        skipPolicy(1, `.eml for ${emailId}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+
+  // Nothing made it in AND at least one skip was a transport failure: 500 so
+  // Resend retries the delivery — a retry can genuinely fix these, and the
+  // idempotency check above makes the eventual success safe. (Partial
+  // ingestion still 200s: a redelivery would be deduplicated wholesale, so
+  // retrying could never recover the failed pieces anyway.)
+  if (ingested === 0 && transportFailures > 0) {
+    console.log(`[inbox/email] transport failure with nothing ingested for ${emailId} — 500 so the provider retries`);
+    return NextResponse.json({ error: "Upstream fetch failed", ingested, skipped }, { status: 500 });
   }
 
   if (ingested === 0 && skipped === 0) {

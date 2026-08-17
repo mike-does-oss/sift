@@ -100,6 +100,21 @@ export function runTerminalCountsSql(runId: string): SQL {
   `;
 }
 
+/**
+ * Review-round fix (§INBOX): a sweep is a TERMINAL transition, so the swept
+ * rows' run identity must surface to the caller — otherwise a run whose last
+ * job died stale would never fire its delivery hook (digest + dataset append
+ * silently lost, since no job of the run transitions again). Exported for
+ * SQL-shape tests.
+ */
+export function sweepStaleSql(): SQL {
+  return sql`
+    UPDATE jobs SET status = 'failed', error = 'Worker timed out', completed_at = now()
+    WHERE status = 'processing' AND started_at < now() - interval '10 minutes' AND attempts >= ${MAX_ATTEMPTS}
+    RETURNING batch_id, run_id, schedule_id
+  `;
+}
+
 export const pgStore: JobStore = {
   dialect: "pg",
 
@@ -134,18 +149,21 @@ export const pgStore: JobStore = {
 
   // Jobs stuck in `processing` past staleness with no attempts left can never
   // be re-claimed (the claim's stale arm requires attempts < MAX) — sweep
-  // them to terminal `failed` and roll their batches' failed_count forward.
+  // them to terminal `failed`, roll their batches' failed_count forward, and
+  // hand the swept rows' (batchId, runId, scheduleId) back so the core can
+  // fire the run-delivery hook for runs this sweep just made all-terminal.
   async sweepStale() {
-    const swept = (await pgDb().execute(sql`
-      UPDATE jobs SET status = 'failed', error = 'Worker timed out', completed_at = now()
-      WHERE status = 'processing' AND started_at < now() - interval '10 minutes' AND attempts >= ${MAX_ATTEMPTS}
-      RETURNING batch_id
-    `)).rows as unknown as Array<{ batch_id: string | null }>;
+    const swept = (await pgDb().execute(sweepStaleSql())).rows as unknown as Array<{
+      batch_id: string | null;
+      run_id: string | null;
+      schedule_id: string | null;
+    }>;
     for (const { batch_id } of swept) {
       if (batch_id) {
         await pgDb().execute(sql`UPDATE batches SET failed_count = failed_count + 1 WHERE id = ${batch_id}`);
       }
     }
+    return swept.map((r) => ({ batchId: r.batch_id, runId: r.run_id, scheduleId: r.schedule_id }));
   },
 
   async enqueueInbox(schedule: { id: string; userId: string }, snapshot: Snapshot, runId: string, usedByoKey: boolean, quotaLimit: number | null) {

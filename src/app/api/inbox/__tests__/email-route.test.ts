@@ -215,9 +215,14 @@ describe("allowedSenders", () => {
     { list: "sender@acme.com", from: "sender@acme.com", allowed: true },
     { list: "sender@acme.com", from: "Other <other@acme.com>", allowed: false },
     { list: "SENDER@ACME.COM", from: "Sender <sender@acme.com>", allowed: true },
-    { list: "acme.com", from: "bob@mail.acme.com", allowed: true }, // substring-on-domain
+    { list: "acme.com", from: "bob@acme.com", allowed: true }, // exact domain
+    { list: "acme.com", from: "bob@mail.acme.com", allowed: true }, // subdomain (dot-boundary suffix)
     { list: "acme.com", from: "bob@evil.io", allowed: false },
     { list: "acme.com", from: "acme.com@evil.io", allowed: false }, // local part can't satisfy a domain entry
+    // Review round: suffix matching is dot-bounded — neither a spoof domain
+    // that merely CONTAINS the entry nor a non-subdomain suffix may pass.
+    { list: "acme.com", from: "x@acme.com.evil.net", allowed: false },
+    { list: "acme.com", from: "x@notacme.com", allowed: false },
     { list: "billing@acme.com, partners.example", from: "kim@eu.partners.example", allowed: true },
     { list: "billing@acme.com, partners.example", from: "kim@other.example", allowed: false },
   ];
@@ -325,6 +330,83 @@ describe("ingestMode policy matrix", () => {
     expect(await run("auto", oneAtt, [{ ...ATT_PDF, filename: "weird.xyz" }], garbage)).toEqual({ ingested: 1, skipped: 1 });
     expect(state.fetchReceivedRawMime).toHaveBeenCalled();
     expect(state.inserts[0].filename).toMatch(/\.eml$/);
+  });
+});
+
+describe("transport failures vs policy skips (review round)", () => {
+  // TRANSPORT (a throw from the Resend fetches) with NOTHING ingested → 500
+  // so Resend retries; idempotency makes the eventual successful retry safe.
+  // Deterministic POLICY skips must keep returning 200 — no retry storms.
+
+  it("attachment-list failure with nothing ingested → 500 (mode attachments)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments" });
+    state.listReceivedAttachments.mockRejectedValue(new Error("resend 503"));
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(2) }));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Upstream fetch failed", ingested: 0, skipped: 2 });
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("attachment-download failure with nothing ingested → 500 (mode attachments)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments" });
+    state.listReceivedAttachments.mockResolvedValue([ATT_PDF]);
+    state.fetchReceivedAttachment.mockRejectedValue(new Error("socket hang up"));
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(res.status).toBe(500);
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("raw-MIME fetch failure with nothing ingested → 500 (mode email)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "email" });
+    state.fetchReceivedRawMime.mockRejectedValue(new Error("ECONNRESET"));
+    const res = await deliver(receivedEvent());
+    expect(res.status).toBe(500);
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("auto: list failure but the .eml fallback ingests → 200 (partial success never retries)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "auto" });
+    state.listReceivedAttachments.mockRejectedValue(new Error("resend 503"));
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 1 });
+    expect(state.inserts[0].filename).toMatch(/\.eml$/);
+  });
+
+  it("both: a download failure alongside a successful .eml → 200 (a redelivery would dedupe wholesale)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "both" });
+    state.listReceivedAttachments.mockResolvedValue([ATT_PDF]);
+    state.fetchReceivedAttachment.mockRejectedValue(new Error("socket hang up"));
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ingested: 1, skipped: 1 });
+  });
+
+  it("an over-cap download abort (AttachmentTooLargeError) is a POLICY skip → 200", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments" });
+    state.listReceivedAttachments.mockResolvedValue([ATT_PDF]);
+    const tooBig = new Error("Attachment exceeds the 33554432-byte fetch cap");
+    tooBig.name = "AttachmentTooLargeError";
+    state.fetchReceivedAttachment.mockRejectedValue(tooBig);
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ingested: 0, skipped: 1 });
+  });
+
+  it("deterministic policy skips with nothing ingested stay 200 (unsupported type)", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments" });
+    state.listReceivedAttachments.mockResolvedValue([{ ...ATT_PDF, filename: "weird.xyz" }]);
+    state.fetchReceivedAttachment.mockResolvedValue(Buffer.from("garbage-bytes"));
+    const res = await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ingested: 0, skipped: 1 });
+  });
+
+  it("passes the 32MB fetch cap to the attachment download", async () => {
+    state.scheduleFindFirst.mockResolvedValue({ ...SCHEDULE, ingestMode: "attachments" });
+    state.listReceivedAttachments.mockResolvedValue([ATT_PDF]);
+    await deliver(receivedEvent({ attachments: payloadAttachments(1) }));
+    expect(state.fetchReceivedAttachment).toHaveBeenCalledWith(ATT_PDF.downloadUrl, 32 * 1024 * 1024);
   });
 });
 

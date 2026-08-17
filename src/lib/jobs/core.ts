@@ -45,8 +45,15 @@ export interface JobStore {
   /** local-only: bracket an in-process run so the stale-reclaim arm can never re-claim a job this process is still running. */
   beginRun?(jobId: string): void;
   endRun?(jobId: string): void;
-  /** pg-only: fail stale `processing` jobs that are out of attempts (orphans from a dead serverless instance). */
-  sweepStale?(): Promise<void>;
+  /**
+   * pg-only: fail stale `processing` jobs that are out of attempts (orphans
+   * from a dead serverless instance). Returns each swept row's batch/run
+   * identity — a sweep IS a terminal transition, so the caller must fire the
+   * run-delivery hook for every distinct swept runId (the `run_deliveries`
+   * insert-claim keeps double-fires safe). Batch failed_count rollups stay
+   * inside the store.
+   */
+  sweepStale?(): Promise<Array<{ batchId: string | null; runId: string | null; scheduleId: string | null }>>;
   /**
    * Terminal/total counts for a schedule run — drives BOTH all-terminal
    * hooks: local output-folder writes and hosted run delivery (§INBOX T2).
@@ -444,7 +451,19 @@ export async function processPendingJobs(timeBudgetMs: number): Promise<{ proces
   let processed = 0;
   if (store.sweepStale) {
     try {
-      await store.sweepStale();
+      const swept = await store.sweepStale();
+      // Review-round fix: sweeping is a terminal transition, so runs whose
+      // LAST live job just got swept would otherwise never deliver (no job of
+      // the run transitions again — digest + dataset append permanently
+      // lost). Fire the delivery hook once per distinct swept run; the
+      // insert-claim inside makes a double-fire (e.g. vs a racing worker)
+      // harmless, and the hook itself never throws.
+      const deliveredRuns = new Set<string>();
+      for (const { runId, scheduleId } of swept) {
+        if (!runId || deliveredRuns.has(runId)) continue;
+        deliveredRuns.add(runId);
+        await deliverRunResultsIfDone(store, { runId, scheduleId });
+      }
     } catch (err) {
       console.error("Stale job sweep failed:", err);
     }

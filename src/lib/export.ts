@@ -2,7 +2,14 @@ export function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
   const headers = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
   const esc = (v: unknown) => {
-    const s = v == null ? "" : Array.isArray(v) ? v.join("; ") : String(v);
+    let s = v == null ? "" : Array.isArray(v) ? v.join("; ") : String(v);
+    // Formula-injection hardening: extracted values are untrusted (they come
+    // out of whatever document was uploaded/emailed in), and this exporter
+    // feeds spreadsheet apps (dataset CSV route, digest attachments, client
+    // downloads, local output files). A leading =, +, -, @, tab, or CR would
+    // be interpreted as a formula by Excel/Sheets — neutralize with a
+    // leading apostrophe (the standard OWASP mitigation).
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
