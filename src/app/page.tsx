@@ -9,7 +9,6 @@ import {
   KeyRound,
   LayoutTemplate,
   Table2,
-  Terminal,
 } from "lucide-react";
 import { isHosted } from "@/lib/profile";
 import { PLANS, planFeatures, type Plan } from "@/lib/plans";
@@ -95,7 +94,7 @@ export default async function Home() {
 
       {/* Hero */}
       <section className="mx-auto max-w-4xl px-6 pb-16 pt-16 text-center sm:pt-20">
-        <h1 className="font-display mx-auto max-w-2xl text-4xl leading-tight sm:text-5xl">
+        <h1 className="font-display mx-auto max-w-2xl text-balance text-[2.75rem] leading-[1.08] tracking-[-0.02em] sm:text-6xl">
           Turn documents into structured data
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-[var(--text-secondary)]">
@@ -147,33 +146,33 @@ export default async function Home() {
         <h2 className="font-display text-center text-2xl sm:text-3xl">
           Built for documents that matter
         </h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FeatureCard
+        <div className="mt-12 grid gap-x-14 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+          <Feature
             icon={<Anchor className="h-4 w-4 text-[var(--accent)]" />}
             title="Grounded extraction"
             description="Values are tied to exact quotes in the source and highlighted where they appear — you can see why every cell says what it says."
           />
-          <FeatureCard
+          <Feature
             icon={<FileStack className="h-4 w-4 text-[var(--accent)]" />}
             title="Every format"
             description="PDF, DOCX, PPTX, images, EML, TXT, CSV, and Markdown all go through the same pipeline."
           />
-          <FeatureCard
+          <Feature
             icon={<LayoutTemplate className="h-4 w-4 text-[var(--accent)]" />}
             title="Templates + AI scaffolding"
             description="Save field sets as reusable templates, or let AI draft the fields for you from a sample document."
           />
-          <FeatureCard
+          <Feature
             icon={<CalendarClock className="h-4 w-4 text-[var(--accent)]" />}
             title="Batches & schedules"
             description="Run a folder of documents through one template, or drop files into an inbox that processes itself on a daily or weekly cadence."
           />
-          <FeatureCard
+          <Feature
             icon={<Table2 className="h-4 w-4 text-[var(--accent)]" />}
             title="Datasets & CSV export"
             description="Extractions accumulate into datasets you can browse, edit, and export as CSV for your spreadsheet or pipeline."
           />
-          <FeatureCard
+          <Feature
             icon={<KeyRound className="h-4 w-4 text-[var(--accent)]" />}
             title="Your keys or ours"
             description="Use our metered plans, plug in your own Anthropic key, or go fully local with Ollama in the open-source edition."
@@ -181,19 +180,18 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Open-source band */}
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <div className="card-elevated rounded-2xl px-6 py-10 text-center sm:px-12">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-subtle)]">
-            <GitHubIcon className="h-5 w-5 text-[var(--accent)]" />
-          </div>
-          <h2 className="font-display mt-4 text-2xl">Open source, local first</h2>
+      {/* Open-source band — full-bleed inset surface, no card */}
+      <section className="mt-16 border-y border-[var(--border-subtle)] bg-[var(--surface-inset)]">
+        <div className="mx-auto max-w-5xl px-6 py-14 text-center">
+          <h2 className="font-display text-2xl sm:text-3xl">Open source, local first</h2>
           <p className="mx-auto mt-3 max-w-xl text-[var(--text-secondary)]">
             Sift is AGPL-3.0. The same app ships as a desktop edition that runs entirely on your
             machine — your documents never leave it. One command on macOS:
           </p>
-          <div className="mx-auto mt-5 flex w-fit max-w-full items-center gap-2.5 overflow-x-auto rounded-lg border border-[var(--border-default)] bg-[var(--surface-inset)] px-4 py-3">
-            <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-tertiary)]" />
+          <div className="mx-auto mt-6 flex w-fit max-w-full items-center gap-3 overflow-x-auto rounded-lg border border-[var(--border-default)] bg-[var(--surface)] px-4 py-3 shadow-sm">
+            <span aria-hidden className="data flex-shrink-0 select-none text-xs text-[var(--accent)]">
+              $
+            </span>
             <code className="data whitespace-nowrap text-xs text-[var(--text-secondary)]">
               {INSTALL_ONE_LINER}
             </code>
@@ -221,8 +219,10 @@ export default async function Home() {
             return (
               <div
                 key={plan}
-                className={`card-elevated flex flex-col rounded-xl p-5 ${
-                  highlighted ? "border border-[var(--accent-muted)]" : ""
+                className={`flex flex-col rounded-xl p-5 ${
+                  highlighted
+                    ? "card-elevated border border-[var(--accent-muted)] shadow-[var(--shadow-md)]"
+                    : "border border-[var(--border-default)]"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export default async function Home() {
       {/* FAQ */}
       <section id="faq" className="mx-auto max-w-3xl scroll-mt-20 px-6 py-16">
         <h2 className="font-display text-center text-2xl sm:text-3xl">Questions</h2>
-        <div className="mt-8 space-y-3">
+        <div className="mt-6 divide-y divide-[var(--border-default)] border-y border-[var(--border-default)]">
           <Faq q="Where does my data go?">
             On the hosted service, documents are processed via the Anthropic API and stored in your
             private workspace — never used to train models. If your documents can&apos;t leave your
@@ -343,19 +343,22 @@ export default async function Home() {
   );
 }
 
+// The step number is real information (the sequence is the point), set as a
+// display numeral rather than boxed in a badge.
 function Step({ n, title, description }: { n: number; title: string; description: string }) {
   return (
-    <div className="text-center sm:text-left">
-      <div className="font-display mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-sm text-[var(--accent)] sm:mx-0">
-        {n}
+    <div className="border-t border-[var(--border-default)] pt-5 text-left">
+      <div className="flex items-baseline gap-3">
+        <span className="font-display text-3xl leading-none text-[var(--accent)]">{n}</span>
+        <h3 className="text-sm font-medium text-[var(--text-primary)]">{title}</h3>
       </div>
-      <h3 className="mt-3 text-sm font-medium text-[var(--text-primary)]">{title}</h3>
-      <p className="mt-1.5 text-sm text-[var(--text-tertiary)]">{description}</p>
+      <p className="mt-2.5 text-sm leading-relaxed text-[var(--text-tertiary)]">{description}</p>
     </div>
   );
 }
 
-function FeatureCard({
+// Editorial feature row — hairline rule, plain icon, no box.
+function Feature({
   icon,
   title,
   description,
@@ -365,27 +368,33 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="card-elevated rounded-xl p-5">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-subtle)]">
+    <div className="border-t border-[var(--border-default)] pt-5">
+      <div className="flex items-center gap-2.5">
         {icon}
+        <h3 className="text-sm font-medium text-[var(--text-primary)]">{title}</h3>
       </div>
-      <h3 className="text-sm font-medium text-[var(--text-primary)]">{title}</h3>
-      <p className="mt-1.5 text-sm text-[var(--text-tertiary)]">{description}</p>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--text-tertiary)]">{description}</p>
     </div>
   );
 }
 
-// Server-rendered disclosure — native <details>, no client JS needed.
+// Server-rendered disclosure — native <details> on hairline dividers, no
+// client JS and no card chrome.
 function Faq({ q, children }: { q: string; children: React.ReactNode }) {
   return (
-    <details className="card-elevated group rounded-xl px-5 py-4">
+    <details className="group py-4">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium text-[var(--text-primary)] [&::-webkit-details-marker]:hidden">
         {q}
-        <span className="text-[var(--text-tertiary)] transition-transform group-open:rotate-45">
+        <span
+          aria-hidden
+          className="text-[var(--text-tertiary)] transition-transform duration-200 group-open:rotate-45"
+        >
           +
         </span>
       </summary>
-      <p className="mt-3 text-sm leading-relaxed text-[var(--text-tertiary)]">{children}</p>
+      <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--text-tertiary)]">
+        {children}
+      </p>
     </details>
   );
 }
