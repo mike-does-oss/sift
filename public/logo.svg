@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
+  <!-- Geometry mirrors src/components/brand/SiftMark.tsx — keep in sync. -->
+  <rect width="32" height="32" rx="7" fill="#2f6f4e"/>
+  <g stroke="#fff" stroke-linecap="round" fill="none">
+    <line x1="9" y1="6" x2="23" y2="6" stroke-width="4"/>
+    <line x1="9" y1="12" x2="17" y2="12" stroke-width="4"/>
+    <line x1="7" y1="19" x2="25" y2="19" stroke-width="2" stroke-linecap="butt" stroke-dasharray="4 3"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="9" cy="26" r="2"/>
+    <circle cx="16" cy="26" r="2"/>
+    <circle cx="23" cy="26" r="2"/>
+  </g>
+</svg>

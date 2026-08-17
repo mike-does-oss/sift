@@ -1,3 +1,5 @@
+export { SiftMark } from "./brand/SiftMark";
+export { SiftWordmark } from "./brand/SiftWordmark";
 export { FileUpload } from "./FileUpload";
 export { FieldConfiguration } from "./FieldConfiguration";
 export { ResultsDisplay } from "./ResultsDisplay";

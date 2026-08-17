@@ -16,6 +16,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { signOutAction } from "@/app/dashboard/actions";
+import { SiftWordmark } from "@/components/brand/SiftWordmark";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Extract", icon: Sparkles },
@@ -84,13 +85,8 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
 
   return (
     <aside className="w-60 flex-shrink-0 h-screen sticky top-0 flex flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-elevated)]/50">
-      <div className="flex items-center gap-2.5 px-5 h-14 border-b border-[var(--border-subtle)] flex-shrink-0">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--accent)] to-[var(--accent-muted)]">
-          <Layers className="h-4 w-4 text-white" />
-        </div>
-        <span className="font-display text-lg text-[var(--text-primary)]">
-          Sift
-        </span>
+      <div className="flex items-center px-5 h-14 border-b border-[var(--border-subtle)] flex-shrink-0">
+        <SiftWordmark markSize={30} textClassName="text-lg" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">

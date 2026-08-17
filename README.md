@@ -1,4 +1,8 @@
+<img src="public/logo.svg" alt="Sift logo" width="80">
+
 # Sift
+
+**Turn documents into structured data — locally, privately, on your terms.**
 
 ![AGPL-3.0 License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
 

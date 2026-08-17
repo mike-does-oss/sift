@@ -1,5 +1,8 @@
 appId: com.whypred.sift
 productName: Sift
+# 1024×1024 PNG (build/icon.png); electron-builder derives .icns/.ico per
+# platform from it at package time.
+icon: build/icon.png
 directories:
   output: dist-desktop
 # No native modules ship inside app.asar (dist-electron/main.cjs is a pure

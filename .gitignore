@@ -17,8 +17,11 @@
 /.next/
 /out/
 
-# production
-/build
+# production (contents pattern, not the dir itself, so the un-ignore below
+# can reach into it — git doesn't descend into ignored directories)
+/build/*
+# ...except the electron-builder app icon, which lives in build/ by convention
+!/build/icon.png
 
 # misc
 .DS_Store

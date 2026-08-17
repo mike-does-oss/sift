@@ -34,8 +34,18 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sift | Local-First Document Extraction",
-  description: "Extract structured data from documents, locally and privately",
+  title: {
+    default: "Sift — turn documents into structured data",
+    template: "%s — Sift",
+  },
+  description:
+    "Open-source document extraction that runs local-first and private by default. Define fields, drop in documents, get structured data back.",
+  openGraph: {
+    title: "Sift — turn documents into structured data",
+    description:
+      "Open-source document extraction that runs local-first and private by default.",
+    images: ["/logo-512.png"],
+  },
 };
 
 export default function RootLayout({
