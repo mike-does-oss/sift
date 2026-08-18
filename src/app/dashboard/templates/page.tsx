@@ -530,7 +530,7 @@ export default function TemplatesPage() {
                 </div>
                 <button
                   onClick={() => startEdit(t)}
-                  className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
+                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
                   aria-label={`Edit ${t.name}`}
                 >
                   <Pencil className="w-4 h-4" />
@@ -556,7 +556,7 @@ export default function TemplatesPage() {
                       setDeleteError(null);
                       setConfirmDeleteId(t.id);
                     }}
-                    className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
+                    className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
                     aria-label={`Delete ${t.name}`}
                   >
                     <Trash2 className="w-4 h-4" />

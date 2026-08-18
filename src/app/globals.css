@@ -23,7 +23,7 @@
   --bg: #fbfaf7;
   --surface: #ffffff;
   --ink: #17171a;
-  --muted: #74736e;
+  --muted: #6d6c67; /* ≥4.5:1 on every light surface incl. overlay #f5f3ee */
   --line: #e7e4dd;
   --accent: #2f6f4e;
   --accent-tint: #e9f3ec;
@@ -31,8 +31,12 @@
      alpha (box-shadow can't alpha-blend a var(--accent) hex directly) */
   --accent-rgb: 47, 111, 78;
 
-  /* Derived, same spirit as §13 but not spelled out there */
-  --ink-tertiary: #9b9a93;
+  /* Derived, same spirit as §13 but not spelled out there.
+     Tertiary is the app's quietest TEXT color, and text must clear WCAG
+     4.5:1 on the darkest surface it sits on (inset #f0ede6) — hierarchy
+     below secondary comes from size/weight, not from dropping legibility.
+     (Critique 2026-08-18: the old #9b9a93 measured 2.4–2.8:1 everywhere.) */
+  --ink-tertiary: #676661;
   --line-strong: #c9c5bb;
   --accent-muted: #24593e;
   --surface-overlay: #f5f3ee;
@@ -90,8 +94,9 @@ html.dark {
   --accent-tint: #1f3229;
   --accent-rgb: 78, 155, 114;
 
-  /* Derived */
-  --ink-tertiary: #6e6c67;
+  /* Derived. Same 4.5:1 floor as light: tertiary text on --surface #1d1d20
+     (the old #6e6c67 measured ~3.2:1). */
+  --ink-tertiary: #8c8a83;
   --line-strong: #3a3a3f;
   --accent-muted: #3d7d5b;
   --surface-overlay: #232326;
@@ -239,6 +244,29 @@ html.dark .grain-overlay::before {
 
 .input-base::placeholder {
   color: var(--text-tertiary);
+}
+
+/* Tailwind's `font-mono` utility lives in a cascade layer that loses to the
+   unlayered `.input-base` font-family above — so mono-classed inputs (paths,
+   model ids, API keys) silently rendered the body face. Mono means data,
+   including inside form fields. */
+.input-base.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Small icon buttons keep their quiet 30px visual but get a ≥44px hit area
+   (WCAG target-size) via an invisible centered overlay — no layout shift. */
+.hit-44 {
+  position: relative;
+}
+.hit-44::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .input-base:hover {

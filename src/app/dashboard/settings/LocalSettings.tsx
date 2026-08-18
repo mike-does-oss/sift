@@ -963,8 +963,16 @@ export default function LocalSettingsPage() {
         </div>
       </section>
 
-      {/* Save */}
-      <div className="flex items-center gap-3">
+      {/* Save — sticky so a change made 2,000px up never hides its own
+          commit button (critique 2026-08-18); the bar only reads as a bar
+          when there is something to save. */}
+      <div
+        className={`sticky bottom-0 -mx-1 flex items-center gap-3 px-1 py-3 ${
+          hasChanges
+            ? "border-t border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] backdrop-blur-sm"
+            : ""
+        }`}
+      >
         <button
           onClick={handleSave}
           disabled={isSaving || !hasChanges}

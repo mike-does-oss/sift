@@ -56,3 +56,6 @@ data/
 # internal founder docs — never publish
 docs/plans/
 docs/specs/
+
+# impeccable critique snapshots (design-internal, like .superpowers)
+.impeccable/

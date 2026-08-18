@@ -155,7 +155,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
               <form action={signOutAction}>
                 <button
                   type="submit"
-                  className="theme-toggle w-9 h-9 rounded-lg flex items-center justify-center"
+                  className="theme-toggle hit-44 w-9 h-9 rounded-lg flex items-center justify-center"
                   aria-label="Sign out"
                   title="Sign out"
                 >
@@ -165,7 +165,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
             )}
             <button
               onClick={toggleDarkMode}
-              className="theme-toggle w-9 h-9 rounded-lg flex items-center justify-center"
+              className="theme-toggle hit-44 w-9 h-9 rounded-lg flex items-center justify-center"
               aria-label="Toggle theme"
             >
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

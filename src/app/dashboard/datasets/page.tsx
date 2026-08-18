@@ -88,7 +88,7 @@ export default function DatasetsPage() {
                   href={`/dashboard/datasets/${d.id}`}
                   aria-label={`View ${d.name}`}
                   title="View"
-                  className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                 >
                   <Eye className="w-4 h-4" />
                 </Link>
@@ -96,7 +96,7 @@ export default function DatasetsPage() {
                   href={`/api/datasets/${d.id}/csv`}
                   aria-label={`Download ${d.name} as CSV`}
                   title="Download CSV"
-                  className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                 >
                   <Download className="w-4 h-4" />
                 </a>
@@ -121,7 +121,7 @@ export default function DatasetsPage() {
                       setDeleteError(null);
                       setConfirmDeleteId(d.id);
                     }}
-                    className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                    className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                     aria-label={`Delete ${d.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
