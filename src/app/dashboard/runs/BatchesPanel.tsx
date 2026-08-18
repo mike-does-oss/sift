@@ -149,6 +149,10 @@ export function BatchesPanel() {
           name: name.trim(),
           documentIds,
           template: {
+            // The template's name rides in the snapshot so the batch detail
+            // header can say what the batch extracted with (older batches
+            // without it fall back to a field-count summary).
+            name: selectedTemplate.name,
             fields: selectedTemplate.fields,
             prompt: selectedTemplate.prompt,
             extractMultiple: selectedTemplate.extractMultiple,

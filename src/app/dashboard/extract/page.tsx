@@ -20,23 +20,13 @@ import { PRESET_TEMPLATES } from "@/lib/presets";
 import { webSiftApi, type ProviderInfo, type ProviderOverride, type ProviderId } from "@/lib/api";
 import { useHosted } from "@/components/ProfileContext";
 import { createPullProgressTracker } from "@/lib/pull-progress";
+import { DEFAULT_FIELDS, isDefaultFieldState } from "@/lib/field-state";
 import type { ModelRec } from "@/lib/model-recommend";
 import type { Quotes } from "@/lib/highlight";
 
 const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
 const GROUNDED_STORAGE_KEY = "sift-grounded";
 const DOC_COLLAPSED_STORAGE_KEY = "sift-doc-collapsed";
-const DEFAULT_FIELDS: ExtractionField[] = [{ id: "field-1", name: "name", type: "text" }];
-
-/** True when `fields` is still the untouched single starter field — the bar for "replace without confirming" in the scaffold flow (§T2.6). */
-function isDefaultFieldState(fields: ExtractionField[]): boolean {
-  return (
-    fields.length === 1 &&
-    fields[0].name === DEFAULT_FIELDS[0].name &&
-    fields[0].type === DEFAULT_FIELDS[0].type &&
-    !fields[0].description
-  );
-}
 
 type PullUiState =
   | { status: "idle" }
@@ -174,9 +164,21 @@ export default function ExtractPage() {
   const [systemRec, setSystemRec] = useState<ModelRec | null>(null);
   const [pullState, setPullState] = useState<PullUiState>({ status: "idle" });
   const pullAbortRef = useRef<AbortController | null>(null);
+  // In-flight extraction — lets the loading card's Cancel abort the fetch.
+  const extractAbortRef = useRef<AbortController | null>(null);
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  // Confirm-before-clobber (same bar as the scaffold flow): a picked template
+  // waits here when the current fields aren't the untouched starter field,
+  // instead of silently replacing whatever the user has built up.
+  const [pendingTemplate, setPendingTemplate] = useState<{
+    id: string;
+    name: string;
+    fields: ExtractionField[];
+    prompt: string;
+    extractMultiple: boolean;
+  } | null>(null);
   const [isNamingTemplate, setIsNamingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -313,6 +315,7 @@ export default function ExtractPage() {
   useEffect(() => {
     return () => {
       pullAbortRef.current?.abort();
+      extractAbortRef.current?.abort();
     };
   }, []);
 
@@ -347,26 +350,55 @@ export default function ExtractPage() {
     }
   };
 
-  const handleLoadTemplate = (templateId: string) => {
-    setSelectedTemplateId(templateId);
-    if (!templateId) return;
+  const applyTemplate = (config: NonNullable<typeof pendingTemplate>) => {
+    setFields(config.fields);
+    setExtractionPrompt(config.prompt);
+    setExtractMultiple(config.extractMultiple);
+    setSelectedTemplateId(config.id);
+    setPendingTemplate(null);
+    setPendingScaffold(null);
+  };
 
+  const handleLoadTemplate = (templateId: string) => {
+    if (!templateId) {
+      setSelectedTemplateId("");
+      setPendingTemplate(null);
+      return;
+    }
+
+    let config: NonNullable<typeof pendingTemplate> | null = null;
     if (templateId.startsWith("preset:")) {
       const presetKey = templateId.slice("preset:".length);
       const preset = PRESET_TEMPLATES.find((p) => p.key === presetKey);
       if (!preset) return;
-      // Deep-copy so in-editor edits never mutate the module-level constant.
-      setFields(preset.fields.map((f) => ({ ...f })));
-      setExtractionPrompt(preset.prompt);
-      setExtractMultiple(preset.extractMultiple);
-      return;
+      config = {
+        id: templateId,
+        name: preset.name,
+        // Deep-copy so in-editor edits never mutate the module-level constant.
+        fields: preset.fields.map((f) => ({ ...f })),
+        prompt: preset.prompt,
+        extractMultiple: preset.extractMultiple,
+      };
+    } else {
+      const template = templates.find((t) => t.id === templateId);
+      if (!template) return;
+      config = {
+        id: templateId,
+        name: template.name,
+        fields: template.fields,
+        prompt: template.prompt,
+        extractMultiple: template.extractMultiple,
+      };
     }
 
-    const template = templates.find((t) => t.id === templateId);
-    if (!template) return;
-    setFields(template.fields);
-    setExtractionPrompt(template.prompt);
-    setExtractMultiple(template.extractMultiple);
+    // Same bar as the scaffold flow (§T2.6): only the untouched starter
+    // field may be replaced silently — anything else asks first. The select
+    // stays on the previous choice until the user confirms.
+    if (isDefaultFieldState(fields)) {
+      applyTemplate(config);
+    } else {
+      setPendingTemplate(config);
+    }
   };
 
   const handleSaveTemplate = async () => {
@@ -403,6 +435,8 @@ export default function ExtractPage() {
     setExtractionPrompt(scaffolded.prompt);
     setExtractMultiple(scaffolded.extractMultiple);
     setPendingScaffold(null);
+    // A scaffold replacing the fields settles any still-open template confirm.
+    setPendingTemplate(null);
   };
 
   const handleBuildFromDescription = async () => {
@@ -466,6 +500,9 @@ export default function ExtractPage() {
     setExtractedWith(null);
     setCompletion(null);
 
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
+
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -481,7 +518,7 @@ export default function ExtractPage() {
         if (providerOverride.model) formData.append("model", providerOverride.model);
       }
 
-      const data = await webSiftApi.extract(formData);
+      const data = await webSiftApi.extract(formData, controller.signal);
 
       if (!data.success) {
         setError(data.error || "Extraction failed");
@@ -509,10 +546,18 @@ export default function ExtractPage() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      // A deliberate Cancel is a quiet reset back to the ready state — the
+      // user asked to stop, so there's nothing to report as an error.
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCancelExtraction = () => {
+    extractAbortRef.current?.abort();
   };
 
   const handleJumpToValue = (fieldName: string, rowIndex: number) => {
@@ -786,6 +831,28 @@ export default function ExtractPage() {
 
                 {saveStatus === "saved" && <span className="text-xs text-[var(--success)]">Saved</span>}
                 {saveStatus === "error" && <span className="text-xs text-[var(--error)]">Couldn&apos;t save template</span>}
+
+                {/* Same inline confirm the scaffold flow uses — loading a
+                    template must not silently clobber edited fields. */}
+                {pendingTemplate && (
+                  <div className="basis-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-muted)]">
+                    <span className="text-xs text-[var(--text-secondary)] flex-1">
+                      Replace current fields with &ldquo;{pendingTemplate.name}&rdquo;?
+                    </span>
+                    <button
+                      onClick={() => applyTemplate(pendingTemplate)}
+                      className="px-2 py-1 rounded-md text-xs font-medium text-[var(--accent)] hover:bg-[var(--surface-elevated)] transition-colors"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setPendingTemplate(null)}
+                      className="px-2 py-1 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
               {selectedTemplateExamples && selectedTemplateExamples.length > 0 && (
                 <p className="text-xs text-[var(--text-tertiary)] mt-2 px-1">
@@ -860,8 +927,7 @@ export default function ExtractPage() {
                       <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">Grounded mode</p>
                         <p className="text-xs text-[var(--text-tertiary)]">
-                          Anchor every value to an exact source quote. Richer output shape — smaller local models may
-                          follow it less strictly.
+                          Anchor every value to an exact source quote. Shows you exactly where each value came from.
                         </p>
                       </div>
                     </div>
@@ -922,6 +988,8 @@ export default function ExtractPage() {
                     hoveredField={hoveredField}
                     onHoverField={setHoveredField}
                     onEditedRowsChange={setDatasetRows}
+                    onCancelExtraction={handleCancelExtraction}
+                    loadingModel={hosted ? hostedModel : selModel}
                     providerModelLabel={
                       extractedWith && !isLoading && !error
                         ? `Extracted with ${extractedWithLabel} · ${extractedWith.model}`

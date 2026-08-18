@@ -121,7 +121,12 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : "Extraction failed unexpectedly";
     await db.insert(jobs).values({
       userId: user.id,
-      templateSnapshot: { fields, prompt, extractMultiple, examples },
+      // Single runs have no documents row — the uploaded file's name is the
+      // job's identity in history/overview (see jobs.sourceFilename).
+      sourceFilename: file.name,
+      // `grounded` rides in the snapshot so history's fallback summary can
+      // say "3 fields · grounded" for runs with no filename at all.
+      templateSnapshot: { fields, prompt, extractMultiple, examples, grounded },
       status: "failed",
       attempts: 1,
       result: null,
@@ -138,7 +143,8 @@ export async function POST(request: NextRequest) {
 
   await db.insert(jobs).values({
     userId: user.id,
-    templateSnapshot: { fields, prompt, extractMultiple, examples },
+    sourceFilename: file.name,
+    templateSnapshot: { fields, prompt, extractMultiple, examples, grounded },
     status: result.success ? "completed" : "failed",
     attempts: 1,
     result: result.success ? result.data : null,

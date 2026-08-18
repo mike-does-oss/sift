@@ -69,6 +69,92 @@ interface ResultsDisplayProps {
    * Undefined renders no line, same as the parent's own caption.
    */
   providerModelLabel?: string;
+  /**
+   * Aborts the in-flight extraction (the parent owns the AbortController).
+   * Renders the loading card's Cancel button when provided; the parent
+   * treats the resulting abort as a quiet reset, not an error.
+   */
+  onCancelExtraction?: () => void;
+  /** The model the running extraction was dispatched to — names the loading card's slow-run escalation line. */
+  loadingModel?: string;
+}
+
+/** "42s" / "1:12" — elapsed readout for the extraction wait. */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/** How long before the wait admits this might be a big one (§4: say what's happening). */
+const SLOW_EXTRACTION_SECONDS = 30;
+
+/**
+ * The extraction wait (loading card): shimmer rows per field, an elapsed
+ * clock, a Cancel that aborts the fetch, and — past 30s — a quiet line
+ * naming the model so a long wait reads as "big document", not "hung".
+ * Mounted only while `isLoading`, so the clock resets per extraction.
+ */
+function ExtractionWait({
+  fields,
+  model,
+  onCancel,
+}: {
+  fields: ExtractionField[];
+  model?: string;
+  onCancel?: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
+      <div className="p-5">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-lg bg-[var(--accent-subtle)] flex items-center justify-center">
+            <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-[var(--text-primary)]">Extracting data…</h3>
+            <p className="text-xs text-[var(--text-tertiary)]">Analyzing document with AI</p>
+          </div>
+          <div className="flex-1" />
+          <span className="text-xs text-[var(--text-tertiary)] tabular-nums" aria-label="Elapsed time">
+            {formatElapsed(elapsed)}
+          </span>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {fields.map((field, i) => (
+            <div key={field.id} className="flex items-center gap-3">
+              <div className="w-24 h-3 rounded animate-shimmer" style={{ animationDelay: `${i * 80}ms` }} />
+              <div className="flex-1 h-3 rounded animate-shimmer" style={{ animationDelay: `${i * 80 + 40}ms` }} />
+            </div>
+          ))}
+        </div>
+
+        {elapsed >= SLOW_EXTRACTION_SECONDS && (
+          <p className="text-xs text-[var(--text-tertiary)] mt-4">
+            Large document — {model || "the model"} can take a while on big files.
+          </p>
+        )}
+      </div>
+    </motion.div>
+  );
 }
 
 function valuesEqual(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
@@ -471,6 +557,8 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
     onHoverField,
     onEditedRowsChange,
     providerModelLabel,
+    onCancelExtraction,
+    loadingModel,
   },
   ref
 ) {
@@ -707,30 +795,7 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
   };
 
   if (isLoading) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-lg bg-[var(--accent-subtle)] flex items-center justify-center">
-              <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)]">Extracting data...</h3>
-              <p className="text-xs text-[var(--text-tertiary)]">Analyzing document with AI</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {fields.map((field, i) => (
-              <div key={field.id} className="flex items-center gap-3">
-                <div className="w-24 h-3 rounded animate-shimmer" style={{ animationDelay: `${i * 80}ms` }} />
-                <div className="flex-1 h-3 rounded animate-shimmer" style={{ animationDelay: `${i * 80 + 40}ms` }} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-    );
+    return <ExtractionWait fields={fields} model={loadingModel} onCancel={onCancelExtraction} />;
   }
 
   if (error) {

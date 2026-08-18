@@ -11,8 +11,10 @@ import {
   type DatasetOption,
 } from "@/components";
 import { LockedFeature } from "@/components/dashboard/LockedFeature";
+import { TemplateChip } from "@/components/dashboard/TemplateChip";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
+import { scheduleSentence } from "@/lib/schedule-display";
 
 interface Template {
   id: string;
@@ -42,12 +44,6 @@ const DEFAULT_DELIVERY: DeliverySettingsValue = {
   datasetId: "",
   notifyEmail: true,
 };
-
-function describeCadence(s: Schedule): string {
-  const hour = `${String(s.hourUtc).padStart(2, "0")}:00 UTC`;
-  if (s.cadence === "daily") return `Daily at ${hour}`;
-  return `Weekly on ${DAYS[s.dayOfWeek ?? 0]} at ${hour}`;
-}
 
 // UI-2 U1: the former /dashboard/schedules page body, rendered as the
 // Schedules tab of /dashboard/runs. Keeps its own data fetching; the runs
@@ -311,14 +307,25 @@ export function SchedulesPanel() {
             {schedules.map((s) => (
               <div key={s.id} className="card-elevated rounded-xl p-4 flex items-center gap-4">
                 <Link href={`/dashboard/schedules/${s.id}`} className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)]">{s.name}</p>
+                  <p className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 min-w-0">
+                    <span className="truncate">{s.name}</span>
+                    {/* What this schedule extracts — templates are already
+                        fetched for the form's picker, so this is a lookup. */}
+                    {templates.find((t) => t.id === s.templateId) && (
+                      <TemplateChip name={templates.find((t) => t.id === s.templateId)!.name} />
+                    )}
+                  </p>
                   <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
-                    {describeCadence(s)}
+                    {/* Rendered client-side after fetch, so reading the
+                        viewer's timezone here can't mismatch on hydrate. */}
+                    {scheduleSentence(s, -new Date().getTimezoneOffset())}
                   </p>
                 </Link>
 
                 <button
                   onClick={() => toggleActive(s)}
+                  role="switch"
+                  aria-checked={s.active}
                   className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
                     s.active ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
                   }`}

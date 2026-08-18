@@ -7,6 +7,7 @@ import { UsageMeter } from "@/components/dashboard/UsageMeter";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
 import { isProviderId, type ProviderId } from "@/lib/api";
+import { jobIdentity } from "@/lib/job-display";
 
 // UI-2 U1: /dashboard is now an overview home (founder ask: "logged in should
 // hit dashboard instead of straight into the processing page"). The extract
@@ -18,6 +19,8 @@ interface Job {
   id: string;
   status: "pending" | "processing" | "completed" | "failed";
   source: "single" | "batch" | "schedule";
+  sourceFilename: string | null;
+  templateSnapshot: unknown;
   provider: string | null;
   model: string | null;
   createdAt: string;
@@ -243,8 +246,14 @@ export default function OverviewPage() {
           </div>
         ) : (
           <div className="card-elevated rounded-xl overflow-hidden divide-y divide-[var(--border-subtle)]">
+            {/* Each row opens the full history tab — these look like the
+                history panel's expandable rows, so they must go somewhere. */}
             {jobs.map(({ job, filename }) => (
-              <div key={job.id} className="px-4 py-3 flex items-center gap-4">
+              <Link
+                key={job.id}
+                href="/dashboard/runs?tab=history"
+                className="px-4 py-3 flex items-center gap-4 hover:bg-[var(--surface-overlay)]/30 transition-colors"
+              >
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize flex-shrink-0 ${
                     STATUS_STYLES[job.status] ?? STATUS_STYLES.pending
@@ -253,7 +262,7 @@ export default function OverviewPage() {
                   {job.status}
                 </span>
                 <span className="data flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">
-                  {filename ?? "—"}
+                  {jobIdentity(filename, job.sourceFilename, job.templateSnapshot)}
                 </span>
                 <span className="data w-40 flex-shrink-0 text-xs text-[var(--text-tertiary)] truncate hidden sm:block">
                   {job.provider ? `${labelForProvider(job.provider)} · ${job.model ?? "—"}` : "—"}
@@ -261,7 +270,7 @@ export default function OverviewPage() {
                 <span className="w-20 flex-shrink-0 text-right text-xs text-[var(--text-tertiary)] tabular-nums">
                   {relativeTime(job.createdAt)}
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

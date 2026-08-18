@@ -62,6 +62,12 @@ export const jobs = sqliteTable("jobs", {
   id: id(),
   userId: userId(),
   documentId: text("document_id"),
+  // Single-run identity: the extract route parses the upload in-request and
+  // never writes a documents row, so the uploaded file's name is stamped
+  // here at insert. Null for batch/schedule jobs (they join `documents` via
+  // documentId) and for pre-migration rows — display falls back to a
+  // templateSnapshot-derived summary (see src/lib/job-display.ts).
+  sourceFilename: text("source_filename"),
   templateSnapshot: text("template_snapshot", { mode: "json" }).notNull(),
   status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).notNull().default("pending"),
   attempts: integer("attempts").notNull().default(0),

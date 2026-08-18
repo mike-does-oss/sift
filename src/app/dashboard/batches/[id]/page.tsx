@@ -6,6 +6,8 @@ import Link from "next/link";
 import { ArrowLeft, Download, FileWarning, Database } from "lucide-react";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
 import { SaveToDatasetPanel } from "@/components";
+import { TemplateChip } from "@/components/dashboard/TemplateChip";
+import { snapshotFieldNames, snapshotSummary, snapshotTemplateName } from "@/lib/job-display";
 
 interface Job {
   id: string;
@@ -30,16 +32,6 @@ interface Batch {
   /** `{ fields, prompt, extractMultiple }` at the time the batch was created — see `templates`/`jobs` in the schema comment. Loosely typed here since only `fields[].name` is used (see `fieldKeysFromSnapshot`). */
   templateSnapshot: unknown;
   outputDir: string | null;
-}
-
-/** Same key derivation `jobsToRows` implicitly relies on (result object keys == template field names) — read directly from the batch's `templateSnapshot.fields`, defensively, since it's untyped JSON from the DB. */
-function fieldKeysFromSnapshot(snapshot: unknown): string[] {
-  if (typeof snapshot !== "object" || snapshot === null || !("fields" in snapshot)) return [];
-  const fields = (snapshot as { fields?: unknown }).fields;
-  if (!Array.isArray(fields)) return [];
-  return fields
-    .map((f) => (typeof f === "object" && f !== null && "name" in f ? (f as { name?: unknown }).name : undefined))
-    .filter((name): name is string => typeof name === "string" && name.trim() !== "");
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -171,7 +163,10 @@ export default function BatchDetailPage() {
   // the same `jobsToRows` helper — the dataset's headers are the template's
   // field keys, not whatever extra columns jobsToRows adds (e.g. `_document`);
   // the save route projects each row onto the target dataset's headers server-side.
-  const fieldKeys = fieldKeysFromSnapshot(batch.templateSnapshot);
+  const fieldKeys = snapshotFieldNames(batch.templateSnapshot);
+  // Header chip: what this batch extracted with — the template's name when
+  // the snapshot carries one (newer batches), else a field-count summary.
+  const templateLabel = snapshotTemplateName(batch.templateSnapshot) ?? snapshotSummary(batch.templateSnapshot);
   const datasetRows = jobsToRows(
     jobs.filter((j) => j.job.status === "completed").map((j) => ({ result: j.job.result, filename: j.filename }))
   );
@@ -188,7 +183,10 @@ export default function BatchDetailPage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl text-[var(--text-primary)]">{batch.name}</h1>
+          <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-2.5 flex-wrap">
+            {batch.name}
+            <TemplateChip name={templateLabel} />
+          </h1>
           <p className="text-sm text-[var(--text-tertiary)] mt-1 tabular-nums">
             {processed} / {batch.totalCount} processed
             {batch.failedCount > 0 && ` · ${batch.failedCount} failed`}

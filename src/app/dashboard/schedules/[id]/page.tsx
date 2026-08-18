@@ -16,6 +16,8 @@ import {
   INGEST_MODE_SUMMARIES,
 } from "@/components";
 import { useHosted } from "@/components/ProfileContext";
+import { TemplateChip } from "@/components/dashboard/TemplateChip";
+import { scheduleSentence } from "@/lib/schedule-display";
 
 interface Schedule {
   id: string;
@@ -56,8 +58,6 @@ interface Doc {
   createdAt: string;
 }
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
   processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
@@ -75,12 +75,6 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
-}
-
-function describeCadence(s: Schedule): string {
-  const hour = `${String(s.hourUtc).padStart(2, "0")}:00 UTC`;
-  if (s.cadence === "daily") return `Daily at ${hour}`;
-  return `Weekly on ${DAYS[s.dayOfWeek ?? 0]} at ${hour}`;
 }
 
 /** Groups jobs into "runs" by rounding createdAt down to the minute — jobs
@@ -109,6 +103,9 @@ export default function ScheduleDetailPage() {
   const hosted = useHosted();
   const { id } = useParams<{ id: string }>();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  // What this schedule extracts — the owning template's name, joined
+  // server-side; null when the template has since been deleted.
+  const [templateName, setTemplateName] = useState<string | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,6 +158,7 @@ export default function ScheduleDetailPage() {
       }
       const data = await scheduleRes.json();
       setSchedule(data.schedule);
+      setTemplateName(data.templateName ?? null);
       setJobs(data.jobs ?? []);
       setInboundDomain(data.inboundDomain ?? null);
       setLoadError(null);
@@ -388,9 +386,15 @@ export default function ScheduleDetailPage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl text-[var(--text-primary)]">{schedule.name}</h1>
+          <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-2.5 flex-wrap">
+            {schedule.name}
+            {templateName && <TemplateChip name={templateName} />}
+          </h1>
           <p className="text-sm text-[var(--text-tertiary)] mt-1">
-            {describeCadence(schedule)} · {schedule.active ? "Active" : "Paused"}
+            {/* Client-rendered after fetch — reading the viewer's timezone
+                here can't mismatch on hydrate. */}
+            {scheduleSentence(schedule, -new Date().getTimezoneOffset())} ·{" "}
+            {schedule.active ? "Active" : "Paused"}
             {schedule.lastRunAt && ` · Last ran ${new Date(schedule.lastRunAt).toLocaleString()}`}
           </p>
           {schedule.outputDir && (

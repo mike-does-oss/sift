@@ -80,6 +80,8 @@ export const jobs = pgTable("jobs", {
   id: id(),
   userId: userId(),
   documentId: text("document_id"),
+  // Single-run identity — see schema.sqlite.ts for the full note.
+  sourceFilename: text("source_filename"),
   templateSnapshot: jsonb("template_snapshot").notNull(),
   status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).notNull().default("pending"),
   attempts: integer("attempts").notNull().default(0),

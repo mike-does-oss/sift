@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
-import { schedules, jobs, documents } from "@/db/schema";
+import { schedules, jobs, documents, templates } from "@/db/schema";
 import { requireUser } from "@/lib/user";
 import { scheduleGate } from "@/lib/gates";
 import { isHosted } from "@/lib/profile";
@@ -22,6 +22,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const schedule = await find(id, user.id);
   if (!schedule) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // What this schedule extracts — the detail header names the template
+  // (scoped like everything else; null if the template was since deleted).
+  const template = await db.query.templates.findFirst({
+    where: and(eq(templates.id, schedule.templateId), eq(templates.userId, user.id)),
+    columns: { name: true },
+  });
   const runs = await db
     .select({ job: jobs, filename: documents.filename })
     .from(jobs)
@@ -30,6 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .orderBy(desc(jobs.createdAt));
   return NextResponse.json({
     schedule,
+    templateName: template?.name ?? null,
     jobs: runs,
     // §INBOX T3: same contract as the list GET — the email-in domain for
     // rendering the schedule's address; null when local or unconfigured.

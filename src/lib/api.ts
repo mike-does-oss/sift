@@ -115,9 +115,11 @@ export interface SiftApi {
   /**
    * `formData` carries the same fields `POST /api/extract` accepts today
    * (`file`, `fields`, `prompt`, `extractMultiple`) plus the optional
-   * per-request override fields `provider` and `model`.
+   * per-request override fields `provider` and `model`. When `signal` fires
+   * the request rejects with an `AbortError` — the workspace's Cancel treats
+   * that as a quiet reset, not a failure.
    */
-  extract(formData: FormData): Promise<ExtractResponse>;
+  extract(formData: FormData, signal?: AbortSignal): Promise<ExtractResponse>;
   /**
    * Meta-extraction (§T2.6): turns a plain-language task description into a
    * starting `{ fields, prompt, extractMultiple }` config via `POST
@@ -193,8 +195,8 @@ class WebSiftApi implements SiftApi {
     return body.providers as ProviderInfo[];
   }
 
-  async extract(formData: FormData): Promise<ExtractResponse> {
-    const res = await fetch("/api/extract", { method: "POST", body: formData });
+  async extract(formData: FormData, signal?: AbortSignal): Promise<ExtractResponse> {
+    const res = await fetch("/api/extract", { method: "POST", body: formData, signal });
     return (await res.json()) as ExtractResponse;
   }
 
