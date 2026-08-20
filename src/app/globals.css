@@ -526,6 +526,17 @@ html.dark .field-tick {
   --trace: var(--mark-text-dark, var(--phosphor));
 }
 
+/* Trace-colored ink (landing probe line): resolves the field's trace hue for
+   the active calibration into `color`, so SVG strokes/fills can follow the
+   theme via currentColor. Same inline --mark-* vars as .sift-mark. */
+.field-trace-ink {
+  color: var(--mark-text-light, var(--phosphor));
+}
+
+html.dark .field-trace-ink {
+  color: var(--mark-text-dark, var(--phosphor));
+}
+
 /* Hover tint on a linked column's cells while its field is hovered in
    either pane — a trace-tinted veil (≤14%), no more solid wash. */
 .field-tint {
@@ -621,32 +632,10 @@ html.dark .field-tint {
    R3 additions — landing + auth re-execution (bench instrument).
    ──────────────────────────────────────────────────────────────────────── */
 
-/* The hosted landing is the Persuade surface (DESIGN.md "Modes"): the dark
-   bench hero — lit-paper specimen against the graphite case — IS the design,
-   not a theme variant. .bench-dark re-pins the canonical tokens to the dark
-   calibration so the page stays the instrument case even when the visitor's
-   stored preference sets html.light (the legacy aliases chain via var() and
-   re-resolve automatically). Scoped to the landing <main> only; the app
-   behind sign-in keeps both calibrations. */
-.bench-dark {
-  color-scheme: dark;
-  --case: #101214;
-  --panel: #16191c;
-  --panel-raised: #1b1f23;
-  --well: #0b0d0e;
-  --ink: #e9ebe7;
-  --ink-dim: #a9ada7;
-  --ink-faint: #878b86;
-  --hairline: #26292d;
-  --hairline-strong: #34383d;
-  --phosphor: #35e0a0;
-  --phosphor-dim: #1e8f68;
-  --phosphor-well: #0f2a20;
-  --warn: #e0a845;
-  --fault: #e5655a;
-  --phosphor-contrast: #07130e;
-  --phosphor-rgb: 53, 224, 160;
-}
+/* (.bench-dark retired — founder 2026-08-20: "not dark bg". The landing now
+   renders on the default light lab bench and follows the visitor's
+   calibration like the rest of the app; DESIGN.md "Modes" states the
+   contract.) */
 
 /* Machined secondary plate — the non-primary button (DESIGN.md controls:
    "buttons are machined plates — --panel-raised + hairline, 4px radius").

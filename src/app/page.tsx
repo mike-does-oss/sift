@@ -27,9 +27,10 @@ const INSTALL_ONE_LINER =
 // island), with every pricing number read from PLANS so plan changes never
 // leave stale copy here (guarded by src/app/__tests__/landing-pricing.test.ts).
 //
-// Bench-instrument re-execution (DESIGN.md, Persuade mode): the page is the
-// dark instrument case regardless of the visitor's calibration (.bench-dark
-// pins the tokens — the lit-paper hero only works against graphite).
+// Bench-instrument re-execution (DESIGN.md, Persuade mode): the page renders
+// on the default light lab bench and follows the visitor's calibration like
+// the rest of the app (founder 2026-08-20: "not dark bg" — the .bench-dark
+// pin is retired; the paper specimens stay physically light in both).
 // Grammar: sections separate by hairlines; the ONE tick-rule ornament is the
 // hero's bottom edge; the ONE phosphor plate in the hero viewport is the
 // hero CTA (the header CTA is a machined plate for that reason), and in the
@@ -53,7 +54,7 @@ export default async function Home() {
   const ctaHref = signedIn ? "/dashboard" : "/auth/sign-up";
 
   return (
-    <main className="bench-dark min-h-screen bg-[var(--case)] text-[var(--ink)]">
+    <main className="min-h-screen bg-[var(--case)] text-[var(--ink)]">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[var(--hairline)] bg-[color-mix(in_srgb,var(--case)_88%,transparent)] backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
