@@ -83,11 +83,21 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
     // One-time sync from browser storage/media-query (external systems) on mount,
     // after the server-rendered (theme-less) markup has hydrated — avoids an
     // SSR/client markup mismatch that a render-time read of localStorage would cause.
+    //
+    // Bench-instrument theme inversion (DESIGN.md): dark is now the DEFAULT
+    // calibration (:root) and light is the opt-in (`html.light`) — the old
+    // world was the reverse (`html.dark` opt-in). The stored preference keeps
+    // its key ("sift-theme") and values ("dark"/"light") and maps as:
+    //   stored "dark"  → default (no class)   — same look the user chose
+    //   stored "light" → html.light           — same look the user chose
+    //   nothing stored → OS prefers-color-scheme, falling back to dark
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     const isDark =
       stored === "dark" ||
-      (stored === null && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark", isDark);
+      (stored === null && !window.matchMedia?.("(prefers-color-scheme: light)").matches);
+    document.documentElement.classList.toggle("light", !isDark);
+    // Pre-inversion sessions may have left the (now meaningless) class behind.
+    document.documentElement.classList.remove("dark");
     // Correcting from an external system (localStorage/matchMedia) post-hydration is intentional here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDarkMode(isDark);
@@ -96,7 +106,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
   const toggleDarkMode = () => {
     setDarkMode((prev) => {
       const next = !prev;
-      document.documentElement.classList.toggle("dark", next);
+      document.documentElement.classList.toggle("light", !next);
       window.localStorage.setItem(THEME_STORAGE_KEY, next ? "dark" : "light");
       return next;
     });

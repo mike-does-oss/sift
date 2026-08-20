@@ -1,134 +1,164 @@
 @import "tailwindcss";
 
 /*
- * Sift design system (playbook §13) — "an instrument, not the default AI
- * look": quiet paper-toned surfaces, a single confident field-green accent,
- * data set in mono because data *is* code.
+ * Sift design system — "Bench Instrument" (DESIGN.md, chosen 2026-08-20).
  *
- * `--bg`/`--surface`/`--ink`/`--muted`/`--line`/`--accent`/`--accent-tint`
- * are the §13-canonical tokens. Everything below them is a legacy alias so
- * existing component classnames (var(--text-primary), var(--surface-inset),
- * etc.) keep working unchanged, now pointed at the new palette instead of
- * the old cream/terracotta one.
+ * The interface is a calibrated measurement instrument's front panel:
+ * machined graphite, etched labels, calibration ticks, and ONE phosphor
+ * signal that means "live/valid" — nothing else glows. Elevation comes from
+ * 1px hairlines, not blur (law 3); phosphor covers ≤8% of any screen (law 1);
+ * field colors are traces, not washes (law 2).
+ *
+ * Canonical tokens: --case / --panel / --panel-raised / --well (surfaces),
+ * --ink / --ink-dim / --ink-faint (text), --hairline / --hairline-strong
+ * (structure), --phosphor / --phosphor-dim / --phosphor-well (the signal),
+ * --warn / --fault (status). Everything below them is a legacy alias
+ * (--bg / --surface* / --text-* / --border-* / --accent* / --line* ...) so
+ * existing component classnames re-skin through the token layer unchanged.
+ *
+ * THEME INVERSION (vs the pre-bench §13 world): dark is now the DEFAULT
+ * calibration on :root; light ("lab bench") is the opt-in via `html.light`.
+ * The old world was light-default with `html.dark` opt-in — Sidebar.tsx maps
+ * the stored preference (localStorage "sift-theme"): stored "dark" → default
+ * (no class), stored "light" → html.light, nothing stored → OS preference.
+ *
+ * ── WCAG contrast verification (computed 2026-08-20, WCAG 2.x relative
+ *    luminance; floor is 4.5:1 for ALL text incl. placeholders) ────────────
+ *
+ * DARK (default)      case     panel    raised   well     phos-well
+ *   ink #e9ebe7       15.65    14.71    13.82    16.23    12.75
+ *   ink-dim #a9ada7    8.24     7.75     7.28     8.55     6.72
+ *   ink-faint #878b86  5.42     5.10     4.79     5.63     4.42 (!)
+ *   phosphor #35e0a0  11.01    10.35     9.73    11.43     8.98
+ *   warn #e0a845       8.81     8.28     7.78     9.14     7.18
+ *   fault #e5655a      5.67     5.33     5.01     5.88     4.62
+ *   phosphor-contrast #07130e on phosphor #35e0a0: 11.12
+ *
+ * LIGHT (lab bench)   case     panel    raised   well     phos-well
+ *   ink #17191b       15.73    17.02    17.63    14.60    15.21
+ *   ink-dim #4c4f4c    7.40     8.02     8.30     6.87     7.16
+ *   ink-faint #666964  4.97     5.38     5.57     4.61     4.81
+ *   phosphor #0d7350   5.23     5.66     5.86     4.85     5.05
+ *   warn #8a5e0f       5.08     5.50     5.69     4.71     4.91
+ *   fault #b3362c      5.38     5.83     6.03     5.00     5.21
+ *   phosphor-contrast #ffffff on phosphor #0d7350: 5.86
+ *
+ * (!) USAGE RULE: --ink-faint is 4.42:1 on --phosphor-well (dark) — the one
+ * sub-floor pair. Tertiary text must never sit on active signal fills; use
+ * --ink-dim (6.72) or --phosphor there. DESIGN.md states ink-faint's floor
+ * as "≥4.5:1 on panel" (5.10 ✓); this rule keeps the floor everywhere else.
+ *
+ * Three light-calibration values are minimally nudged from DESIGN.md's
+ * literals so every token clears DESIGN's own 4.5:1 quality gate on --well
+ * (inputs — where placeholders live):
+ *   --ink-faint  #6b6e6a → #666964  (was 4.28 on well)
+ *   --phosphor   #0e7a55 → #0d7350  (was 4.42 on well)
+ *   --warn       #9a6a12 → #8a5e0f  (was 3.91 on well)
+ * Each is the smallest darkening step that clears 4.5 on all five surfaces.
  */
 
-/* Light theme (default) */
+/* Dark — the default calibration (the instrument case) */
 :root {
-  /* Tells the UA to render native chrome (select popups, scrollbar gutters,
-     form control defaults) in the light palette — without this, dark mode's
-     `html.dark color-scheme: dark` below has nothing to override, and native
-     widgets stay light-scheme even when every author-styled surface is dark. */
-  color-scheme: light;
-  /* §13 canonical tokens */
-  --bg: #fbfaf7;
-  --surface: #ffffff;
-  --ink: #17171a;
-  --muted: #6d6c67; /* ≥4.5:1 on every light surface incl. overlay #f5f3ee */
-  --line: #e7e4dd;
-  --accent: #2f6f4e;
-  --accent-tint: #e9f3ec;
-  /* rgb triplet of --accent, for rgba() shadows/glows that need a variable
-     alpha (box-shadow can't alpha-blend a var(--accent) hex directly) */
-  --accent-rgb: 47, 111, 78;
+  /* Native chrome (select popups, scrollbars, form controls) renders in the
+     dark palette by default; html.light overrides below. */
+  color-scheme: dark;
 
-  /* Derived, same spirit as §13 but not spelled out there.
-     Tertiary is the app's quietest TEXT color, and text must clear WCAG
-     4.5:1 on the darkest surface it sits on (inset #f0ede6) — hierarchy
-     below secondary comes from size/weight, not from dropping legibility.
-     (Critique 2026-08-18: the old #9b9a93 measured 2.4–2.8:1 everywhere.) */
-  --ink-tertiary: #676661;
-  --line-strong: #c9c5bb;
-  --accent-muted: #24593e;
-  --surface-overlay: #f5f3ee;
-  --surface-inset: #f0ede6;
+  /* Canonical tokens */
+  --case: #101214;
+  --panel: #16191c;
+  --panel-raised: #1b1f23;
+  --well: #0b0d0e;
+  --ink: #e9ebe7;
+  --ink-dim: #a9ada7;
+  --ink-faint: #878b86;
+  --hairline: #26292d;
+  --hairline-strong: #34383d;
+  --phosphor: #35e0a0;
+  --phosphor-dim: #1e8f68;
+  --phosphor-well: #0f2a20;
+  --warn: #e0a845;
+  --fault: #e5655a;
+  /* Text set ON a phosphor plate (the one primary action per view). */
+  --phosphor-contrast: #07130e;
+  /* rgb triplet of --phosphor for rgba() effects with variable alpha. */
+  --phosphor-rgb: 53, 224, 160;
 
-  /* Legacy aliases — old token names, new values */
-  --surface-base: var(--bg);
-  --surface-elevated: var(--surface);
+  /* Legacy aliases — old token names, re-pointed at the bench tokens.
+     Defined once here; they re-resolve automatically under html.light
+     because var() lookups happen at computed-value time. */
+  --bg: var(--case);
+  --surface: var(--panel);
+  --surface-base: var(--case);
+  --surface-elevated: var(--panel);
+  --surface-overlay: var(--panel-raised);
+  --surface-inset: var(--well);
   --text-primary: var(--ink);
-  --text-secondary: var(--muted);
-  --text-tertiary: var(--ink-tertiary);
-  --border-default: var(--line);
-  --border-subtle: var(--line);
-  --border-strong: var(--line-strong);
-  --accent-subtle: var(--accent-tint);
+  --text-secondary: var(--ink-dim);
+  --text-tertiary: var(--ink-faint);
+  --muted: var(--ink-dim);
+  --ink-tertiary: var(--ink-faint);
+  --line: var(--hairline);
+  --line-strong: var(--hairline-strong);
+  --border-default: var(--hairline);
+  --border-subtle: var(--hairline);
+  --border-strong: var(--hairline-strong);
+  --accent: var(--phosphor);
+  --accent-muted: var(--phosphor-dim);
+  --accent-tint: var(--phosphor-well);
+  --accent-subtle: var(--phosphor-well);
+  --accent-rgb: var(--phosphor-rgb);
+  --btn-text: var(--phosphor-contrast);
 
-  /* Semantic colors ("verified" ties to the field-green accent; error stays
-     a plain functional red — not part of the old cream/terracotta palette) */
-  --success: var(--accent);
-  --success-subtle: var(--accent-tint);
-  --error: #dc3545;
-  --error-subtle: rgba(220, 53, 69, 0.12);
+  /* Semantic status */
+  --success: var(--phosphor);
+  --success-subtle: var(--phosphor-well);
+  --error: var(--fault);
+  --error-subtle: rgba(229, 101, 90, 0.14);
 
   /* Typography — semantic tokens chained to the next/font-generated vars
-     (see layout.tsx: --font-space-grotesk/--font-inter/--font-ibm-plex-mono).
-     Chaining rather than redeclaring means next/font's own metric-matched
-     local fallback (packed into its variable's value) still applies; we only
-     add generic fallbacks after it in case next/font fails to load. */
+     (see layout.tsx). Chaining rather than redeclaring keeps next/font's
+     metric-matched local fallback intact. */
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-
-  /* Card shadow */
-  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-
-  /* Button text */
-  --btn-text: #ffffff;
+  /* Shadows — law 3: box-shadow exists only on true overlays (modals,
+     popovers, toasts) and is tight, offset, dark. Panels get hairlines. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.4);
+  /* Cards elevate by hairline, not blur — kept as a token because legacy
+     classnames reference it; resolves to no shadow at all. */
+  --card-shadow: none;
 }
 
-/* Dark theme — a deliberate dark palette, not a naive inversion */
-html.dark {
-  color-scheme: dark;
-  /* §13 canonical tokens, dark set */
-  --bg: #141416;
-  --surface: #1d1d20;
-  --ink: #ededea;
-  --muted: #9c9a93;
-  --line: #2c2c30;
-  --accent: #4e9b72;
-  --accent-tint: #1f3229;
-  --accent-rgb: 78, 155, 114;
+/* Light — the "lab bench" calibration: brushed-aluminum, cool and clinical,
+   zero cream. Its own design, not an inversion. */
+html.light {
+  color-scheme: light;
 
-  /* Derived. Same 4.5:1 floor as light: tertiary text on --surface #1d1d20
-     (the old #6e6c67 measured ~3.2:1). */
-  --ink-tertiary: #8c8a83;
-  --line-strong: #3a3a3f;
-  --accent-muted: #3d7d5b;
-  --surface-overlay: #232326;
-  --surface-inset: #0e0e10;
+  --case: #f2f2f0;
+  --panel: #fbfbfa;
+  --panel-raised: #ffffff;
+  --well: #e9eae7;
+  --ink: #17191b;
+  --ink-dim: #4c4f4c;
+  --ink-faint: #666964;
+  --hairline: #d8d9d5;
+  --hairline-strong: #bfc1bc;
+  --phosphor: #0d7350;
+  --phosphor-dim: #4f9c78;
+  --phosphor-well: #e2f2ea;
+  --warn: #8a5e0f;
+  --fault: #b3362c;
+  --phosphor-contrast: #ffffff;
+  --phosphor-rgb: 13, 115, 80;
 
-  /* Legacy aliases — old token names, new values */
-  --surface-base: var(--bg);
-  --surface-elevated: var(--surface);
-  --text-primary: var(--ink);
-  --text-secondary: var(--muted);
-  --text-tertiary: var(--ink-tertiary);
-  --border-default: var(--line);
-  --border-subtle: var(--line);
-  --border-strong: var(--line-strong);
-  --accent-subtle: var(--accent-tint);
+  --error-subtle: rgba(179, 54, 44, 0.1);
 
-  /* Semantic colors */
-  --success: var(--accent);
-  --success-subtle: var(--accent-tint);
-  --error: #e2726a;
-  --error-subtle: rgba(226, 114, 106, 0.14);
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
-
-  /* Card shadow */
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
-
-  /* Button text — dark ink reads on the lightened accent green */
-  --btn-text: #0e1512;
+  --shadow-sm: 0 1px 2px rgba(16, 18, 20, 0.1);
+  --shadow-md: 0 2px 4px rgba(16, 18, 20, 0.08), 0 6px 16px rgba(16, 18, 20, 0.08);
+  --shadow-lg: 0 4px 8px rgba(16, 18, 20, 0.1), 0 12px 28px rgba(16, 18, 20, 0.12);
 }
 
 * {
@@ -140,8 +170,8 @@ html {
 }
 
 body {
-  background: var(--surface-base);
-  color: var(--text-primary);
+  background: var(--case);
+  color: var(--ink);
   font-family: var(--font-body);
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
@@ -157,13 +187,91 @@ body {
 }
 
 /* Data utility — extracted values, field keys, model names, filenames.
-   Mono is meaningful here, not decorative: it marks "this is data." */
+   Mono MEANS data (unchanged law) — always tabular. */
 .data {
   font-family: var(--font-mono);
   font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-/* Custom scrollbar */
+/* Etched micro-label (DESIGN.md form language): Space Grotesk, 10.5px,
+   uppercase, +0.08em tracking, --ink-faint. Section headers and panel
+   labels are etched into the panel, not printed on it. */
+.etched-label {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+/* On-rule variant: the label sits ON the hairline rule, interrupting the
+   line instrument-style. <div class="etched-label etched-label--rule">…</div> */
+.etched-label--rule {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.etched-label--rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* Calibration ticks — the signature ornament, used sparingly: 4px hairline
+   ticks at 8px pitch. ONE tick-ruled element per view maximum.
+   .tick-rule = horizontal rail (give it width); .tick-rule-v = vertical
+   rail (give it height). */
+.tick-rule {
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--hairline-strong) 0 1px,
+    transparent 1px 8px
+  );
+}
+
+.tick-rule-v {
+  width: 4px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--hairline-strong) 0 1px,
+    transparent 1px 8px
+  );
+}
+
+/* Status grammar (DESIGN.md): tiny square LEDs + mono caps text, never
+   colored text alone. 8px, 2px radius — the one place "pill-ish" survives.
+   .led-on = completed/active (phosphor) · .led-warn = processing/pending
+   (amber) · .led-fault = failed · .led-idle = hairline outline. */
+.led {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.led-on {
+  background: var(--phosphor);
+}
+
+.led-warn {
+  background: var(--warn);
+}
+
+.led-fault {
+  background: var(--fault);
+}
+
+.led-idle {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+/* Custom scrollbar — machined, square-ish */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -174,76 +282,53 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-default);
-  border-radius: 3px;
+  background: var(--hairline-strong);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+  background: var(--ink-faint);
 }
 
-/* Focus styles */
+/* Focus styles — 2px phosphor outline, 2px offset (unchanged law) */
 *:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--phosphor);
   outline-offset: 2px;
 }
 
-/* Selection */
+/* Selection — phosphor plate treatment */
 ::selection {
-  background: var(--accent);
-  color: white;
+  background: var(--phosphor);
+  color: var(--phosphor-contrast);
 }
 
-html.dark ::selection {
-  color: var(--surface-base);
-}
+/* (grain-overlay retired — toy-era texture; all usages removed.) */
 
-/* Subtle grain texture overlay */
-.grain-overlay {
-  position: relative;
-}
-
-.grain-overlay::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.02;
-  pointer-events: none;
-  z-index: 1;
-}
-
-html.dark .grain-overlay::before {
-  opacity: 0.03;
-}
-
-/* Glow effect for accent elements */
-.accent-glow {
-  box-shadow:
-    0 0 0 1px var(--accent-subtle),
-    0 0 20px -5px var(--accent-muted),
-    0 0 40px -10px var(--accent);
-}
-
-/* Elevated card styling */
+/* Panel (was "elevated card") — elevation by line, not blur (law 3):
+   hairline border, panel surface, 6px machined radius, no shadow.
+   The unlayered radius deliberately outranks Tailwind's layered rounded-*
+   utilities, so legacy rounded-xl/2xl usages come down to 6px for free. */
 .card-elevated {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--card-shadow);
-  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: none;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-/* Input styling */
+/* Inputs sit in wells: --well surface, inset hairline, 4px control radius.
+   (Same unlayered-beats-layered note as .card-elevated for the radius.) */
 .input-base {
-  background: var(--surface-inset);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
+  background: var(--well);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink);
   font-family: var(--font-body);
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .input-base::placeholder {
-  color: var(--text-tertiary);
+  color: var(--ink-faint);
 }
 
 /* Tailwind's `font-mono` utility lives in a cascade layer that loses to the
@@ -270,60 +355,63 @@ html.dark .grain-overlay::before {
 }
 
 .input-base:hover {
-  border-color: var(--border-default);
+  border-color: var(--hairline-strong);
 }
 
+/* Focus ring: phosphor, matching the global focus-visible treatment. */
 .input-base:focus {
-  border-color: var(--accent-muted);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
-  outline: none;
+  border-color: var(--hairline-strong);
+  outline: 2px solid var(--phosphor);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
-/* Button base */
+/* Primary action — the ONE phosphor plate per view (law 1). Flat machined
+   plate: no gradient, no glow, no lift. Hover mixes a step toward the
+   plate's own text color (darkens in dark, lightens in light). */
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-muted) 100%);
-  color: var(--btn-text);
+  background: var(--phosphor);
+  color: var(--phosphor-contrast);
+  border-radius: 4px;
   font-weight: 600;
-  transition: all 0.2s ease;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.1),
-    0 2px 8px rgba(var(--accent-rgb), 0.2);
+  transition: background-color 0.15s ease;
+  box-shadow: none;
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.15),
-    0 4px 16px rgba(var(--accent-rgb), 0.3);
+  background: color-mix(in srgb, var(--phosphor) 88%, var(--phosphor-contrast));
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-primary:active {
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--phosphor) 80%, var(--phosphor-contrast));
 }
 
 .btn-primary:disabled {
-  background: var(--surface-overlay);
-  color: var(--text-tertiary);
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  color: var(--ink-faint);
   box-shadow: none;
   cursor: not-allowed;
   transform: none;
 }
 
-/* Theme toggle button */
+/* Theme toggle / quiet icon buttons — machined secondary plates. */
 .theme-toggle {
-  background: var(--surface-inset);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .theme-toggle:hover {
-  background: var(--surface-overlay);
-  border-color: var(--border-default);
-  color: var(--text-primary);
+  border-color: var(--hairline-strong);
+  color: var(--ink);
 }
 
-/* Animations */
+/* Animations — instrument damping: exponential ease-out, needle-settle. */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -349,9 +437,9 @@ html.dark .grain-overlay::before {
   animation: shimmer 2s infinite linear;
   background: linear-gradient(
     90deg,
-    var(--surface-inset) 25%,
-    var(--surface-elevated) 50%,
-    var(--surface-inset) 75%
+    var(--well) 25%,
+    var(--panel-raised) 50%,
+    var(--well) 75%
   );
   background-size: 200% 100%;
 }
@@ -378,69 +466,56 @@ html.dark .grain-overlay::before {
 .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
 
 /*
- * §13 signature: extracted values anchored to where they appear in the
- * source text — mono chips tinted per-field (task: per-field color-coded
- * highlights), small radius. DocumentView's "Extracted text" view renders
- * these as <mark> elements; ResultsDisplay renders the matching field's
- * column with the same hue (`--mark-bg-*`/`--mark-text-*`, both set inline
- * per element by `fieldColorVars()` — see src/lib/fieldColors.ts — so plain
- * CSS below just picks the light/dark variant, no JS theme sniffing). The
- * `var(--accent-tint, ...)`/`var(--text-primary, ...)` fallbacks only matter
- * for a hypothetical mark with no color vars set; every mark DocumentView
- * renders sets them, so in practice the field color always wins.
+ * Field colors are TRACES, not washes (law 2). A marked value in the
+ * document keeps the ink text color and carries its field identity as a
+ * 2px field-colored underline trace plus a faint (≤14% alpha) tint.
+ *
+ * The golden-angle per-field hue system survives unchanged: fieldColorVars()
+ * (src/lib/fieldColors.ts) sets --mark-bg-light/--mark-text-light/
+ * --mark-bg-dark/--mark-text-dark inline on every mark/<th>/<td>, and plain
+ * CSS picks the active theme's variant — no JS theme sniffing. The trace
+ * color is the field's *text* variant (the saturated identity hue); the old
+ * bg variant is no longer painted as a wash.
  */
 .sift-mark {
-  background: var(--mark-bg-light, var(--accent-tint));
-  color: var(--mark-text-light, var(--text-primary));
+  /* Dark default → dark variant; html.light flips below. */
+  --trace: var(--mark-text-dark, var(--phosphor));
+  color: var(--ink);
   font-family: var(--font-mono);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--trace) 12%, transparent);
+  box-shadow: inset 0 -2px 0 0 var(--trace);
+  border-radius: 2px 2px 0 0;
   padding: 0 2px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  transition: box-shadow 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
-html.dark .sift-mark {
-  background: var(--mark-bg-dark, var(--accent-tint));
-  color: var(--mark-text-dark, var(--text-primary));
+html.light .sift-mark {
+  --trace: var(--mark-text-light, var(--phosphor));
 }
 
-/* Hovering the matching results-table cell rings every mark for that field
-   (the document-side half of the two-way hover link) — `currentColor` is
-   the mark's own (per-field) text color, so the ring always matches. */
+/* Hovering the matching results cell deepens every mark for that field
+   (the document-side half of the two-way hover link): tint steps up and a
+   1px trace-colored ring completes the probe indication. */
 .sift-mark--linked {
-  box-shadow: 0 0 0 2px currentColor;
+  background: color-mix(in srgb, var(--trace) 24%, transparent);
+  box-shadow:
+    inset 0 -2px 0 0 var(--trace),
+    0 0 0 1px var(--trace);
 }
 
 /* Clicking a result row flashes its mark (restarted via classList on every
-   click, see DocumentView.scrollToMark). Reduced-motion users still get the
-   scroll-into-view jump; the animation itself is dropped below. Settles back
-   to the mark's own field color (light/dark) rather than the old flat
-   --accent-tint, so a colored mark doesn't pop to the wrong hue once the
-   flash ends. */
+   click, see DocumentView.scrollToMark): a strong trace-tinted pulse that
+   settles back to the resting 12% tint. One keyframe serves both themes —
+   --trace re-resolves per calibration. Reduced-motion users still get the
+   scroll-into-view jump; the animation itself is dropped below. */
 @keyframes sift-mark-flash {
   0% {
-    background: var(--accent);
-    color: var(--btn-text);
+    background: color-mix(in srgb, var(--trace) 55%, transparent);
   }
   100% {
-    background: var(--mark-bg-light, var(--accent-tint));
-    color: var(--mark-text-light, var(--text-primary));
-  }
-}
-
-html.dark .sift-mark.flash {
-  animation-name: sift-mark-flash-dark;
-}
-
-@keyframes sift-mark-flash-dark {
-  0% {
-    background: var(--accent);
-    color: var(--btn-text);
-  }
-  100% {
-    background: var(--mark-bg-dark, var(--accent-tint));
-    color: var(--mark-text-dark, var(--text-primary));
+    background: color-mix(in srgb, var(--trace) 12%, transparent);
   }
 }
 
@@ -455,35 +530,47 @@ html.dark .sift-mark.flash {
 }
 
 /*
- * ResultsDisplay half of the per-field color-coding: a small swatch before
- * each column's name (matches that field's mark color) and a subtle
- * bg/ring tint on the column's cells while its field is hovered in either
- * pane. Both read the same `--mark-bg-*`/`--mark-text-*` vars `fieldColorVars()`
- * sets inline on the <th>/<td> — same source of truth as .sift-mark above.
+ * ResultsDisplay half of the per-field system. Same inline --mark-* vars as
+ * .sift-mark (single source of truth: fieldColorVars()).
  */
+
+/* Column-header swatch: the field's identity chip, now the trace hue. */
 .field-swatch {
-  background: var(--mark-bg-light);
+  background: var(--mark-text-dark);
 }
 
-html.dark .field-swatch {
-  background: var(--mark-bg-dark);
+html.light .field-swatch {
+  background: var(--mark-text-light);
 }
 
+/* Results-cell edge-tick (law 2): a 2px left tick in the field color marks
+   a reading's cell — apply to positioned <td> content or the cell itself. */
+.field-tick {
+  --trace: var(--mark-text-dark, var(--phosphor));
+  box-shadow: inset 2px 0 0 0 var(--trace);
+}
+
+html.light .field-tick {
+  --trace: var(--mark-text-light, var(--phosphor));
+}
+
+/* Hover tint on a linked column's cells while its field is hovered in
+   either pane — a trace-tinted veil (≤14%), no more solid wash. */
 .field-tint {
-  background: color-mix(in srgb, var(--mark-bg-light) 45%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark-text-light) 35%, transparent);
+  background: color-mix(in srgb, var(--mark-text-dark) 12%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--mark-text-dark);
 }
 
-html.dark .field-tint {
-  background: color-mix(in srgb, var(--mark-bg-dark) 45%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark-text-dark) 35%, transparent);
+html.light .field-tint {
+  background: color-mix(in srgb, var(--mark-text-light) 12%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--mark-text-light);
 }
 
 /* Reverse-direction flash (ResultsDisplay.flashCell): clicking a document
-   mark scrolls to and briefly flashes its results cell. A pulsing overlay
-   rather than a background-color keyframe (like .sift-mark.flash) because a
-   cell's resting background is the row's own hover/tint state, not a fixed
-   color to animate back to. */
+   mark scrolls to and briefly flashes its results cell. An overlay rather
+   than a background keyframe because a cell's resting background is the
+   row's own hover/tint state. Phosphor at partial alpha — a signal pulse,
+   not a paint-over. */
 @keyframes sift-cell-flash {
   0% {
     opacity: 1;
@@ -497,8 +584,8 @@ html.dark .field-tint {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  border-radius: 4px;
-  background: var(--accent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--phosphor) 40%, transparent);
   animation: sift-cell-flash 900ms ease;
 }
 
@@ -509,17 +596,14 @@ html.dark .field-tint {
   }
 }
 
-/* Templates page (task-templates-tabs): flashes the row for a template just
-   added from a preset, on the "Your templates" tab it switches to — a
-   background-color keyframe like .sift-mark.flash rather than an overlay
-   like .cell-flash-overlay, since a template row (unlike a results cell)
-   always rests at the same --surface-elevated color. */
+/* Templates page: flashes the row for a template just added from a preset —
+   settles from a phosphor-well pulse back to the panel surface. */
 @keyframes sift-row-flash {
   0% {
-    background-color: var(--accent-subtle);
+    background-color: var(--phosphor-well);
   }
   100% {
-    background-color: var(--surface-elevated);
+    background-color: var(--panel);
   }
 }
 
@@ -533,43 +617,30 @@ html.dark .field-tint {
   }
 }
 
-/* Expand-to-modal backdrop (§13, "expand-to-modal" task) — the app's first
-   true overlay. A theme-invariant dark scrim: in dark mode `--ink` is
-   near-white, which read as a frosted light veil instead of dimming —
-   so this deliberately does NOT derive from the ink token. The warm
-   near-black matches the light theme's ink family. */
+/* Overlay scrims — cool graphite (the old warm near-black was §13-era).
+   Modal backdrop dims hard; the completion popup stays a light veil so the
+   live results table underneath remains legible. */
 .modal-backdrop {
-  background: rgba(23, 20, 15, 0.45);
+  background: rgba(8, 10, 11, 0.55);
 }
 
-/* Completion popup backdrop (task-done-popup brief) — the same warm
-   near-black as .modal-backdrop, deliberately lighter (20% vs 45%): this is
-   a transient, self-dismissing confirmation over live results, not a true
-   modal, so the table underneath must stay legible through it. */
 .popup-backdrop {
-  background: rgba(23, 20, 15, 0.2);
+  background: rgba(8, 10, 11, 0.25);
 }
 
-/* The document "sheet": text documents render as a white page floating on
-   the inset gray backdrop (mirrors how PDF pages present), rather than
-   text sitting flat on gray. Dark mode swaps paper-white for the elevated
-   surface with a deeper shadow. */
+/* The document sheet — becomes the PLATEN in R2 (paper physically light in
+   both themes, edge-lit against the case). For R1 it stays token-driven
+   (component text colors still assume theme ink); only the frame is
+   re-derived: hairline edge, true-overlay shadow retired to a tight edge. */
 .doc-sheet {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
   border-radius: 6px;
-  box-shadow:
-    0 1px 3px rgba(23, 23, 26, 0.08),
-    0 8px 24px rgba(23, 23, 26, 0.06);
+  box-shadow: var(--shadow-sm);
   max-width: 46rem;
   /* Fill the pane vertically even for short documents — a content-hugging
      sheet reads as a torn half-page rather than a page. */
   min-height: 100%;
   margin: 0 auto;
   padding: 2.5rem 2.75rem;
-}
-html.dark .doc-sheet {
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.45),
-    0 8px 24px rgba(0, 0, 0, 0.3);
 }

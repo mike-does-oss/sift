@@ -45,7 +45,7 @@ export default async function Home() {
   const ctaHref = signedIn ? "/dashboard" : "/auth/sign-up";
 
   return (
-    <main className="min-h-screen bg-[var(--surface-base)] grain-overlay text-[var(--text-primary)]">
+    <main className="min-h-screen bg-[var(--surface-base)] text-[var(--text-primary)]">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg)_85%,transparent)] backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

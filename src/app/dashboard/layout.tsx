@@ -25,7 +25,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   return (
     <ProfileProvider hosted={hosted}>
-      <div className="flex min-h-screen bg-[var(--surface-base)] grain-overlay">
+      <div className="flex min-h-screen bg-[var(--surface-base)]">
         <Sidebar accountEmail={accountEmail} />
         <main className="flex-1 min-w-0">{children}</main>
       </div>

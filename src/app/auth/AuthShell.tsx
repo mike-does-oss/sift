@@ -6,7 +6,7 @@ import { SiftWordmark } from "@/components/brand/SiftWordmark";
 // the interactive form inside is the client boundary.
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[var(--surface-base)] grain-overlay p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[var(--surface-base)] p-4">
       <div className="mb-6">
         <SiftWordmark markSize={34} textClassName="text-2xl" />
       </div>
