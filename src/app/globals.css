@@ -644,3 +644,51 @@ html.light .field-tint {
   margin: 0 auto;
   padding: 2.5rem 2.75rem;
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   R3 additions — landing + auth re-execution (bench instrument).
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* The hosted landing is the Persuade surface (DESIGN.md "Modes"): the dark
+   bench hero — lit-paper specimen against the graphite case — IS the design,
+   not a theme variant. .bench-dark re-pins the canonical tokens to the dark
+   calibration so the page stays the instrument case even when the visitor's
+   stored preference sets html.light (the legacy aliases chain via var() and
+   re-resolve automatically). Scoped to the landing <main> only; the app
+   behind sign-in keeps both calibrations. */
+.bench-dark {
+  color-scheme: dark;
+  --case: #101214;
+  --panel: #16191c;
+  --panel-raised: #1b1f23;
+  --well: #0b0d0e;
+  --ink: #e9ebe7;
+  --ink-dim: #a9ada7;
+  --ink-faint: #878b86;
+  --hairline: #26292d;
+  --hairline-strong: #34383d;
+  --phosphor: #35e0a0;
+  --phosphor-dim: #1e8f68;
+  --phosphor-well: #0f2a20;
+  --warn: #e0a845;
+  --fault: #e5655a;
+  --phosphor-contrast: #07130e;
+  --phosphor-rgb: 53, 224, 160;
+}
+
+/* Machined secondary plate — the non-primary button (DESIGN.md controls:
+   "buttons are machined plates — --panel-raised + hairline, 4px radius").
+   Used by the landing header/CTAs, pricing tiers, and the GitHub plate. */
+.btn-plate {
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-weight: 500;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-plate:hover {
+  border-color: var(--hairline-strong);
+  color: var(--ink);
+}

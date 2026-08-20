@@ -1,26 +1,41 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { fieldColorVars } from "@/lib/fieldColors";
+import { fieldColor, fieldColorVars } from "@/lib/fieldColors";
 
 /**
- * Animated hero showcase, "paperwork on a desk" treatment: a realistic paper
- * miniature (typeset with real content — no skeleton bars, no fake window
- * chrome) sits slightly rotated on the page surface while sift's results
- * card floats beside it. Cycles bank statement → contract → invoice → email;
- * per cycle, marker-style highlight sweeps land on the paper and the matching
- * rows populate the results card in the same field colors the real app uses
- * (fieldColorVars).
+ * Animated hero showcase — the instrument reading a document (DESIGN.md
+ * "Signature interaction", Persuade mode). One machined bezel holds two
+ * chambers: the PLATEN (an inset well where a realistic paper miniature sits
+ * as a lit specimen — fixed ink-on-paper colors in both calibrations, edge-lit
+ * against the graphite case) and the READINGS panel (mono values, etched
+ * uppercase field labels, a 2px field-color edge-tick per row — traces, not
+ * washes, law 2).
  *
- * The paper is always light, in both themes — it's a photographed object,
- * not a UI surface — so its palette is fixed ink-on-paper values and its
- * highlights always use the light-mode mark vars. The results card is an app
- * artifact and follows the theme normally.
+ * Cycles bank statement → contract → invoice → email. Per cycle, each field's
+ * value on the paper gets a 2px field-colored underline trace drawing on
+ * (plus a ≤12% tint — the marker sweep is retired), its reading lands in the
+ * panel, and a hairline PROBE LINE (SVG) draws from the mark to its reading —
+ * the signature motif. The probe line is measured from layout offsets
+ * (offsetLeft/Top chains), not getBoundingClientRect, so entrance transforms
+ * never skew it; it renders only at sm+ where the two chambers sit side by
+ * side.
+ *
+ * The showcase always renders in the dark calibration (the landing <main> is
+ * .bench-dark), so readings use the dark field-color variants explicitly,
+ * mirroring the paper's fixed light variants.
  *
  * This is the landing page's only client island and the page's one authored
- * motion moment. prefers-reduced-motion: static invoice, fully highlighted,
- * no cycling. Hover pauses the cycle.
+ * motion moment. prefers-reduced-motion: static invoice, traces fully drawn,
+ * probe line static, no cycling. Hover pauses the cycle (unchanged).
  */
 
 interface DocField {
@@ -32,7 +47,6 @@ interface DocDef {
   id: "statement" | "contract" | "invoice" | "email";
   label: string;
   file: string;
-  rotate: number; // resting tilt of the sheet, degrees
   fields: DocField[]; // order = field color index = animation order
 }
 
@@ -41,7 +55,6 @@ const DOCS: DocDef[] = [
     id: "statement",
     label: "Bank statement",
     file: "statement_mar.pdf",
-    rotate: -1.1,
     fields: [
       { name: "date", value: "03 Mar 2026" },
       { name: "description", value: "ACME PAYROLL" },
@@ -52,7 +65,6 @@ const DOCS: DocDef[] = [
     id: "contract",
     label: "Contract",
     file: "msa_northwind.pdf",
-    rotate: 0.9,
     fields: [
       { name: "party", value: "Northwind Ltd" },
       { name: "effective_date", value: "1 February 2026" },
@@ -63,7 +75,6 @@ const DOCS: DocDef[] = [
     id: "invoice",
     label: "Invoice",
     file: "inv-2041.pdf",
-    rotate: -0.6,
     fields: [
       { name: "invoice_no", value: "INV-2041" },
       { name: "due_date", value: "30 Apr 2026" },
@@ -74,7 +85,6 @@ const DOCS: DocDef[] = [
     id: "email",
     label: "Email",
     file: "delivery.eml",
-    rotate: 1.2,
     fields: [
       { name: "from", value: "anna@parcel.io" },
       { name: "subject", value: "Delivery confirmation" },
@@ -86,46 +96,53 @@ const DOCS: DocDef[] = [
 const CYCLE_MS = 4600;
 const SWEEP_START = 0.8; // s after the sheet lands
 const STAGGER = 0.45; // s between fields
-const ROW_LAG = 0.35; // s between a sweep starting and its row landing
+const ROW_LAG = 0.35; // s between a trace starting and its reading landing
 
-// Reduced-motion users get a static, fully-highlighted invoice.
+// Reduced-motion users get a static, fully-traced invoice.
 const STATIC_DOC_INDEX = 2;
 
 /* -------------------------------------------------------------- paper ink */
-// The sheet is a physical object: fixed light-paper palette in both themes.
+// The sheet is a physical specimen under instrument light: fixed light-paper
+// palette in BOTH calibrations (never theme tokens). Edge-lit against the
+// case — a 1px light rim where the platen light catches the paper's edge
+// (a line, not a blur — law 3 stays honored; same treatment as .doc-sheet).
 const PAPER: CSSProperties = {
-  background: "linear-gradient(176deg, #fdfcf7 0%, #faf8f1 100%)",
+  background: "linear-gradient(178deg, #fdfcf7 0%, #f8f6ef 100%)",
   color: "#2b2f33",
-  boxShadow:
-    "0 1px 2px rgba(43, 47, 51, 0.10), 0 10px 28px -10px rgba(43, 47, 51, 0.28)",
+  boxShadow: "0 0 0 1px rgba(233, 235, 231, 0.14)",
 };
 const INK_FAINT = "#787d80"; // secondary print on paper, ~4.6:1 on #fdfcf7
 const RULE = "rgba(43, 47, 51, 0.14)"; // hairlines on paper
 const RULE_STRONG = "rgba(43, 47, 51, 0.42)";
 
-/** Marker highlight on paper: organic radius, sweeps in like a real stroke. */
+/**
+ * A marked value on the paper (law 2): the value keeps the paper's own ink
+ * color and carries its field identity as a 2px underline trace drawing on
+ * left→right plus a faint (12%) tint. Paper is a light object, so the trace
+ * always uses the light-variant field color regardless of theme.
+ */
 function Hl({ i, instant, children }: { i: number; instant: boolean; children: ReactNode }) {
   return (
     <span
-      className="relative inline-block whitespace-nowrap px-[3px]"
-      style={{
-        ...(fieldColorVars(i) as CSSProperties),
-        color: "var(--mark-text-light)",
-        borderRadius: "0.45em 0.65em 0.5em 0.35em",
-      }}
+      data-probe-mark={i}
+      className="relative inline-block whitespace-nowrap px-[2px]"
+      style={fieldColorVars(i) as CSSProperties}
     >
       <motion.span
         aria-hidden
         className="absolute inset-0"
-        style={{
-          originX: 0,
-          background: "var(--mark-bg-light)",
-          borderRadius: "0.45em 0.65em 0.5em 0.35em",
-          transform: "rotate(-0.4deg)",
-        }}
+        style={{ background: "color-mix(in srgb, var(--mark-text-light) 12%, transparent)" }}
+        initial={instant ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: SWEEP_START + i * STAGGER, duration: 0.25 }}
+      />
+      <motion.span
+        aria-hidden
+        className="absolute inset-x-0 bottom-[-1px] h-[2px]"
+        style={{ originX: 0, background: "var(--mark-text-light)" }}
         initial={instant ? false : { scaleX: 0 }}
         animate={{ scaleX: 1 }}
-        transition={{ delay: SWEEP_START + i * STAGGER, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ delay: SWEEP_START + i * STAGGER, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       />
       <span className="relative">{children}</span>
     </span>
@@ -134,8 +151,10 @@ function Hl({ i, instant, children }: { i: number; instant: boolean; children: R
 
 /* --------------------------------------------------------------- the sheets
    Real miniature documents: genuine (illustrative) content, real typography,
-   tabular figures. Sizes are tiny by design — these read as paperwork at
-   arm's length, and every highlighted value is genuinely printed on the page. */
+   tabular figures. Sizes are tiny by design — these read as paperwork under
+   the instrument's light, and every traced value is genuinely printed on the
+   page. (Typeset content unchanged from the desk-era showcase — only the
+   mark treatment moved from marker sweeps to underline traces.) */
 
 function StatementRow({ date, desc, amount, neg = true }: { date: string; desc: string; amount: string; neg?: boolean }) {
   return (
@@ -350,6 +369,46 @@ const DOC_RENDERERS: Record<DocDef["id"], typeof StatementDoc> = {
   email: EmailDoc,
 };
 
+/* --------------------------------------------------------------- the probe
+   The signature motif: a hairline SVG line from a mark on the paper to its
+   reading in the panel, drawn in the field's (dark-variant) trace color.
+   Endpoints come from offsetLeft/Top chains up to the stage element — layout
+   coordinates, immune to the entrance transforms framer applies — so the
+   line is exact once the elements exist. */
+
+interface ProbePt {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+function layoutOffset(stage: HTMLElement, el: HTMLElement): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== stage) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return { x, y };
+}
+
+function measureProbe(stage: HTMLElement, i: number): ProbePt | null {
+  const mark = stage.querySelector<HTMLElement>(`[data-probe-mark="${i}"]`);
+  const row = stage.querySelector<HTMLElement>(`[data-probe-row="${i}"]`);
+  if (!mark || !row) return null;
+  const m = layoutOffset(stage, mark);
+  const r = layoutOffset(stage, row);
+  return {
+    x1: m.x + mark.offsetWidth + 3,
+    y1: m.y + mark.offsetHeight / 2,
+    x2: r.x - 1,
+    y2: r.y + row.offsetHeight / 2,
+  };
+}
+
 /* ---------------------------------------------------------------- showcase */
 
 // "Am I hydrated yet?" via useSyncExternalStore: the server snapshot is false,
@@ -367,6 +426,11 @@ export function ExtractionShowcase() {
   const reduced = mounted && prefersReduced;
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
+  // The probe carries the doc id it was measured against: a stale probe
+  // (from the previous specimen) simply stops rendering when the cycle
+  // advances — no synchronous state clearing needed in the effect below.
+  const [probe, setProbe] = useState<{ docId: DocDef["id"]; i: number; pt: ProbePt } | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (reduced || paused) return;
@@ -377,102 +441,189 @@ export function ExtractionShowcase() {
   const active = reduced ? DOCS[STATIC_DOC_INDEX] : DOCS[idx];
   const Doc = DOC_RENDERERS[active.id];
 
+  // Probe stepping: as each reading lands, re-aim the probe line at that
+  // field's mark→reading pair (measured fresh — the new doc's marks are in
+  // the DOM from mount even while their traces are still delayed).
+  useEffect(() => {
+    if (!mounted) return;
+    const docId = active.id;
+    if (reduced) {
+      // Static probe on the invoice's first field, measured after paint.
+      const raf = requestAnimationFrame(() => {
+        const el = stageRef.current;
+        if (!el) return;
+        const pt = measureProbe(el, 0);
+        if (pt) setProbe({ docId, i: 0, pt });
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+    const timers = DOCS[0].fields.map((_, i) =>
+      setTimeout(
+        () => {
+          const el = stageRef.current;
+          if (!el) return;
+          const pt = measureProbe(el, i);
+          setProbe(pt ? { docId, i, pt } : null);
+        },
+        (SWEEP_START + ROW_LAG + i * STAGGER) * 1000 + 150,
+      ),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [active.id, reduced, mounted]);
+
+  // Keep the current probe line true across resizes.
+  useEffect(() => {
+    const onResize = () =>
+      setProbe((p) => {
+        const el = stageRef.current;
+        if (!p || !el) return p;
+        const pt = measureProbe(el, p.i);
+        return pt ? { ...p, pt } : p;
+      });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Render the probe only if it belongs to the specimen currently on the
+  // platen (a stale one goes dark the moment the cycle advances).
+  const liveProbe = probe && probe.docId === active.id ? probe : null;
+  const probeColor = liveProbe ? fieldColor(liveProbe.i).dark.text : undefined;
+
   return (
     <figure
       role="img"
-      aria-label="Demo of sift extracting fields from a bank statement, contract, invoice, and email — each value marked on the paper and mirrored in a results card"
+      aria-label="Demo of sift reading a bank statement, contract, invoice, and email — each value traced on the paper, linked by a probe line to its reading in the results panel"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className="mx-auto w-full max-w-3xl text-left"
     >
       <div aria-hidden>
-        {/* Which paper is on the desk right now — quiet filename tags */}
-        <div className="mb-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5">
-          {DOCS.map((doc) => (
-            <span
-              key={doc.id}
-              className="data pb-0.5 text-[11px] transition-colors duration-300"
-              style={{
-                color: doc.id === active.id ? "var(--text-primary)" : "var(--text-tertiary)",
-                boxShadow: doc.id === active.id ? "inset 0 -2px 0 var(--accent)" : "none",
-              }}
-            >
-              {doc.file}
-            </span>
-          ))}
-        </div>
-
-        <div className="grid items-center gap-6 sm:grid-cols-[1.15fr_1fr] sm:gap-8">
-          {/* The paper, resting on the page itself — no frame, no chrome */}
-          <div className="relative mx-auto h-[248px] w-full max-w-[356px]">
-            {/* A second sheet peeking out beneath the stack */}
-            <div
-              className="absolute inset-x-2 bottom-[-5px] top-[9px]"
-              style={{
-                background: "#f6f4ec",
-                transform: "rotate(1.6deg)",
-                borderRadius: 2,
-                boxShadow: "0 6px 18px -8px rgba(43,47,51,0.25)",
-              }}
-            />
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={active.id}
-                className="absolute inset-0 px-4 py-3.5"
-                style={{ ...PAPER, borderRadius: 2 }}
-                initial={reduced ? false : { opacity: 0, y: -14, rotate: active.rotate + 2.5 }}
-                animate={{ opacity: 1, y: 0, rotate: active.rotate }}
-                exit={reduced ? undefined : { opacity: 0, y: 10, transition: { duration: 0.18 } }}
-                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        {/* The instrument bezel: one machined panel, hairline-divided */}
+        <div className="overflow-hidden rounded-[6px] border border-[var(--hairline)] bg-[var(--panel)]">
+          {/* Header strip: etched specimen labels (which paper is on the platen) */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[var(--hairline)] px-4 py-2.5 sm:px-5">
+            <span className="etched-label mr-1">Specimen</span>
+            {DOCS.map((doc) => (
+              <span
+                key={doc.id}
+                className="data pb-px text-[10px] tracking-[0.02em] transition-colors duration-300"
+                style={{
+                  color: doc.id === active.id ? "var(--ink)" : "var(--ink-faint)",
+                  boxShadow:
+                    doc.id === active.id ? "inset 0 -2px 0 var(--hairline-strong)" : "none",
+                }}
               >
-                <Doc fields={active.fields} instant={reduced} />
-              </motion.div>
-            </AnimatePresence>
+                {doc.file}
+              </span>
+            ))}
           </div>
 
-          {/* Results — an actual sift artifact, so it follows the app theme */}
-          <div
-            className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-3.5"
-            style={{ boxShadow: "0 1px 2px rgba(0,0,0,0.05), 0 12px 32px -16px rgba(0,0,0,0.18)" }}
-          >
-            <div className="mb-2.5 flex items-center justify-between gap-3">
-              <span className="data truncate text-[11px] text-[var(--text-secondary)]">{active.file}</span>
-              <span className="flex flex-shrink-0 items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                grounded
-              </span>
-            </div>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={active.id}
-                exit={reduced ? undefined : { opacity: 0, transition: { duration: 0.18 } }}
-                className="divide-y divide-[var(--border-subtle)]"
-              >
-                {active.fields.map((field, i) => (
+          <div ref={stageRef} className="relative grid sm:grid-cols-[1.15fr_1fr]">
+            {/* The platen: an inset well; the paper sits on it as a lit specimen */}
+            <div className="border-b border-[var(--hairline)] bg-[var(--well)] px-4 py-5 sm:border-b-0 sm:border-r sm:px-6 sm:py-6">
+              <div className="relative mx-auto h-[248px] w-full max-w-[356px]">
+                <AnimatePresence mode="wait" initial={false}>
                   <motion.div
-                    key={field.name}
-                    initial={reduced ? false : { opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{
-                      delay: SWEEP_START + ROW_LAG + i * STAGGER,
-                      duration: 0.32,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                    className="flex items-center gap-2.5 py-2 first:pt-0.5 last:pb-0.5"
-                    style={fieldColorVars(i) as CSSProperties}
+                    key={active.id}
+                    className="absolute inset-0 px-4 py-3.5"
+                    style={{ ...PAPER, borderRadius: 2 }}
+                    initial={reduced ? false : { opacity: 0, y: -12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduced ? undefined : { opacity: 0, y: 8, transition: { duration: 0.18 } }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <span className="field-swatch h-2 w-2 flex-shrink-0 rounded-[3px]" />
-                    <span className="data text-[11px] text-[var(--text-tertiary)]">{field.name}</span>
-                    <span
-                      className="data ml-auto truncate text-[11px] font-medium text-[var(--text-primary)]"
-                      style={{ fontVariantNumeric: "tabular-nums" }}
-                    >
-                      {field.value}
-                    </span>
+                    <Doc fields={active.fields} instant={reduced} />
                   </motion.div>
-                ))}
-              </motion.div>
-            </AnimatePresence>
+                </AnimatePresence>
+              </div>
+            </div>
+
+            {/* Readings — the phosphor-lit display side of the instrument */}
+            <div className="flex flex-col p-4 sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="etched-label">Readings</span>
+                <span className="flex flex-shrink-0 items-center gap-1.5">
+                  <span className="led led-on" />
+                  <span className="data text-[10px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">
+                    grounded
+                  </span>
+                </span>
+              </div>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={active.id}
+                  exit={reduced ? undefined : { opacity: 0, transition: { duration: 0.18 } }}
+                  className="divide-y divide-[var(--hairline)] border-y border-[var(--hairline)]"
+                >
+                  {active.fields.map((field, i) => (
+                    <motion.div
+                      key={field.name}
+                      data-probe-row={i}
+                      initial={reduced ? false : { opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        delay: SWEEP_START + ROW_LAG + i * STAGGER,
+                        duration: 0.32,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="flex items-baseline gap-3 py-2.5 pl-3 pr-1"
+                      // The reading's edge-tick (law 2): 2px left tick in the
+                      // field color. Always the dark variant — the landing is
+                      // pinned to the dark calibration (.bench-dark) — the
+                      // mirror of the paper hardcoding the light variant.
+                      style={{ boxShadow: `inset 2px 0 0 0 ${fieldColor(i).dark.text}` }}
+                    >
+                      <span className="data text-[10px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
+                        {field.name}
+                      </span>
+                      <span
+                        className="data ml-auto truncate text-[11.5px] font-medium text-[var(--ink)]"
+                        style={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {field.value}
+                      </span>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
+              <div className="mt-auto flex items-center justify-between pt-3">
+                <span className="data truncate text-[10px] text-[var(--ink-faint)]">
+                  {active.file}
+                </span>
+                <span className="data flex-shrink-0 text-[10px] text-[var(--ink-faint)]">
+                  3 fields
+                </span>
+              </div>
+            </div>
+
+            {/* The probe line — mark → reading, in the field's trace color.
+                Only where the chambers sit side by side (sm+). */}
+            {liveProbe && probeColor && (
+              <svg className="pointer-events-none absolute inset-0 hidden h-full w-full sm:block">
+                <motion.line
+                  key={`${liveProbe.docId}-${liveProbe.i}`}
+                  x1={liveProbe.pt.x1}
+                  y1={liveProbe.pt.y1}
+                  x2={liveProbe.pt.x2}
+                  y2={liveProbe.pt.y2}
+                  stroke={probeColor}
+                  strokeWidth={1}
+                  initial={reduced ? undefined : { pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 0.85 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                />
+                <motion.circle
+                  key={`${liveProbe.docId}-${liveProbe.i}-dot`}
+                  cx={liveProbe.pt.x1}
+                  cy={liveProbe.pt.y1}
+                  r={2}
+                  fill={probeColor}
+                  initial={reduced ? undefined : { opacity: 0 }}
+                  animate={{ opacity: 0.85 }}
+                  transition={{ duration: 0.2 }}
+                />
+              </svg>
+            )}
           </div>
         </div>
       </div>

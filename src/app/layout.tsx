@@ -48,17 +48,32 @@ export const metadata: Metadata = {
   },
 };
 
+// Pre-hydration theme init: dark is the default calibration (:root), light is
+// the `html.light` opt-in. Without this, a visitor whose stored/OS preference
+// is light gets a dark first paint until Sidebar's post-hydration effect runs
+// (R1's theme inversion introduced that flash). Same mapping as Sidebar.tsx:
+// stored "light" → html.light; nothing stored → OS preference; stored "dark"
+// (or anything else) → default. Parser-blocking inline script so it runs
+// before first paint; try/catch for storage-disabled contexts.
+const THEME_INIT = `try{var t=localStorage.getItem("sift-theme");if(t==="light"||(!t&&matchMedia("(prefers-color-scheme: light)").matches))document.documentElement.classList.add("light")}catch(e){}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
+    // suppressHydrationWarning: the theme script above legitimately mutates
+    // <html>'s class list before React hydrates.
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${spaceGrotesk.variable} ${inter.variable} ${ibmPlexMono.variable}`}
     >
-      <body className="antialiased min-h-screen">{children}</body>
+      <body className="antialiased min-h-screen">
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        {children}
+      </body>
     </html>
   );
 }
