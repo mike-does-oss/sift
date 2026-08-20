@@ -41,7 +41,7 @@ function RunsPageInner() {
     <div className="p-8 max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-3">
-          <Layers className="w-6 h-6 text-[var(--accent)]" />
+          <Layers className="w-6 h-6 text-[var(--ink-dim)]" />
           Runs
         </h1>
         <p className="text-sm text-[var(--text-tertiary)] mt-1">
@@ -50,17 +50,17 @@ function RunsPageInner() {
       </div>
 
       {/* §13 segmented pill tab bar — same idiom as the templates page. */}
-      <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-sm font-medium w-fit">
+      <div className="flex items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-sm font-medium w-fit">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => selectTab(tab.key)}
             aria-pressed={activeTab === tab.key}
-            className={`px-3.5 py-1.5 rounded-md transition-colors ${
+            className={`px-3.5 py-1.5 rounded-[3px] transition-colors ${
               activeTab === tab.key
-                ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+                : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             }`}
           >
             {tab.label}

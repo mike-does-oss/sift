@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isProviderId, type ProviderId } from "@/lib/api";
 import { PaginationBar } from "@/components/PaginationBar";
+import { StatusLed } from "@/components/dashboard/StatusLed";
 import { PAGE_SIZE, clampPage, pageSlice } from "@/lib/pagination";
 import {
   HISTORY_FILTERS,
@@ -53,25 +54,6 @@ function labelForProvider(id: string): string {
   return isProviderId(id) ? PROVIDER_LABELS[id] : id;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
-  processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
-  completed: "bg-[var(--success-subtle)] text-[var(--success)]",
-  failed: "bg-[var(--error-subtle)] text-[var(--error)]",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-        STATUS_STYLES[status] ?? STATUS_STYLES.pending
-      }`}
-    >
-      {status}
-    </span>
-  );
-}
-
 /**
  * Expanded-row detail: a mini field→value table keyed to the job's
  * templateSnapshot (a single-object result reads as key→value rows; a
@@ -84,7 +66,7 @@ function JobResultDetail({ job }: { job: Job }) {
 
   if (!view) {
     return (
-      <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+      <pre className="data p-3 rounded bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
         {job.result ? JSON.stringify(job.result, null, 2) : "No result"}
       </pre>
     );
@@ -92,7 +74,7 @@ function JobResultDetail({ job }: { job: Job }) {
 
   return (
     <div className="space-y-2">
-      <div className="rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] overflow-x-auto max-h-64 overflow-y-auto">
+      <div className="rounded bg-[var(--surface-inset)] border border-[var(--border-subtle)] overflow-x-auto max-h-64 overflow-y-auto">
         {view.rows.length === 1 ? (
           <table className="w-full text-xs">
             <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -134,7 +116,7 @@ function JobResultDetail({ job }: { job: Job }) {
         )}
       </div>
       {view.extras && (
-        <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-40">
+        <pre className="data p-3 rounded bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-40">
           {JSON.stringify(view.extras.length === 1 ? view.extras[0] : view.extras, null, 2)}
         </pre>
       )}
@@ -185,23 +167,23 @@ export function HistoryPanel() {
       </p>
 
       {isLoading ? (
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       ) : jobs.length === 0 ? (
         <p className="text-sm text-[var(--text-tertiary)]">No extractions yet.</p>
       ) : (
         <>
           {/* §13 segmented pill bar — same idiom as the runs tab bar. */}
-          <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium w-fit">
+          <div className="flex items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium w-fit">
             {HISTORY_FILTERS.map((key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => selectFilter(key)}
                 aria-pressed={filter === key}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
+                className={`px-3 py-1.5 rounded-[3px] transition-colors ${
                   filter === key
-                    ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+                    : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 {HISTORY_FILTER_LABELS[key]}
@@ -214,7 +196,7 @@ export function HistoryPanel() {
               No {HISTORY_FILTER_LABELS[filter].toLowerCase()} runs in the last {jobs.length} jobs.
             </p>
           ) : (
-            <div className="card-elevated rounded-xl overflow-hidden">
+            <div className="card-elevated overflow-hidden">
               <div className="divide-y divide-[var(--border-subtle)]">
                 {pageRows.map(({ job, filename }) => (
                   <details key={job.id} className="group">
@@ -231,7 +213,7 @@ export function HistoryPanel() {
                       <span className="data w-32 flex-shrink-0 text-xs text-[var(--text-tertiary)] truncate">
                         {job.provider ? `${labelForProvider(job.provider)} · ${job.model ?? "—"}` : "—"}
                       </span>
-                      <StatusBadge status={job.status} />
+                      <StatusLed status={job.status} className="w-28 justify-end" />
                     </summary>
                     <div className="px-4 pb-4">
                       {job.status === "failed" && job.error && (

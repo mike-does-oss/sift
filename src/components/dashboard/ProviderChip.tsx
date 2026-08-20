@@ -84,7 +84,7 @@ export function ProviderChip() {
   if (!settings) {
     return (
       <div className="px-2 py-2">
-        <div className="h-6 w-28 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-28 rounded bg-[var(--surface-overlay)] animate-pulse" />
       </div>
     );
   }
@@ -94,7 +94,7 @@ export function ProviderChip() {
   return (
     <div className="px-2 py-1.5">
       <div
-        className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+        className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-[var(--hairline)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--ink-dim)]"
         title={text}
         aria-label={text}
       >

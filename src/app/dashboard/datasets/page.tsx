@@ -45,7 +45,7 @@ export default function DatasetsPage() {
     <div className="p-8 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-3">
-          <Database className="w-6 h-6 text-[var(--accent)]" />
+          <Database className="w-6 h-6 text-[var(--ink-dim)]" />
           Datasets
         </h1>
         <p className="text-sm text-[var(--text-tertiary)] mt-1">
@@ -57,7 +57,7 @@ export default function DatasetsPage() {
       {loadError && <p className="text-sm text-[var(--error)]">{loadError}</p>}
 
       {isLoading ? (
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       ) : datasets.length === 0 ? (
         <p className="text-sm text-[var(--text-tertiary)]">
           Datasets collect extraction results over time — run an extraction and choose Save to dataset.
@@ -65,14 +65,14 @@ export default function DatasetsPage() {
       ) : (
         <div className="space-y-2">
           {datasets.map((d) => (
-            <div key={d.id} className="card-elevated rounded-xl p-4 flex items-start gap-4">
+            <div key={d.id} className="card-elevated p-4 flex items-start gap-4">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-[var(--text-primary)]">{d.name}</p>
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   {d.headers.map((header) => (
                     <span
                       key={header}
-                      className="data px-2 py-0.5 rounded-full bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]"
+                      className="data px-2 py-0.5 rounded bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]"
                     >
                       {header}
                     </span>
@@ -88,7 +88,7 @@ export default function DatasetsPage() {
                   href={`/dashboard/datasets/${d.id}`}
                   aria-label={`View ${d.name}`}
                   title="View"
-                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                  className="hit-44 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                 >
                   <Eye className="w-4 h-4" />
                 </Link>
@@ -96,7 +96,7 @@ export default function DatasetsPage() {
                   href={`/api/datasets/${d.id}/csv`}
                   aria-label={`Download ${d.name} as CSV`}
                   title="Download CSV"
-                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                  className="hit-44 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                 >
                   <Download className="w-4 h-4" />
                 </a>
@@ -104,13 +104,13 @@ export default function DatasetsPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleDelete(d.id)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -121,7 +121,7 @@ export default function DatasetsPage() {
                       setDeleteError(null);
                       setConfirmDeleteId(d.id);
                     }}
-                    className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                    className="hit-44 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                     aria-label={`Delete ${d.name}`}
                   >
                     <Trash2 className="w-4 h-4" />

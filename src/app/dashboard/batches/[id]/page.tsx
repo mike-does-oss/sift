@@ -8,6 +8,7 @@ import { toCsv, jobsToRows, downloadText } from "@/lib/export";
 import { SaveToDatasetPanel } from "@/components";
 import { TemplateChip } from "@/components/dashboard/TemplateChip";
 import { snapshotFieldNames, snapshotSummary, snapshotTemplateName } from "@/lib/job-display";
+import { StatusLed } from "@/components/dashboard/StatusLed";
 
 interface Job {
   id: string;
@@ -32,25 +33,6 @@ interface Batch {
   /** `{ fields, prompt, extractMultiple }` at the time the batch was created — see `templates`/`jobs` in the schema comment. Loosely typed here since only `fields[].name` is used (see `fieldKeysFromSnapshot`). */
   templateSnapshot: unknown;
   outputDir: string | null;
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
-  processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
-  completed: "bg-[var(--success-subtle)] text-[var(--success)]",
-  failed: "bg-[var(--error-subtle)] text-[var(--error)]",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-        STATUS_STYLES[status] ?? STATUS_STYLES.pending
-      }`}
-    >
-      {status}
-    </span>
-  );
 }
 
 export default function BatchDetailPage() {
@@ -109,7 +91,7 @@ export default function BatchDetailPage() {
   if (isLoading) {
     return (
       <div className="p-8">
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       </div>
     );
   }
@@ -118,7 +100,10 @@ export default function BatchDetailPage() {
     return (
       <div className="p-8 max-w-3xl mx-auto">
         <p className="text-sm text-[var(--text-tertiary)]">Batch not found.</p>
-        <Link href="/dashboard/runs?tab=batches" className="text-sm text-[var(--accent)] font-medium">
+        <Link
+          href="/dashboard/runs?tab=batches"
+          className="text-sm text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+        >
           Back to batches
         </Link>
       </div>
@@ -132,10 +117,13 @@ export default function BatchDetailPage() {
           {loadError ?? "Couldn't load this batch."}
         </p>
         <div className="flex items-center gap-4">
-          <button onClick={load} className="px-3 py-2 rounded-lg btn-primary text-xs">
+          <button onClick={load} className="px-3 py-2 btn-primary text-xs">
             Retry
           </button>
-          <Link href="/dashboard/runs?tab=batches" className="text-sm text-[var(--accent)] font-medium">
+          <Link
+            href="/dashboard/runs?tab=batches"
+            className="text-sm text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+          >
             Back to batches
           </Link>
         </div>
@@ -201,14 +189,14 @@ export default function BatchDetailPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleDownloadCsv}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
               CSV
             </button>
             <button
               onClick={handleDownloadJson}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
               JSON
@@ -217,9 +205,9 @@ export default function BatchDetailPage() {
               <button
                 onClick={() => setShowSavePanel((prev) => !prev)}
                 aria-expanded={showSavePanel}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded border text-xs font-medium transition-colors ${
                   showSavePanel
-                    ? "border-[var(--accent-muted)] text-[var(--accent)] bg-[var(--accent-subtle)]"
+                    ? "border-[var(--hairline-strong)] text-[var(--text-primary)] bg-[var(--surface-overlay)]"
                     : "border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)]"
                 }`}
               >
@@ -232,21 +220,21 @@ export default function BatchDetailPage() {
       </div>
 
       {showSavePanel && fieldKeys.length > 0 && (
-        <div className="card-elevated rounded-xl p-4">
+        <div className="card-elevated p-4">
           <SaveToDatasetPanel fieldKeys={fieldKeys} rows={datasetRows} />
         </div>
       )}
 
-      <div className="h-1.5 w-full rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+      <div className="h-1.5 w-full rounded-[2px] bg-[var(--well)] border border-[var(--hairline)] overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-300 ${
-            batch.failedCount > 0 ? "bg-[var(--error)]" : "bg-[var(--accent)]"
+          className={`h-full transition-all duration-300 ${
+            batch.failedCount > 0 ? "bg-[var(--warn)]" : "bg-[var(--phosphor)]"
           }`}
           style={{ width: `${pct}%` }}
         />
       </div>
 
-      <div className="card-elevated rounded-xl divide-y divide-[var(--border-subtle)] overflow-hidden">
+      <div className="card-elevated divide-y divide-[var(--border-subtle)] overflow-hidden">
         {jobs.map(({ job, filename }) => (
           <div key={job.id} className="flex items-start gap-3 px-4 py-3">
             <div className="flex-1 min-w-0">
@@ -260,7 +248,7 @@ export default function BatchDetailPage() {
                 </p>
               )}
             </div>
-            <StatusBadge status={job.status} />
+            <StatusLed status={job.status} />
           </div>
         ))}
       </div>

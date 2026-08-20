@@ -111,7 +111,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
   if (!file) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8">
-        <div className="w-20 h-20 rounded-2xl bg-[var(--surface-elevated)] flex items-center justify-center mb-6 border border-[var(--border-subtle)]">
+        <div className="w-20 h-20 rounded-md bg-[var(--surface-elevated)] flex items-center justify-center mb-6 border border-[var(--border-subtle)]">
           <FileText className="w-10 h-10 text-[var(--text-tertiary)]" strokeWidth={1.5} />
         </div>
         <h3 className="font-display text-lg text-[var(--text-secondary)] mb-2">
@@ -136,7 +136,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8">
-        <div className="w-16 h-16 rounded-2xl bg-[var(--error)]/10 flex items-center justify-center mb-4">
+        <div className="w-16 h-16 rounded-md bg-[var(--error)]/10 flex items-center justify-center mb-4">
           <FileText className="w-8 h-8 text-[var(--error)]" />
         </div>
         <p className="text-sm text-[var(--error)]">{error}</p>
@@ -152,7 +152,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
           <button
             onClick={zoomOut}
             disabled={scale <= 0.5}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="p-2 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             aria-label="Zoom out"
           >
             <ZoomOut className="w-4 h-4" />
@@ -163,7 +163,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
           <button
             onClick={zoomIn}
             disabled={scale >= 3}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="p-2 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             aria-label="Zoom in"
           >
             <ZoomIn className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
           <button
             onClick={goToPrevPage}
             disabled={currentPage <= 1}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="p-2 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             aria-label="Previous page"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -187,7 +187,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
           <button
             onClick={goToNextPage}
             disabled={currentPage >= totalPages}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="p-2 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             aria-label="Next page"
           >
             <ChevronRight className="w-4 h-4" />
@@ -211,7 +211,7 @@ export function PDFPreview({ file }: PDFPreviewProps) {
           >
             <canvas
               ref={canvasRef}
-              className="shadow-2xl rounded-sm bg-white"
+              className="sheet-rim rounded-[2px] bg-white"
               style={{
                 maxWidth: "100%",
                 height: "auto",

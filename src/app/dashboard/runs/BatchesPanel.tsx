@@ -7,6 +7,7 @@ import { UploadCloud, X, FileText } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
 import { OutputSettingsFields, type OutputSettingsValue } from "@/components";
 import { LockedFeature } from "@/components/dashboard/LockedFeature";
+import { StatusLed } from "@/components/dashboard/StatusLed";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
 import type { TemplateExample } from "@/types";
@@ -28,25 +29,6 @@ interface Batch {
   failedCount: number;
   createdAt: string;
   outputDir: string | null;
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
-  processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
-  completed: "bg-[var(--success-subtle)] text-[var(--success)]",
-  failed: "bg-[var(--error-subtle)] text-[var(--error)]",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-        STATUS_STYLES[status] ?? STATUS_STYLES.pending
-      }`}
-    >
-      {status}
-    </span>
-  );
 }
 
 function batchStatus(b: Batch): "processing" | "completed" | "failed" {
@@ -112,7 +94,7 @@ export function BatchesPanel() {
   }, [load]);
 
   if (isLoading) {
-    return <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />;
+    return <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />;
   }
 
   const selectedTemplate = templates.find((t) => t.id === templateId) ?? null;
@@ -200,12 +182,10 @@ export function BatchesPanel() {
           requiredPlan={PLANS.pro.name}
         />
       ) : (
-      <section className="card-elevated rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          New batch
-        </h2>
+      <section className="card-elevated p-5 space-y-4">
+        <h2 className="etched-label etched-label--rule">New batch</h2>
 
-        <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--border-default)] rounded-xl cursor-pointer hover:border-[var(--accent-muted)] hover:bg-[var(--surface-elevated)] transition-all">
+        <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--hairline-strong)] bg-[var(--well)] rounded-md cursor-pointer hover:border-[var(--ink-faint)] transition-colors">
           <input
             type="file"
             accept={UPLOAD_ACCEPT_ATTR}
@@ -225,13 +205,13 @@ export function BatchesPanel() {
             {files.map((file, index) => (
               <li
                 key={`${file.name}-${index}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--surface-inset)] text-sm"
+                className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--surface-inset)] text-sm"
               >
                 <FileText className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" />
                 <span className="flex-1 truncate text-[var(--text-primary)]">{file.name}</span>
                 <button
                   onClick={() => removeFile(index)}
-                  className="p-1 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors"
+                  className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors"
                   aria-label={`Remove ${file.name}`}
                 >
                   <X className="w-3.5 h-3.5" />
@@ -247,12 +227,12 @@ export function BatchesPanel() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Batch name"
-            className="px-3 py-2 rounded-lg input-base text-sm"
+            className="px-3 py-2 input-base text-sm"
           />
           <select
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
-            className="px-3 py-2 rounded-lg input-base text-sm"
+            className="px-3 py-2 input-base text-sm"
             aria-label="Template"
           >
             <option value="">Select a template…</option>
@@ -267,7 +247,10 @@ export function BatchesPanel() {
         {templates.length === 0 && (
           <p className="text-xs text-[var(--text-tertiary)]">
             No templates yet.{" "}
-            <Link href="/dashboard/templates" className="text-[var(--accent)] font-medium">
+            <Link
+              href="/dashboard/templates"
+              className="font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+            >
               Create one
             </Link>{" "}
             to run a batch.
@@ -281,7 +264,10 @@ export function BatchesPanel() {
             Your {PLANS[plan].name} plan allows up to {batchLimit} files per batch — you&apos;ve
             selected {files.length}. Remove {files.length - batchLimit} file
             {files.length - batchLimit === 1 ? "" : "s"} or upgrade in{" "}
-            <Link href="/dashboard/settings" className="text-[var(--accent)] font-medium">
+            <Link
+              href="/dashboard/settings"
+              className="font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+            >
               Settings
             </Link>
             .
@@ -293,7 +279,7 @@ export function BatchesPanel() {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="w-full py-3 px-6 rounded-xl btn-primary text-sm disabled:opacity-50"
+          className="w-full py-3 px-6 btn-primary text-sm disabled:opacity-50"
         >
           {isSubmitting
             ? progress || "Working…"
@@ -303,9 +289,7 @@ export function BatchesPanel() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Past batches
-        </h2>
+        <h2 className="etched-label etched-label--rule">Past batches</h2>
         {batches.length === 0 ? (
           <p className="text-sm text-[var(--text-tertiary)]">No batches yet.</p>
         ) : (
@@ -314,7 +298,7 @@ export function BatchesPanel() {
               <Link
                 key={b.id}
                 href={`/dashboard/batches/${b.id}`}
-                className="card-elevated rounded-xl p-4 flex items-center justify-between hover:border-[var(--accent-muted)] transition-colors"
+                className="card-elevated p-4 flex items-center justify-between hover:border-[var(--hairline-strong)] transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium text-[var(--text-primary)]">{b.name}</p>
@@ -322,7 +306,7 @@ export function BatchesPanel() {
                     {b.completedCount + b.failedCount} / {b.totalCount} processed
                   </p>
                 </div>
-                <StatusBadge status={batchStatus(b)} />
+                <StatusLed status={batchStatus(b)} />
               </Link>
             ))}
           </div>

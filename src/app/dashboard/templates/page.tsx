@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileJson, Plus, Pencil, Trash2, Table2, Sparkles, Check, Braces, X } from "lucide-react";
 import { FieldConfiguration } from "@/components";
+import { InstrumentSwitch } from "@/components/InstrumentSwitch";
 import type { ExtractionField, TemplateExample } from "@/types";
 import { PRESET_TEMPLATES } from "@/lib/presets";
 
@@ -244,7 +245,7 @@ export default function TemplatesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-3">
-            <FileJson className="w-6 h-6 text-[var(--accent)]" />
+            <FileJson className="w-6 h-6 text-[var(--ink-dim)]" />
             Templates
           </h1>
           <p className="text-sm text-[var(--text-tertiary)] mt-1">
@@ -254,7 +255,7 @@ export default function TemplatesPage() {
         {activeTab === "yours" && !isEditingForm && (
           <button
             onClick={startCreate}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg btn-primary text-sm"
+            className="flex items-center gap-2 px-3 py-2 btn-primary text-sm"
           >
             <Plus className="w-4 h-4" />
             New template
@@ -267,15 +268,15 @@ export default function TemplatesPage() {
           and boxes") and saved templates were mixed into one list; splitting
           "add from an example" from "manage what I've saved" into tabs makes
           the two actions legible on their own. */}
-      <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-sm font-medium w-fit">
+      <div className="flex items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-sm font-medium w-fit">
         <button
           type="button"
           onClick={() => setActiveTab("yours")}
           aria-pressed={activeTab === "yours"}
-          className={`px-3.5 py-1.5 rounded-md transition-colors ${
+          className={`px-3.5 py-1.5 rounded-[3px] transition-colors ${
             activeTab === "yours"
-              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+              ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+              : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
           }`}
         >
           Your templates
@@ -284,10 +285,10 @@ export default function TemplatesPage() {
           type="button"
           onClick={() => setActiveTab("examples")}
           aria-pressed={activeTab === "examples"}
-          className={`px-3.5 py-1.5 rounded-md transition-colors ${
+          className={`px-3.5 py-1.5 rounded-[3px] transition-colors ${
             activeTab === "examples"
-              ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-              : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+              ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+              : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
           }`}
         >
           Examples
@@ -295,17 +296,15 @@ export default function TemplatesPage() {
       </div>
 
       {activeTab === "yours" && isEditingForm && (
-        <section className="card-elevated rounded-xl p-5 space-y-5">
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            {editingId === "new" ? "New template" : "Edit template"}
-          </h2>
+        <section className="card-elevated p-5 space-y-5">
+<h2 className="etched-label etched-label--rule">{editingId === "new" ? "New template" : "Edit template"}</h2>
 
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Template name"
-            className="w-full px-3 py-2 rounded-lg input-base text-sm"
+            className="w-full px-3 py-2 input-base text-sm"
           />
 
           <FieldConfiguration
@@ -317,7 +316,7 @@ export default function TemplatesPage() {
 
           <label className="flex items-center justify-between cursor-pointer pt-2 border-t border-[var(--border-subtle)]">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)]">
+              <div className="w-8 h-8 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)]">
                 <Table2 className="w-4 h-4 text-[var(--text-tertiary)]" />
               </div>
               <div>
@@ -329,29 +328,13 @@ export default function TemplatesPage() {
                 </p>
               </div>
             </div>
-            <div
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                extractMultiple ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
-              }`}
-            >
-              <div
-                className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-                  extractMultiple ? "left-6" : "left-1"
-                }`}
-              />
-              <input
-                type="checkbox"
-                checked={extractMultiple}
-                onChange={(e) => setExtractMultiple(e.target.checked)}
-                className="sr-only"
-              />
-            </div>
+            <InstrumentSwitch checked={extractMultiple} onChange={setExtractMultiple} />
           </label>
 
           <div className="pt-2 border-t border-[var(--border-subtle)] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)]">
+                <div className="w-8 h-8 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)]">
                   <Braces className="w-4 h-4 text-[var(--text-tertiary)]" />
                 </div>
                 <div>
@@ -367,7 +350,7 @@ export default function TemplatesPage() {
             </div>
 
             {exampleDrafts.map((draft, i) => (
-              <div key={i} className="rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] p-2 space-y-1.5">
+              <div key={i} className="rounded bg-[var(--surface-inset)] border border-[var(--border-subtle)] p-2 space-y-1.5">
                 <div className="flex items-start gap-2">
                   <textarea
                     value={draft.text}
@@ -376,7 +359,7 @@ export default function TemplatesPage() {
                     placeholder='{"vendor": "ACME PTY LTD"}'
                     rows={2}
                     spellCheck={false}
-                    className={`flex-1 px-2.5 py-1.5 rounded-md bg-[var(--surface-elevated)] border text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:ring-0 focus:outline-none transition-all resize-y ${
+                    className={`flex-1 px-2.5 py-1.5 rounded bg-[var(--surface-elevated)] border text-xs font-mono text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:ring-0 focus:outline-none transition-all resize-y ${
                       draft.error ? "border-[var(--error)]" : "border-transparent focus:border-[var(--accent-muted)]"
                     }`}
                     aria-label={`Example ${i + 1} output JSON`}
@@ -384,7 +367,7 @@ export default function TemplatesPage() {
                   />
                   <button
                     onClick={() => removeExampleDraft(i)}
-                    className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all flex-shrink-0"
+                    className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all flex-shrink-0"
                     aria-label={`Remove example ${i + 1}`}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -397,7 +380,7 @@ export default function TemplatesPage() {
             {exampleDrafts.length < MAX_EXAMPLES && (
               <button
                 onClick={addExampleDraft}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--accent-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all"
+                className="flex items-center gap-2 px-3 py-2 rounded border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--hairline-strong)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-all"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add example
@@ -411,13 +394,13 @@ export default function TemplatesPage() {
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="px-4 py-2 rounded-lg btn-primary text-sm disabled:opacity-50"
+              className="px-4 py-2 btn-primary text-sm disabled:opacity-50"
             >
               {isSaving ? "Saving…" : "Save template"}
             </button>
             <button
               onClick={cancelEdit}
-              className="px-4 py-2 rounded-lg text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+              className="px-4 py-2 rounded text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
             >
               Cancel
             </button>
@@ -428,21 +411,19 @@ export default function TemplatesPage() {
       {activeTab === "examples" && (
       <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Start from an example
-          </h2>
+<h2 className="etched-label etched-label--rule">Start from an example</h2>
           <p className="text-xs text-[var(--text-tertiary)] mt-1">
             Curated templates for common document formats — add one to customize it.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {PRESET_TEMPLATES.map((preset) => (
-            <div key={preset.key} className="card-elevated rounded-xl p-4 flex flex-col gap-3">
+            <div key={preset.key} className="card-elevated p-4 flex flex-col gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-[var(--text-primary)]">{preset.name}</p>
                   {preset.extractMultiple && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-[10px] font-medium uppercase tracking-wide">
+                    <span className="px-1.5 py-0.5 rounded border border-[var(--hairline)] bg-[var(--surface-inset)] text-[var(--text-tertiary)] text-[10px] font-medium uppercase tracking-wide">
                       Multi-row
                     </span>
                   )}
@@ -454,13 +435,13 @@ export default function TemplatesPage() {
                 {preset.fields.slice(0, 4).map((f) => (
                   <span
                     key={f.id}
-                    className="px-2 py-0.5 rounded-full bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]"
+                    className="data px-2 py-0.5 rounded bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]"
                   >
                     {f.name}
                   </span>
                 ))}
                 {preset.fields.length > 4 && (
-                  <span className="px-2 py-0.5 rounded-full bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]">
+                  <span className="data px-2 py-0.5 rounded bg-[var(--surface-overlay)] text-[var(--text-tertiary)] text-[11px]">
                     +{preset.fields.length - 4} more
                   </span>
                 )}
@@ -473,7 +454,7 @@ export default function TemplatesPage() {
                 <button
                   onClick={() => handleAddPreset(preset)}
                   disabled={addingPresetKey === preset.key}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--accent-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--hairline-strong)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-all disabled:opacity-50"
                 >
                   {addedPresetKey === preset.key ? (
                     <>
@@ -498,14 +479,14 @@ export default function TemplatesPage() {
       <section className="space-y-2">
         {deleteError && <p className="text-sm text-[var(--error)]">{deleteError}</p>}
         {isLoading ? (
-          <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+          <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
         ) : templates.length === 0 && !isEditingForm ? (
           <p className="text-sm text-[var(--text-tertiary)]">
             No templates yet.{" "}
             <button
               type="button"
               onClick={() => setActiveTab("examples")}
-              className="text-[var(--accent)] font-medium hover:underline"
+              className="text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
             >
               Browse examples
             </button>{" "}
@@ -517,7 +498,7 @@ export default function TemplatesPage() {
             .map((t) => (
               <div
                 key={t.id}
-                className={`card-elevated rounded-xl p-4 flex items-center gap-4${
+                className={`card-elevated p-4 flex items-center gap-4${
                   t.id === flashId ? " row-flash" : ""
                 }`}
               >
@@ -530,7 +511,7 @@ export default function TemplatesPage() {
                 </div>
                 <button
                   onClick={() => startEdit(t)}
-                  className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
+                  className="hit-44 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
                   aria-label={`Edit ${t.name}`}
                 >
                   <Pencil className="w-4 h-4" />
@@ -539,13 +520,13 @@ export default function TemplatesPage() {
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => handleDelete(t.id)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -556,7 +537,7 @@ export default function TemplatesPage() {
                       setDeleteError(null);
                       setConfirmDeleteId(t.id);
                     }}
-                    className="hit-44 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
+                    className="hit-44 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
                     aria-label={`Delete ${t.name}`}
                   >
                     <Trash2 className="w-4 h-4" />

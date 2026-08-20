@@ -11,6 +11,7 @@ import {
   type DatasetOption,
 } from "@/components";
 import { LockedFeature } from "@/components/dashboard/LockedFeature";
+import { InstrumentSwitch } from "@/components/InstrumentSwitch";
 import { TemplateChip } from "@/components/dashboard/TemplateChip";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
@@ -107,7 +108,7 @@ export function SchedulesPanel() {
   }, [load]);
 
   if (isLoading) {
-    return <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />;
+    return <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />;
   }
 
   const canSubmit = name.trim() && templateId && !isSubmitting;
@@ -195,10 +196,8 @@ export function SchedulesPanel() {
           requiredPlan={PLANS.business.name}
         />
       ) : (
-      <section className="card-elevated rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          New schedule
-        </h2>
+      <section className="card-elevated p-5 space-y-4">
+        <h2 className="etched-label etched-label--rule">New schedule</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input
@@ -206,12 +205,12 @@ export function SchedulesPanel() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Schedule name"
-            className="px-3 py-2 rounded-lg input-base text-sm"
+            className="px-3 py-2 input-base text-sm"
           />
           <select
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
-            className="px-3 py-2 rounded-lg input-base text-sm"
+            className="px-3 py-2 input-base text-sm"
             aria-label="Template"
           >
             <option value="">Select a template…</option>
@@ -226,7 +225,10 @@ export function SchedulesPanel() {
         {templates.length === 0 && (
           <p className="text-xs text-[var(--text-tertiary)]">
             No templates yet.{" "}
-            <Link href="/dashboard/templates" className="text-[var(--accent)] font-medium">
+            <Link
+              href="/dashboard/templates"
+              className="font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+            >
               Create one
             </Link>{" "}
             to schedule a run.
@@ -256,7 +258,7 @@ export function SchedulesPanel() {
           <select
             value={hourUtc}
             onChange={(e) => setHourUtc(Number(e.target.value))}
-            className="px-3 py-2 rounded-lg input-base text-sm"
+            className="px-3 py-2 input-base text-sm"
             aria-label="Hour (UTC)"
           >
             {Array.from({ length: 24 }, (_, h) => (
@@ -269,7 +271,7 @@ export function SchedulesPanel() {
             <select
               value={dayOfWeek}
               onChange={(e) => setDayOfWeek(Number(e.target.value))}
-              className="px-3 py-2 rounded-lg input-base text-sm"
+              className="px-3 py-2 input-base text-sm"
               aria-label="Day of week"
             >
               {DAYS.map((d, i) => (
@@ -289,7 +291,7 @@ export function SchedulesPanel() {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="w-full py-3 px-6 rounded-xl btn-primary text-sm disabled:opacity-50"
+          className="w-full py-3 px-6 btn-primary text-sm disabled:opacity-50"
         >
           {isSubmitting ? "Creating…" : "Create schedule"}
         </button>
@@ -297,15 +299,13 @@ export function SchedulesPanel() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Your schedules
-        </h2>
+        <h2 className="etched-label etched-label--rule">Your schedules</h2>
         {schedules.length === 0 ? (
           <p className="text-sm text-[var(--text-tertiary)]">No schedules yet.</p>
         ) : (
           <div className="space-y-2">
             {schedules.map((s) => (
-              <div key={s.id} className="card-elevated rounded-xl p-4 flex items-center gap-4">
+              <div key={s.id} className="card-elevated p-4 flex items-center gap-4">
                 <Link href={`/dashboard/schedules/${s.id}`} className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 min-w-0">
                     <span className="truncate">{s.name}</span>
@@ -322,33 +322,23 @@ export function SchedulesPanel() {
                   </p>
                 </Link>
 
-                <button
-                  onClick={() => toggleActive(s)}
-                  role="switch"
-                  aria-checked={s.active}
-                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                    s.active ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
-                  }`}
-                  aria-label={s.active ? "Deactivate schedule" : "Activate schedule"}
-                >
-                  <div
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-                      s.active ? "left-6" : "left-1"
-                    }`}
-                  />
-                </button>
+                <InstrumentSwitch
+                  checked={s.active}
+                  onChange={() => toggleActive(s)}
+                  ariaLabel={s.active ? "Deactivate schedule" : "Activate schedule"}
+                />
 
                 {confirmDeleteId === s.id ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => handleDelete(s.id)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => setConfirmDeleteId(null)}
-                      className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      className="px-2 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -356,7 +346,7 @@ export function SchedulesPanel() {
                 ) : (
                   <button
                     onClick={() => setConfirmDeleteId(s.id)}
-                    className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
+                    className="p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors flex-shrink-0"
                     aria-label={`Delete ${s.name}`}
                   >
                     <Trash2 className="w-4 h-4" />

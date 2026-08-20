@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Sparkles, Table2, FolderOpen, Save, Loader2, Anchor } from "lucide-react";
+import { Sparkles, Table2, Save, Loader2, Anchor } from "lucide-react";
+import { InstrumentSwitch } from "@/components/InstrumentSwitch";
 import {
   FieldConfiguration,
   ResultsDisplay,
@@ -599,7 +600,7 @@ export default function ExtractPage() {
         {hosted ? (
           // No picker on hosted: the model is a plan decision, shown as info.
           <div
-            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-[var(--hairline)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--ink-dim)]"
             title={hostedModel ? `Claude · ${hostedModel}` : "Claude"}
           >
             <span aria-hidden="true" className="not-italic">
@@ -613,7 +614,7 @@ export default function ExtractPage() {
           <select
             value={providerKey}
             onChange={(e) => setProviderKey(e.target.value)}
-            className="px-3 py-2 rounded-lg input-base text-sm min-w-[220px]"
+            className="px-3 py-2 input-base text-sm min-w-[220px]"
             aria-label="Extraction provider and model"
           >
             {!providersLoaded && <option value="">Loading providers…</option>}
@@ -658,15 +659,15 @@ export default function ExtractPage() {
             <button
               onClick={handlePullOllamaModel}
               disabled={pullState.status === "pulling"}
-              className="px-2.5 py-1 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+              className="px-2.5 py-1 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
             >
               {pullState.status === "pulling" ? "Downloading…" : "Download"}
             </button>
             {pullState.status === "pulling" && (
               <>
-                <div className="w-24 h-1 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+                <div className="w-24 h-1 rounded-[2px] bg-[var(--well)] border border-[var(--hairline)] overflow-hidden">
                   <div
-                    className={`h-full bg-[var(--accent)] transition-all ${
+                    className={`h-full bg-[var(--phosphor)] transition-all ${
                       pullState.percent === null ? "w-1/3 animate-pulse" : ""
                     }`}
                     style={pullState.percent !== null ? { width: `${pullState.percent}%` } : undefined}
@@ -681,7 +682,7 @@ export default function ExtractPage() {
             {pullState.status === "error" && <span className="text-xs text-[var(--error)]">{pullState.error}</span>}
             <Link
               href="/dashboard/settings"
-              className="text-xs text-[var(--accent)] hover:underline flex-shrink-0"
+              className="text-xs text-[var(--text-secondary)] underline underline-offset-2 hover:text-[var(--text-primary)] flex-shrink-0"
             >
               More options in Settings
             </Link>
@@ -690,7 +691,7 @@ export default function ExtractPage() {
 
         {privacyBadge && (
           <div
-            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--accent-tint)] text-xs font-medium text-[var(--accent)]"
+            className="data flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-[var(--hairline)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--ink-dim)]"
             title={privacyBadge.text}
           >
             <span aria-hidden="true" className="not-italic">
@@ -702,12 +703,12 @@ export default function ExtractPage() {
 
         <div className="flex-1" />
 
-        <motion.button
-          whileHover={canExtract && !isLoading ? { scale: 1.02 } : {}}
-          whileTap={canExtract && !isLoading ? { scale: 0.98 } : {}}
+        {/* The ONE phosphor plate on this view (law 1) — flat machined
+            plate, no scale bounce (instrument damping). */}
+        <button
           onClick={handleExtract}
           disabled={!canExtract || isLoading}
-          className="px-5 py-2.5 rounded-lg btn-primary text-sm flex items-center gap-2 flex-shrink-0"
+          className="px-5 py-2.5 btn-primary text-sm flex items-center gap-2 flex-shrink-0"
         >
           {isLoading ? (
             <>
@@ -720,7 +721,7 @@ export default function ExtractPage() {
               <span>Run extraction</span>
             </>
           )}
-        </motion.button>
+        </button>
       </div>
 
       {/* Two-pane workspace: document left, fields + results right */}
@@ -749,21 +750,20 @@ export default function ExtractPage() {
           </div>
         </div>
 
+        {/* Calibration ticks on the workspace gutter — the ONE tick-ruled
+            element on this view (DESIGN.md ornament budget). */}
+        <div className="hidden lg:block tick-rule-v flex-shrink-0 self-stretch" aria-hidden />
+
         <div className={`${leftPaneCollapsed ? "lg:flex-1" : "lg:w-1/2"} lg:h-full lg:overflow-y-auto`}>
           <div className="p-6 space-y-6">
             {/* Templates */}
             <section>
-              <div className="flex items-center gap-3 mb-4">
-                <FolderOpen className="w-4 h-4 text-[var(--text-tertiary)]" />
-                <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                  Templates
-                </h2>
-              </div>
-              <div className="card-elevated rounded-xl p-4 flex flex-wrap items-center gap-3">
+              <h2 className="etched-label etched-label--rule mb-4">Templates</h2>
+              <div className="card-elevated p-4 flex flex-wrap items-center gap-3">
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => handleLoadTemplate(e.target.value)}
-                  className="flex-1 min-w-[160px] px-3 py-2 rounded-lg input-base text-sm"
+                  className="flex-1 min-w-[160px] px-3 py-2 input-base text-sm"
                   aria-label="Load a template"
                 >
                   <option value="">Load a template…</option>
@@ -800,12 +800,12 @@ export default function ExtractPage() {
                         }
                       }}
                       placeholder="Template name"
-                      className="w-40 px-3 py-2 rounded-lg input-base text-sm"
+                      className="w-40 px-3 py-2 input-base text-sm"
                     />
                     <button
                       onClick={handleSaveTemplate}
                       disabled={!templateName.trim() || saveStatus === "saving"}
-                      className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+                      className="px-3 py-2 rounded border border-[var(--hairline-strong)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
                     >
                       {saveStatus === "saving" ? "Saving…" : "Save"}
                     </button>
@@ -814,7 +814,7 @@ export default function ExtractPage() {
                         setIsNamingTemplate(false);
                         setTemplateName("");
                       }}
-                      className="px-2 py-2 rounded-lg text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      className="px-2 py-2 rounded text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -822,7 +822,7 @@ export default function ExtractPage() {
                 ) : (
                   <button
                     onClick={() => setIsNamingTemplate(true)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--accent-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all"
+                    className="flex items-center gap-2 px-3 py-2 rounded border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] text-xs font-medium hover:border-[var(--hairline-strong)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-all"
                   >
                     <Save className="w-3.5 h-3.5" />
                     Save as template
@@ -835,19 +835,19 @@ export default function ExtractPage() {
                 {/* Same inline confirm the scaffold flow uses — loading a
                     template must not silently clobber edited fields. */}
                 {pendingTemplate && (
-                  <div className="basis-full flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-muted)]">
+                  <div className="basis-full flex items-center gap-2 px-3 py-2 rounded bg-[var(--panel-raised)] border border-[var(--hairline-strong)]">
                     <span className="text-xs text-[var(--text-secondary)] flex-1">
                       Replace current fields with &ldquo;{pendingTemplate.name}&rdquo;?
                     </span>
                     <button
                       onClick={() => applyTemplate(pendingTemplate)}
-                      className="px-2 py-1 rounded-md text-xs font-medium text-[var(--accent)] hover:bg-[var(--surface-elevated)] transition-colors"
+                      className="px-2 py-1 rounded border border-[var(--hairline-strong)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => setPendingTemplate(null)}
-                      className="px-2 py-1 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                      className="px-2 py-1 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -865,12 +865,12 @@ export default function ExtractPage() {
             {/* Field configuration */}
             <section>
               <div className="flex items-center gap-3 mb-4">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] text-xs font-semibold">
+                <span className="data flex items-center justify-center w-6 h-6 rounded bg-[var(--well)] border border-[var(--hairline)] text-[var(--ink-dim)] text-xs font-semibold">
                   1
                 </span>
                 <h2 className="font-display text-xl text-[var(--text-primary)]">Define Extraction</h2>
               </div>
-              <div className="card-elevated rounded-xl p-5">
+              <div className="card-elevated p-5">
                 <FieldConfiguration
                   fields={fields}
                   onFieldsChange={setFields}
@@ -890,39 +890,23 @@ export default function ExtractPage() {
                 <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
                   <label className="flex items-center justify-between cursor-pointer group">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] group-hover:border-[var(--accent-muted)] transition-colors">
-                        <Table2 className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
+                      <div className="w-8 h-8 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] group-hover:border-[var(--hairline-strong)] transition-colors">
+                        <Table2 className="w-4 h-4 text-[var(--text-tertiary)]" />
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">Extract multiple rows</p>
                         <p className="text-xs text-[var(--text-tertiary)]">For tables, lists, or repeated data</p>
                       </div>
                     </div>
-                    <div
-                      className={`relative w-11 h-6 rounded-full transition-colors ${
-                        extractMultiple ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-                          extractMultiple ? "left-6" : "left-1"
-                        }`}
-                      />
-                      <input
-                        type="checkbox"
-                        checked={extractMultiple}
-                        onChange={(e) => setExtractMultiple(e.target.checked)}
-                        className="sr-only"
-                      />
-                    </div>
+                    <InstrumentSwitch checked={extractMultiple} onChange={setExtractMultiple} />
                   </label>
                 </div>
 
                 <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]">
                   <label className="flex items-center justify-between cursor-pointer group">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] group-hover:border-[var(--accent-muted)] transition-colors">
-                        <Anchor className="w-4 h-4 text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
+                      <div className="w-8 h-8 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] group-hover:border-[var(--hairline-strong)] transition-colors">
+                        <Anchor className="w-4 h-4 text-[var(--text-tertiary)]" />
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">Grounded mode</p>
@@ -931,23 +915,7 @@ export default function ExtractPage() {
                         </p>
                       </div>
                     </div>
-                    <div
-                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                        groundedMode ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-                          groundedMode ? "left-6" : "left-1"
-                        }`}
-                      />
-                      <input
-                        type="checkbox"
-                        checked={groundedMode}
-                        onChange={(e) => handleToggleGrounded(e.target.checked)}
-                        className="sr-only"
-                      />
-                    </div>
+                    <InstrumentSwitch checked={groundedMode} onChange={handleToggleGrounded} />
                   </label>
                 </div>
               </div>
@@ -964,7 +932,7 @@ export default function ExtractPage() {
                   transition={{ duration: 0.3 }}
                 >
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[var(--success-subtle)] text-[var(--success)] text-xs font-semibold">
+                    <span className="data flex items-center justify-center w-6 h-6 rounded bg-[var(--well)] border border-[var(--hairline)] text-[var(--ink-dim)] text-xs font-semibold">
                       2
                     </span>
                     <h2 className="font-display text-xl text-[var(--text-primary)]">Results</h2>
@@ -1005,10 +973,8 @@ export default function ExtractPage() {
                 condition results itself uses (there's something to save). */}
             {results && !isLoading && !error && datasetRows.length > 0 && (
               <section>
-                <h2 className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                  Save to dataset
-                </h2>
-                <div className="card-elevated rounded-xl p-4">
+                <h2 className="etched-label mb-2">Save to dataset</h2>
+                <div className="card-elevated p-4">
                   <SaveToDatasetPanel fieldKeys={activeFields.map((f) => f.name)} rows={datasetRows} />
                 </div>
               </section>

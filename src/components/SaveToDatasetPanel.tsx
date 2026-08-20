@@ -130,7 +130,7 @@ export function SaveToDatasetPanel({ fieldKeys, rows, sourceJobId, className }: 
           }}
           disabled={isSaving}
           aria-label="Dataset"
-          className="px-2.5 py-1.5 rounded-md input-base text-xs disabled:opacity-50"
+          className="px-2.5 py-1.5 input-base text-xs disabled:opacity-50"
         >
           {matching.map((d) => (
             <option key={d.id} value={d.id}>
@@ -147,14 +147,17 @@ export function SaveToDatasetPanel({ fieldKeys, rows, sourceJobId, className }: 
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Dataset name"
             disabled={isSaving}
-            className="px-2.5 py-1.5 rounded-md input-base text-xs w-40 disabled:opacity-50"
+            className="px-2.5 py-1.5 input-base text-xs w-40 disabled:opacity-50"
           />
         )}
 
         <button
           onClick={handleSave}
           disabled={!canSave}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md btn-primary text-xs disabled:opacity-50"
+          // Machined secondary plate, NOT btn-primary: this panel renders on
+          // views (extract workspace, batch detail) that already carry their
+          // one phosphor plate — a second glowing button breaks law 1.
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--hairline-strong)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
         >
           {isSaving && <Loader2 className="w-3 h-3 animate-spin" />}
           {isSaving ? "Saving…" : "Save"}

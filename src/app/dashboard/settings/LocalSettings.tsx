@@ -72,9 +72,9 @@ function PullProgressBar({ state }: { state: PullState }) {
   if (state.status === "pulling") {
     return (
       <div className="space-y-1">
-        <div className="h-1.5 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+        <div className="h-1.5 rounded-[2px] bg-[var(--well)] border border-[var(--hairline)] overflow-hidden">
           <div
-            className={`h-full bg-[var(--accent)] transition-all ${
+            className={`h-full bg-[var(--phosphor)] transition-all ${
               state.percent === null ? "w-1/3 animate-pulse" : ""
             }`}
             style={state.percent !== null ? { width: `${state.percent}%` } : undefined}
@@ -113,7 +113,7 @@ function TestConnectionButton({
     <button
       onClick={onTest}
       disabled={state.status === "testing"}
-      className="px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
+      className="px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
     >
       {state.status === "testing" ? "Testing…" : label}
     </button>
@@ -407,7 +407,7 @@ export default function LocalSettingsPage() {
   if (isLoading) {
     return (
       <div className="p-8">
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       </div>
     );
   }
@@ -416,7 +416,7 @@ export default function LocalSettingsPage() {
     <div className="p-8 max-w-3xl mx-auto space-y-8">
       <div>
         <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-3">
-          <SettingsIcon className="w-6 h-6 text-[var(--accent)]" />
+          <SettingsIcon className="w-6 h-6 text-[var(--ink-dim)]" />
           Settings
         </h1>
         <p className="text-sm text-[var(--text-tertiary)] mt-1">
@@ -425,11 +425,9 @@ export default function LocalSettingsPage() {
       </div>
 
       {/* Provider selection */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Default Provider
-          </h2>
+          <h2 className="etched-label">Default Provider</h2>
           <p className="text-xs text-[var(--text-tertiary)] mt-1">
             Used for every extraction unless you pick another in the workspace.
           </p>
@@ -442,27 +440,27 @@ export default function LocalSettingsPage() {
               <button
                 key={p.value}
                 onClick={() => handleSelectProvider(p.value)}
-                className={`text-left rounded-xl border p-4 transition-all ${
+                className={`text-left rounded-md border p-4 transition-all ${
                   isSelected
-                    ? "border-[var(--accent-muted)] bg-[var(--accent-subtle)]"
+                    ? "border-[var(--phosphor-dim)] bg-[var(--phosphor-well)]"
                     : "border-[var(--border-subtle)] hover:border-[var(--border-default)] hover:bg-[var(--surface-overlay)]"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <Icon
                     className={`w-4 h-4 ${
-                      isSelected ? "text-[var(--accent)]" : "text-[var(--text-tertiary)]"
+                      isSelected ? "text-[var(--phosphor)]" : "text-[var(--text-tertiary)]"
                     }`}
                   />
                   <span className="text-sm font-medium text-[var(--text-primary)]">
                     {p.label}
                   </span>
                   {isSelected && (
-                    // Same recipe as the "Recommended" badge (rounded-full, accent text,
-                    // 10px uppercase) — filled with --surface instead of --accent-subtle
-                    // so the chip still reads against a card whose own background is
-                    // already --accent-subtle once selected.
-                    <span className="px-1.5 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--accent-muted)] text-[10px] font-medium text-[var(--accent)] uppercase tracking-wide">
+                    // Same recipe as the "Recommended" badge (machined 4px chip,
+                    // 10px mono caps) — but phosphor-bordered: "Default" IS the
+                    // live selection, the one state phosphor is for. Filled with
+                    // --panel so the chip reads against the phosphor-well card.
+                    <span className="data px-1.5 py-0.5 rounded bg-[var(--panel)] border border-[var(--phosphor-dim)] text-[10px] font-medium text-[var(--phosphor)] uppercase tracking-wide">
                       Default
                     </span>
                   )}
@@ -475,14 +473,12 @@ export default function LocalSettingsPage() {
       </section>
 
       {/* Ollama */}
-      <section id="ollama" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
+      <section id="ollama" className="card-elevated p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <HardDrive className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Ollama (Local)
-          </h2>
+          <h2 className="etched-label">Ollama (Local)</h2>
         </div>
 
         {systemInfo && systemInfo.recommendations.length > 0 && (
@@ -501,19 +497,19 @@ export default function LocalSettingsPage() {
                 return (
                   <div
                     key={rec.model}
-                    className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] p-3"
+                    className="flex items-center gap-3 rounded border border-[var(--border-subtle)] p-3"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-sm text-[var(--text-primary)]">{rec.model}</span>
                         <span className="text-xs text-[var(--text-tertiary)]">{rec.downloadSize}</span>
                         {rec.vision && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-[var(--surface-overlay)] text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+                          <span className="data px-1.5 py-0.5 rounded bg-[var(--surface-overlay)] text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
                             Vision
                           </span>
                         )}
                         {rec.recommended && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[10px] font-medium text-[var(--accent)] uppercase tracking-wide">
+                          <span className="data px-1.5 py-0.5 rounded border border-[var(--hairline-strong)] bg-[var(--surface-overlay)] text-[10px] font-medium text-[var(--text-secondary)] uppercase tracking-wide">
                             Recommended
                           </span>
                         )}
@@ -525,14 +521,14 @@ export default function LocalSettingsPage() {
                     </div>
                     {isInstalled ? (
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)]">
-                          <Check className="w-3.5 h-3.5 text-[var(--accent)]" />
+                        <span className="flex items-center gap-1.5 px-2.5 py-2 rounded bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)]">
+                          <span className="led led-on" aria-hidden />
                           Installed
                         </span>
                         <button
                           onClick={() => setOllamaModel(rec.model)}
                           disabled={isSelected}
-                          className="px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
+                          className="px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
                         >
                           {isSelected ? "Selected" : "Use"}
                         </button>
@@ -541,7 +537,7 @@ export default function LocalSettingsPage() {
                       <button
                         onClick={() => handlePullModel(rec.model)}
                         disabled={pullState.status === "pulling"}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
                       >
                         <Download className="w-3.5 h-3.5" />
                         {isPullingThis ? "Downloading…" : "Download"}
@@ -564,7 +560,7 @@ export default function LocalSettingsPage() {
               value={ollamaBaseUrl}
               onChange={(e) => setOllamaBaseUrl(e.target.value)}
               placeholder="http://localhost:11434"
-              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="w-full px-3 py-2 input-base text-sm font-mono"
             />
           </div>
           <div>
@@ -577,12 +573,12 @@ export default function LocalSettingsPage() {
                 value={ollamaModel}
                 onChange={(e) => setOllamaModel(e.target.value)}
                 placeholder="gemma3:4b"
-                className="flex-1 min-w-0 px-3 py-2 rounded-lg input-base text-sm font-mono"
+                className="flex-1 min-w-0 px-3 py-2 input-base text-sm font-mono"
               />
               <button
                 onClick={() => handlePullModel()}
                 disabled={pullState.status === "pulling" || !ollamaModel.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
                 {pullState.status === "pulling" && pullState.model === ollamaModel.trim()
@@ -616,7 +612,7 @@ export default function LocalSettingsPage() {
               <button
                 key={m}
                 onClick={() => setOllamaModel(m)}
-                className="px-2.5 py-1 rounded-full bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--accent-subtle)] hover:text-[var(--accent)] transition-colors"
+                className="data px-2.5 py-1 rounded bg-[var(--surface-overlay)] text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--phosphor-well)] hover:text-[var(--text-primary)] transition-colors"
               >
                 {m}
               </button>
@@ -634,14 +630,12 @@ export default function LocalSettingsPage() {
       </section>
 
       {/* Anthropic */}
-      <section id="anthropic" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
+      <section id="anthropic" className="card-elevated p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <Sparkles className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Anthropic
-          </h2>
+          <h2 className="etched-label">Anthropic</h2>
         </div>
 
         <div>
@@ -653,7 +647,7 @@ export default function LocalSettingsPage() {
             value={anthropicModel}
             onChange={(e) => setAnthropicModel(e.target.value)}
             placeholder="claude-sonnet-5"
-            className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+            className="w-full px-3 py-2 input-base text-sm font-mono"
           />
         </div>
 
@@ -673,12 +667,12 @@ export default function LocalSettingsPage() {
                 anthropicRemoveKey ? "" : loaded?.anthropicApiKey || "sk-ant-..."
               }
               autoComplete="off"
-              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="flex-1 px-3 py-2 input-base text-sm font-mono"
             />
             {loaded?.anthropicApiKey && !anthropicRemoveKey && (
               <button
                 onClick={() => setAnthropicRemoveKey(true)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
               >
                 Remove key
               </button>
@@ -686,7 +680,7 @@ export default function LocalSettingsPage() {
             {anthropicRemoveKey && (
               <button
                 onClick={() => setAnthropicRemoveKey(false)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
               >
                 Cancel
               </button>
@@ -713,14 +707,12 @@ export default function LocalSettingsPage() {
       </section>
 
       {/* OpenAI */}
-      <section id="openai" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
+      <section id="openai" className="card-elevated p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <Cloud className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            OpenAI
-          </h2>
+          <h2 className="etched-label">OpenAI</h2>
         </div>
 
         <div>
@@ -732,7 +724,7 @@ export default function LocalSettingsPage() {
             value={openaiModel}
             onChange={(e) => setOpenaiModel(e.target.value)}
             placeholder="gpt-4o"
-            className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+            className="w-full px-3 py-2 input-base text-sm font-mono"
           />
         </div>
 
@@ -750,12 +742,12 @@ export default function LocalSettingsPage() {
               }}
               placeholder={openaiRemoveKey ? "" : loaded?.openaiApiKey || "sk-..."}
               autoComplete="off"
-              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="flex-1 px-3 py-2 input-base text-sm font-mono"
             />
             {loaded?.openaiApiKey && !openaiRemoveKey && (
               <button
                 onClick={() => setOpenaiRemoveKey(true)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
               >
                 Remove key
               </button>
@@ -763,7 +755,7 @@ export default function LocalSettingsPage() {
             {openaiRemoveKey && (
               <button
                 onClick={() => setOpenaiRemoveKey(false)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
               >
                 Cancel
               </button>
@@ -790,14 +782,12 @@ export default function LocalSettingsPage() {
       </section>
 
       {/* Gemini */}
-      <section id="gemini" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
+      <section id="gemini" className="card-elevated p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <Zap className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Gemini
-          </h2>
+          <h2 className="etched-label">Gemini</h2>
         </div>
 
         <div>
@@ -809,7 +799,7 @@ export default function LocalSettingsPage() {
             value={geminiModel}
             onChange={(e) => setGeminiModel(e.target.value)}
             placeholder="gemini-2.0-flash"
-            className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+            className="w-full px-3 py-2 input-base text-sm font-mono"
           />
         </div>
 
@@ -827,12 +817,12 @@ export default function LocalSettingsPage() {
               }}
               placeholder={geminiRemoveKey ? "" : loaded?.geminiApiKey || "AIza..."}
               autoComplete="off"
-              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="flex-1 px-3 py-2 input-base text-sm font-mono"
             />
             {loaded?.geminiApiKey && !geminiRemoveKey && (
               <button
                 onClick={() => setGeminiRemoveKey(true)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
               >
                 Remove key
               </button>
@@ -840,7 +830,7 @@ export default function LocalSettingsPage() {
             {geminiRemoveKey && (
               <button
                 onClick={() => setGeminiRemoveKey(false)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
               >
                 Cancel
               </button>
@@ -867,14 +857,12 @@ export default function LocalSettingsPage() {
       </section>
 
       {/* OpenAI-compatible */}
-      <section id="openai-compatible" className="card-elevated rounded-xl p-5 space-y-4 scroll-mt-6">
+      <section id="openai-compatible" className="card-elevated p-5 space-y-4 scroll-mt-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <Plug className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            OpenAI-compatible
-          </h2>
+          <h2 className="etched-label">OpenAI-compatible</h2>
         </div>
 
         <p className="text-xs text-[var(--text-tertiary)]">
@@ -893,7 +881,7 @@ export default function LocalSettingsPage() {
               value={compatBaseUrl}
               onChange={(e) => setCompatBaseUrl(e.target.value)}
               placeholder="http://localhost:11434/v1"
-              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="w-full px-3 py-2 input-base text-sm font-mono"
             />
           </div>
           <div>
@@ -905,7 +893,7 @@ export default function LocalSettingsPage() {
               value={compatModel}
               onChange={(e) => setCompatModel(e.target.value)}
               placeholder="gemma3:4b"
-              className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="w-full px-3 py-2 input-base text-sm font-mono"
             />
           </div>
         </div>
@@ -924,12 +912,12 @@ export default function LocalSettingsPage() {
               }}
               placeholder={compatRemoveKey ? "" : loaded?.compatApiKey || "leave blank if not required"}
               autoComplete="off"
-              className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+              className="flex-1 px-3 py-2 input-base text-sm font-mono"
             />
             {loaded?.compatApiKey && !compatRemoveKey && (
               <button
                 onClick={() => setCompatRemoveKey(true)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors flex-shrink-0"
               >
                 Remove key
               </button>
@@ -937,7 +925,7 @@ export default function LocalSettingsPage() {
             {compatRemoveKey && (
               <button
                 onClick={() => setCompatRemoveKey(false)}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0"
               >
                 Cancel
               </button>
@@ -969,14 +957,14 @@ export default function LocalSettingsPage() {
       <div
         className={`sticky bottom-0 -mx-1 flex items-center gap-3 px-1 py-3 ${
           hasChanges
-            ? "border-t border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] backdrop-blur-sm"
+            ? "border-t border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--panel)_92%,transparent)] backdrop-blur-sm"
             : ""
         }`}
       >
         <button
           onClick={handleSave}
           disabled={isSaving || !hasChanges}
-          className="px-4 py-2 rounded-lg btn-primary text-sm disabled:opacity-50"
+          className="px-4 py-2 btn-primary text-sm disabled:opacity-50"
         >
           {isSaving ? "Saving…" : "Save changes"}
         </button>

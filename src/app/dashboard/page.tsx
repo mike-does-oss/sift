@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, Layers, FileJson, Gauge, Lock, ArrowRight } from "lucide-react";
 import { UsageMeter } from "@/components/dashboard/UsageMeter";
+import { StatusLed } from "@/components/dashboard/StatusLed";
 import { useHosted } from "@/components/ProfileContext";
 import { PLANS, type Plan } from "@/lib/plans";
 import { isProviderId, type ProviderId } from "@/lib/api";
@@ -36,13 +37,6 @@ interface UsageInfo {
   limit: number;
   plan: Plan;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
-  processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
-  completed: "bg-[var(--success-subtle)] text-[var(--success)]",
-  failed: "bg-[var(--error-subtle)] text-[var(--error)]",
-};
 
 // Record<ProviderId, string> so adding a provider id without a label here is
 // a compile error, not silent drift (same convention as the history panel).
@@ -157,11 +151,11 @@ export default function OverviewPage() {
             <Link
               key={action.href}
               href={action.href}
-              className="card-elevated rounded-xl p-5 group hover:border-[var(--accent-muted)] transition-colors"
+              className="card-elevated p-5 group hover:border-[var(--hairline-strong)] transition-colors"
             >
               <div className="flex items-center justify-between mb-3">
-                <div className="w-9 h-9 rounded-lg bg-[var(--accent-subtle)] flex items-center justify-center">
-                  <Icon className="w-4 h-4 text-[var(--accent)]" strokeWidth={1.75} />
+                <div className="w-9 h-9 rounded bg-[var(--well)] border border-[var(--hairline)] flex items-center justify-center">
+                  <Icon className="w-4 h-4 text-[var(--ink-dim)]" strokeWidth={1.75} />
                 </div>
                 {action.locked && (
                   <span
@@ -185,15 +179,13 @@ export default function OverviewPage() {
 
       {/* Usage — hosted only; the local profile is unmetered. */}
       {usage && (
-        <section className="card-elevated rounded-xl p-5 space-y-4">
+        <section className="card-elevated p-5 space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
-                <Gauge className="w-4 h-4 text-[var(--text-tertiary)]" />
+              <div className="w-9 h-9 rounded bg-[var(--well)] border border-[var(--hairline)] flex items-center justify-center flex-shrink-0">
+                <Gauge className="w-4 h-4 text-[var(--ink-faint)]" />
               </div>
-              <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-                Usage
-              </h2>
+              <h2 className="etched-label">Usage</h2>
             </div>
             <span className="text-xs text-[var(--text-tertiary)]">
               {PLANS[usage.plan].name} plan
@@ -203,7 +195,10 @@ export default function OverviewPage() {
           {nearLimit && (
             <p className="text-xs text-[var(--text-secondary)]">
               You&apos;re close to this month&apos;s limit —{" "}
-              <Link href="/dashboard/settings" className="text-[var(--accent)] font-medium">
+              <Link
+                href="/dashboard/settings"
+                className="font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+              >
                 upgrade in Settings
               </Link>
               .
@@ -214,14 +209,12 @@ export default function OverviewPage() {
 
       {/* Recent activity */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Recent activity
-          </h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="etched-label etched-label--rule flex-1">Recent activity</h2>
           {jobs !== null && jobs.length > 0 && (
             <Link
               href="/dashboard/runs?tab=history"
-              className="text-xs text-[var(--accent)] font-medium hover:underline"
+              className="text-xs text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] hover:underline"
             >
               View all
             </Link>
@@ -229,23 +222,23 @@ export default function OverviewPage() {
         </div>
 
         {jobs === null ? (
-          <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+          <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
         ) : jobs.length === 0 ? (
-          <div className="card-elevated rounded-xl p-6 text-center space-y-2">
+          <div className="card-elevated p-6 text-center space-y-2">
             <p className="text-sm text-[var(--text-primary)]">No extractions yet.</p>
             <p className="text-xs text-[var(--text-tertiary)]">
               Upload a document and pull your first fields out of it.
             </p>
             <Link
               href="/dashboard/extract"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg btn-primary text-xs mt-1"
+              className="inline-flex items-center gap-2 px-4 py-2 btn-primary text-xs mt-1"
             >
               <Sparkles className="w-3.5 h-3.5" />
               Run your first extraction
             </Link>
           </div>
         ) : (
-          <div className="card-elevated rounded-xl overflow-hidden divide-y divide-[var(--border-subtle)]">
+          <div className="card-elevated overflow-hidden divide-y divide-[var(--border-subtle)]">
             {/* Each row opens the full history tab — these look like the
                 history panel's expandable rows, so they must go somewhere. */}
             {jobs.map(({ job, filename }) => (
@@ -254,13 +247,7 @@ export default function OverviewPage() {
                 href="/dashboard/runs?tab=history"
                 className="px-4 py-3 flex items-center gap-4 hover:bg-[var(--surface-overlay)]/30 transition-colors"
               >
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize flex-shrink-0 ${
-                    STATUS_STYLES[job.status] ?? STATUS_STYLES.pending
-                  }`}
-                >
-                  {job.status}
-                </span>
+                <StatusLed status={job.status} className="w-28 flex-shrink-0" />
                 <span className="data flex-1 min-w-0 text-sm text-[var(--text-primary)] truncate">
                   {jobIdentity(filename, job.sourceFilename, job.templateSnapshot)}
                 </span>

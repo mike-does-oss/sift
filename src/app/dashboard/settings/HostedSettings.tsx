@@ -184,7 +184,7 @@ export default function HostedSettingsPage({ email }: { email: string }) {
     <div className="p-8 max-w-3xl mx-auto space-y-8">
       <div>
         <h1 className="font-display text-2xl text-[var(--text-primary)] flex items-center gap-3">
-          <SettingsIcon className="w-6 h-6 text-[var(--accent)]" />
+          <SettingsIcon className="w-6 h-6 text-[var(--ink-dim)]" />
           Settings
         </h1>
         <p className="text-sm text-[var(--text-tertiary)] mt-1">
@@ -194,21 +194,21 @@ export default function HostedSettingsPage({ email }: { email: string }) {
 
       {checkoutNotice && (
         <div
-          className={`flex items-start justify-between gap-3 rounded-xl border p-4 text-sm ${
+          className={`flex items-start justify-between gap-3 rounded-md border p-4 text-sm ${
             checkoutNotice === "success"
-              ? "border-[var(--accent-muted)] bg-[var(--accent-subtle)] text-[var(--accent)]"
+              ? "border-[var(--phosphor-dim)] bg-[var(--phosphor-well)] text-[var(--text-primary)]"
               : "border-[var(--border-default)] bg-[var(--surface-overlay)] text-[var(--text-secondary)]"
           }`}
         >
           <span className="flex items-center gap-2">
-            {checkoutNotice === "success" ? <Check className="w-4 h-4 flex-shrink-0" /> : null}
+            {checkoutNotice === "success" ? <Check className="w-4 h-4 flex-shrink-0 text-[var(--phosphor)]" /> : null}
             {checkoutNotice === "success"
               ? "Payment complete — your new plan is active. It can take a few seconds to show up here."
               : "Checkout canceled — your plan is unchanged."}
           </span>
           <button
             onClick={() => setCheckoutNotice(null)}
-            className="flex-shrink-0 p-0.5 rounded-md hover:bg-[var(--surface-overlay)] transition-colors"
+            className="flex-shrink-0 p-0.5 rounded hover:bg-[var(--surface-overlay)] transition-colors"
             aria-label="Dismiss"
           >
             <X className="w-4 h-4" />
@@ -217,14 +217,12 @@ export default function HostedSettingsPage({ email }: { email: string }) {
       )}
 
       {/* Account */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <User className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Account
-          </h2>
+          <h2 className="etched-label">Account</h2>
         </div>
         <div>
           <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">Email</p>
@@ -233,21 +231,19 @@ export default function HostedSettingsPage({ email }: { email: string }) {
       </section>
 
       {/* Plan & usage */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             <Gauge className="w-4 h-4 text-[var(--text-tertiary)]" />
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Plan &amp; usage
-          </h2>
+          <h2 className="etched-label">Plan &amp; usage</h2>
         </div>
 
         {usageError && (
           <p className="text-sm text-[var(--error)]">Couldn&apos;t load your plan. Refresh to try again.</p>
         )}
         {!usage && !usageError && (
-          <div className="h-5 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+          <div className="h-5 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
         )}
 
         {usage && plan && (
@@ -264,7 +260,7 @@ export default function HostedSettingsPage({ email }: { email: string }) {
                 <button
                   onClick={() => goToStripe("/api/stripe/portal", null, "portal")}
                   disabled={billingBusy !== null}
-                  className="px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
+                  className="px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50"
                 >
                   {billingBusy === "portal" ? "Opening…" : "Manage billing"}
                 </button>
@@ -285,7 +281,7 @@ export default function HostedSettingsPage({ email }: { email: string }) {
                   return (
                     <div
                       key={p}
-                      className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] p-3"
+                      className="flex items-center gap-3 rounded border border-[var(--border-subtle)] p-3"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -299,7 +295,7 @@ export default function HostedSettingsPage({ email }: { email: string }) {
                       <button
                         onClick={() => goToStripe("/api/stripe/checkout", { plan: p }, p)}
                         disabled={billingBusy !== null}
-                        className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50 flex-shrink-0"
+                        className="px-3 py-2 rounded border border-[var(--hairline-strong)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-50 flex-shrink-0"
                       >
                         {billingBusy === p ? "Opening…" : `Upgrade to ${cfg.name}`}
                       </button>
@@ -314,22 +310,20 @@ export default function HostedSettingsPage({ email }: { email: string }) {
       </section>
 
       {/* Bring your own key */}
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)] flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)] flex-shrink-0">
             {keyState.status === "locked" ? (
               <Lock className="w-4 h-4 text-[var(--text-tertiary)]" />
             ) : (
               <KeyRound className="w-4 h-4 text-[var(--text-tertiary)]" />
             )}
           </div>
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Bring your own key
-          </h2>
+          <h2 className="etched-label">Bring your own key</h2>
         </div>
 
         {keyState.status === "locked" ? (
-          <div className="rounded-lg border border-dashed border-[var(--border-default)] p-4 space-y-2">
+          <div className="rounded border border-dashed border-[var(--border-default)] p-4 space-y-2">
             <p className="text-sm text-[var(--text-primary)]">
               Use your own Anthropic API key — extractions on it are unmetered and run on the most
               capable model.
@@ -349,13 +343,13 @@ export default function HostedSettingsPage({ email }: { email: string }) {
 
             {keyState.status === "stored" && (
               <div className="flex items-center gap-2">
-                <span className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-sm font-mono text-[var(--text-secondary)]">
+                <span className="data flex-1 px-3 py-2 rounded bg-[var(--surface-inset)] border border-[var(--border-subtle)] text-sm text-[var(--text-secondary)]">
                   {keyState.masked}
                 </span>
                 <button
                   onClick={handleRemoveKey}
                   disabled={isRemovingKey}
-                  className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors disabled:opacity-50 flex-shrink-0"
+                  className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors disabled:opacity-50 flex-shrink-0"
                 >
                   {isRemovingKey ? "Removing…" : "Remove key"}
                 </button>
@@ -370,13 +364,13 @@ export default function HostedSettingsPage({ email }: { email: string }) {
                   onChange={(e) => setKeyInput(e.target.value)}
                   placeholder={keyState.status === "stored" ? "Replace with a new key…" : "sk-ant-..."}
                   autoComplete="off"
-                  className="flex-1 px-3 py-2 rounded-lg input-base text-sm font-mono"
+                  className="flex-1 px-3 py-2 input-base text-sm font-mono"
                   aria-label="Anthropic API key"
                 />
                 <button
                   onClick={handleSaveKey}
                   disabled={!keyInput.trim() || isSavingKey}
-                  className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50 flex-shrink-0"
+                  className="px-3 py-2 btn-primary text-xs disabled:opacity-50 flex-shrink-0"
                 >
                   {isSavingKey ? "Validating…" : keyState.status === "stored" ? "Replace key" : "Save key"}
                 </button>
@@ -384,7 +378,7 @@ export default function HostedSettingsPage({ email }: { email: string }) {
             )}
 
             {keyState.status === "loading" && (
-              <div className="h-9 rounded-lg bg-[var(--surface-overlay)] animate-pulse" />
+              <div className="h-9 rounded bg-[var(--surface-overlay)] animate-pulse" />
             )}
 
             {keyError && <p className="text-xs text-[var(--error)]">{keyError}</p>}

@@ -34,7 +34,7 @@ export function PaginationBar({ page, rowCount, pageSize = PAGE_SIZE, onPageChan
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
-          className="p-1 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-30 disabled:pointer-events-none"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -43,7 +43,7 @@ export function PaginationBar({ page, rowCount, pageSize = PAGE_SIZE, onPageChan
           onClick={() => onPageChange(page + 1)}
           disabled={page >= pages}
           aria-label="Next page"
-          className="p-1 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors disabled:opacity-30 disabled:pointer-events-none"
         >
           <ChevronRight className="w-4 h-4" />
         </button>

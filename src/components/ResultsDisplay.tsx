@@ -113,11 +113,11 @@ function ExtractionWait({
   }, []);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated overflow-hidden">
       <div className="p-5">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-lg bg-[var(--accent-subtle)] flex items-center justify-center">
-            <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />
+          <div className="w-9 h-9 rounded bg-[var(--well)] border border-[var(--hairline)] flex items-center justify-center">
+            <Loader2 className="w-4 h-4 text-[var(--phosphor)] animate-spin" />
           </div>
           <div>
             <h3 className="text-sm font-medium text-[var(--text-primary)]">Extracting data…</h3>
@@ -131,7 +131,7 @@ function ExtractionWait({
             <button
               type="button"
               onClick={onCancel}
-              className="px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              className="px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
             >
               Cancel
             </button>
@@ -237,7 +237,7 @@ function EditableValue({
   // with the row's own hover background, border only appears on hover/focus
   // (or permanently, for the invalid state, which must stay legible either way).
   const fieldClasses = (extra: string) =>
-    `data w-full rounded-md text-[13px] leading-tight text-[var(--text-primary)] border bg-transparent transition-colors focus:outline-none ${
+    `data w-full rounded text-[13px] leading-tight text-[var(--text-primary)] border bg-transparent transition-colors focus:outline-none ${
       invalid
         ? "border-[var(--error)]"
         : "border-transparent hover:border-[var(--border-subtle)] focus:border-[var(--accent-muted)] focus:bg-[var(--surface-elevated)]"
@@ -301,37 +301,24 @@ function ExportBar({
   onDownloadJson: () => void;
   onDownloadCsv: () => void;
 }) {
+  const buttonClass =
+    "flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors";
   return (
     <div className="flex items-center gap-1">
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onCopy}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-      >
+      <button onClick={onCopy} className={buttonClass}>
         {copied ? <Check className="w-3.5 h-3.5 text-[var(--success)]" /> : <Copy className="w-3.5 h-3.5" />}
         {copied ? "Copied" : "Copy"}
-      </motion.button>
+      </button>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onDownloadCsv}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-      >
+      <button onClick={onDownloadCsv} className={buttonClass}>
         <Download className="w-3.5 h-3.5" />
         CSV
-      </motion.button>
+      </button>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onDownloadJson}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
-      >
+      <button onClick={onDownloadJson} className={buttonClass}>
         <Download className="w-3.5 h-3.5" />
         JSON
-      </motion.button>
+      </button>
     </div>
   );
 }
@@ -469,7 +456,9 @@ function ResultsTable({
                         if (highlightsLive) onHoverField?.(null);
                       }}
                       className={`relative group/cell px-2 py-1 min-w-[9rem] align-top transition-colors ${
-                        isHoveredColumn ? "field-tint" : ""
+                        // Law 2: every reading's cell carries its field's 2px
+                        // left edge-tick; hover swaps in the tick+veil tint.
+                        isHoveredColumn ? "field-tint" : highlightsLive ? "field-tick" : ""
                       }`}
                       title={unanchored ? "Value not found verbatim in the document — verify manually" : undefined}
                     >
@@ -485,7 +474,9 @@ function ResultsTable({
                         // the cell's right edge — pr-6 (24px) under-reserved
                         // this and let the icons cover the value's tail.
                         className={`${isEdited ? "pr-14" : "pr-1"} ${
-                          unanchored ? "border-b border-dashed border-[var(--text-tertiary)]" : ""
+                          // DESIGN.md: the "verify manually" hint is a dashed
+                          // AMBER trace — attention, not failure.
+                          unanchored ? "border-b border-dashed border-[var(--warn)]" : ""
                         }`}
                       >
                         <EditableValue value={current} onCommit={(v) => updateField(rowIndex, field.name, v)} />
@@ -507,7 +498,7 @@ function ResultsTable({
                             title={`${field.name} edited from the extracted value`}
                             className="flex items-center justify-center w-3 h-3"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                            <span className="w-1.5 h-1.5 rounded-[1px] bg-[var(--warn)]" aria-hidden="true" />
                             <span className="sr-only">Edited</span>
                           </span>
                         )}
@@ -516,7 +507,7 @@ function ResultsTable({
                             onClick={() => onJumpToValue(field.name, rowIndex)}
                             aria-label={`Jump to ${field.name} in document`}
                             title="Jump to highlight in document"
-                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+                            className="p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                           >
                             <Crosshair className="w-3 h-3" />
                           </button>
@@ -803,10 +794,10 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="rounded-xl border border-[var(--error)]/20 bg-[var(--error-subtle)] p-5"
+        className="rounded-md border border-[var(--error)]/20 bg-[var(--error-subtle)] p-5"
       >
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[var(--error)]/10 flex items-center justify-center">
+          <div className="flex-shrink-0 w-9 h-9 rounded bg-[var(--error)]/10 flex items-center justify-center">
             <AlertCircle className="w-4 h-4 text-[var(--error)]" />
           </div>
           <div>
@@ -839,14 +830,15 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated rounded-xl overflow-hidden">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card-elevated overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[var(--success-subtle)] flex items-center justify-center">
-              <Check className="w-4 h-4 text-[var(--success)]" strokeWidth={2.5} />
-            </div>
+          <div className="flex items-center gap-2.5">
+            {/* Status grammar: LED + mono caps, not an icon tile. */}
+            <span className="led led-on" aria-hidden />
             <div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)]">Complete</h3>
+              <h3 className="data text-[11px] uppercase tracking-[0.06em] text-[var(--text-primary)]">
+                Complete
+              </h3>
               <p className="text-xs text-[var(--text-tertiary)]">
                 {rowCount > 1
                   ? `${rowCount} rows extracted`
@@ -856,17 +848,15 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
           </div>
           <div className="flex items-center gap-1">
             <ExportBar copied={copied} onCopy={handleCopy} onDownloadJson={handleDownload} onDownloadCsv={handleDownloadCSV} />
-            <motion.button
+            <button
               ref={expandButtonRef}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
               onClick={() => setExpanded(true)}
               aria-label="Expand table"
               title="Expand table"
-              className="flex items-center justify-center w-8 h-8 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+              className="flex items-center justify-center w-8 h-8 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
             >
               <Maximize2 className="w-3.5 h-3.5" />
-            </motion.button>
+            </button>
           </div>
         </div>
 
@@ -896,7 +886,7 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
             <span className="ml-1">View JSON</span>
           </summary>
           <div className="px-4 pb-4">
-            <pre className="data p-3 rounded-lg bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
+            <pre className="data p-3 rounded bg-[var(--surface-inset)] text-xs text-[var(--text-secondary)] overflow-x-auto border border-[var(--border-subtle)] max-h-64">
               {JSON.stringify(edited, null, 2)}
             </pre>
           </div>
@@ -927,7 +917,11 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
               transition={reduceMotion ? { duration: 0 } : { duration: 0.15 }}
               onClick={(e) => e.stopPropagation()}
-              className="absolute inset-4 md:inset-10 card-elevated rounded-2xl flex flex-col overflow-hidden"
+              className="absolute inset-4 md:inset-10 card-elevated flex flex-col overflow-hidden"
+              // True overlay — the one place shadow is allowed (law 3).
+              // Inline because .card-elevated's unlayered `box-shadow: none`
+              // outranks Tailwind's layered shadow utilities.
+              style={{ boxShadow: "var(--shadow-lg)" }}
             >
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-subtle)] shrink-0">
                 <div className="min-w-0">
@@ -950,7 +944,7 @@ export const ResultsDisplay = forwardRef<ResultsDisplayHandle, ResultsDisplayPro
                     onClick={closeModal}
                     aria-label="Close expanded results"
                     title="Close"
-                    className="flex items-center justify-center w-8 h-8 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors ml-1"
+                    className="flex items-center justify-center w-8 h-8 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors ml-1"
                   >
                     <X className="w-4 h-4" />
                   </button>

@@ -126,9 +126,9 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-[var(--accent-subtle)] text-[var(--accent)]"
+                  ? "bg-[var(--phosphor-well)] text-[var(--phosphor)] shadow-[inset_2px_0_0_0_var(--phosphor)]"
                   : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)]"
               }`}
             >
@@ -149,7 +149,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
         >
           {accountEmail !== null && (
             <div className="flex items-center gap-2 min-w-0">
-              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-xs font-medium text-[var(--accent)]">
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded border border-[var(--hairline)] bg-[var(--panel-raised)] text-xs font-medium text-[var(--ink-dim)]">
                 {accountEmail.charAt(0).toUpperCase() || "?"}
               </div>
               <span
@@ -165,7 +165,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
               <form action={signOutAction}>
                 <button
                   type="submit"
-                  className="theme-toggle hit-44 w-9 h-9 rounded-lg flex items-center justify-center"
+                  className="theme-toggle hit-44 w-9 h-9 flex items-center justify-center"
                   aria-label="Sign out"
                   title="Sign out"
                 >
@@ -175,7 +175,7 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
             )}
             <button
               onClick={toggleDarkMode}
-              className="theme-toggle hit-44 w-9 h-9 rounded-lg flex items-center justify-center"
+              className="theme-toggle hit-44 w-9 h-9 flex items-center justify-center"
               aria-label="Toggle theme"
             >
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -189,12 +189,12 @@ export function Sidebar({ accountEmail = null }: { accountEmail?: string | null 
             className="block px-2 pt-2 pb-1 group"
             title="Monthly extractions — manage your plan in Settings"
           >
-            <div className="h-1.5 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+            <div className="h-1.5 rounded-[2px] bg-[var(--well)] border border-[var(--hairline)] overflow-hidden">
               <div
                 className={`h-full ${
                   usage.limit > 0 && usage.used / usage.limit >= 0.8
-                    ? "bg-[var(--error)]"
-                    : "bg-[var(--accent)]"
+                    ? "bg-[var(--warn)]"
+                    : "bg-[var(--phosphor)]"
                 }`}
                 style={{
                   width: `${usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0}%`,

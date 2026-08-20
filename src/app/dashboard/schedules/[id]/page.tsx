@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UPLOAD_ACCEPT_ATTR, filterSupportedFiles } from "@/lib/upload-accept";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, UploadCloud, Download, FileText, Check, Clock, Copy, Mail, Play, Settings2 } from "lucide-react";
+import { ArrowLeft, UploadCloud, Download, FileText, Check, Copy, Mail, Play, Settings2 } from "lucide-react";
 import { uploadDocument } from "@/lib/upload-client";
 import { toCsv, jobsToRows, downloadText } from "@/lib/export";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components";
 import { useHosted } from "@/components/ProfileContext";
 import { TemplateChip } from "@/components/dashboard/TemplateChip";
+import { StatusLed } from "@/components/dashboard/StatusLed";
 import { scheduleSentence } from "@/lib/schedule-display";
 
 interface Schedule {
@@ -56,25 +57,6 @@ interface Doc {
   filename: string;
   processedAt: string | null;
   createdAt: string;
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-[var(--surface-overlay)] text-[var(--text-tertiary)]",
-  processing: "bg-[var(--accent-subtle)] text-[var(--accent)]",
-  completed: "bg-[var(--success-subtle)] text-[var(--success)]",
-  failed: "bg-[var(--error-subtle)] text-[var(--error)]",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
-        STATUS_STYLES[status] ?? STATUS_STYLES.pending
-      }`}
-    >
-      {status}
-    </span>
-  );
 }
 
 /** Groups jobs into "runs" by rounding createdAt down to the minute — jobs
@@ -318,7 +300,7 @@ export default function ScheduleDetailPage() {
   if (isLoading) {
     return (
       <div className="p-8">
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       </div>
     );
   }
@@ -327,7 +309,10 @@ export default function ScheduleDetailPage() {
     return (
       <div className="p-8 max-w-3xl mx-auto">
         <p className="text-sm text-[var(--text-tertiary)]">Schedule not found.</p>
-        <Link href="/dashboard/runs?tab=schedules" className="text-sm text-[var(--accent)] font-medium">
+        <Link
+          href="/dashboard/runs?tab=schedules"
+          className="text-sm text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+        >
           Back to schedules
         </Link>
       </div>
@@ -341,10 +326,13 @@ export default function ScheduleDetailPage() {
           {loadError ?? "Couldn't load this schedule."}
         </p>
         <div className="flex items-center gap-4">
-          <button onClick={load} className="px-3 py-2 rounded-lg btn-primary text-xs">
+          <button onClick={load} className="px-3 py-2 btn-primary text-xs">
             Retry
           </button>
-          <Link href="/dashboard/runs?tab=schedules" className="text-sm text-[var(--accent)] font-medium">
+          <Link
+            href="/dashboard/runs?tab=schedules"
+            className="text-sm text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+          >
             Back to schedules
           </Link>
         </div>
@@ -407,7 +395,7 @@ export default function ScheduleDetailPage() {
           <button
             onClick={handleRunNow}
             disabled={isRunning}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 btn-primary text-xs disabled:opacity-50"
           >
             <Play className="w-3.5 h-3.5" />
             {isRunning ? "Running…" : "Run now"}
@@ -421,11 +409,9 @@ export default function ScheduleDetailPage() {
       {runError && <p className="text-sm text-[var(--error)]">{runError}</p>}
 
       {!hosted && (
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Output
-          </h2>
+          <h2 className="etched-label">Output</h2>
           {!isEditingOutput && (
             <button
               onClick={startEditingOutput}
@@ -445,7 +431,7 @@ export default function ScheduleDetailPage() {
               <button
                 onClick={handleSaveOutput}
                 disabled={isSavingOutput}
-                className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+                className="px-3 py-2 btn-primary text-xs disabled:opacity-50"
               >
                 {isSavingOutput ? "Saving…" : "Save"}
               </button>
@@ -455,7 +441,7 @@ export default function ScheduleDetailPage() {
                   setOutputSaveError(null);
                 }}
                 disabled={isSavingOutput}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -480,11 +466,9 @@ export default function ScheduleDetailPage() {
       {/* §INBOX T3: hosted counterpart of the OUTPUT card — how emailed-in
           documents are ingested and where results go. Local never renders it. */}
       {hosted && (
-      <section className="card-elevated rounded-xl p-5 space-y-4">
+      <section className="card-elevated p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-            Delivery
-          </h2>
+          <h2 className="etched-label">Delivery</h2>
           {!isEditingDelivery && (
             <button
               onClick={startEditingDelivery}
@@ -509,7 +493,7 @@ export default function ScheduleDetailPage() {
               <button
                 onClick={handleSaveDelivery}
                 disabled={isSavingDelivery}
-                className="px-3 py-2 rounded-lg btn-primary text-xs disabled:opacity-50"
+                className="px-3 py-2 btn-primary text-xs disabled:opacity-50"
               >
                 {isSavingDelivery ? "Saving…" : "Save"}
               </button>
@@ -519,7 +503,7 @@ export default function ScheduleDetailPage() {
                   setDeliverySaveError(null);
                 }}
                 disabled={isSavingDelivery}
-                className="px-3 py-2 rounded-lg text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+                className="px-3 py-2 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -558,14 +542,12 @@ export default function ScheduleDetailPage() {
       </section>
       )}
 
-      <section className="card-elevated rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Inbox
-        </h2>
+      <section className="card-elevated p-5 space-y-4">
+        <h2 className="etched-label">Inbox</h2>
 
         {/* §INBOX T3: the schedule's email-in address — hosted-only. */}
         {hosted && (
-          <div className="rounded-lg bg-[var(--surface-inset)] px-3.5 py-3 space-y-1">
+          <div className="rounded bg-[var(--surface-inset)] border border-[var(--hairline)] px-3.5 py-3 space-y-1">
             {inboundAddress ? (
               <>
                 <div className="flex items-center gap-2">
@@ -575,7 +557,7 @@ export default function ScheduleDetailPage() {
                   </span>
                   <button
                     onClick={copyAddress}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
                     aria-label="Copy email-in address"
                   >
                     {copied ? (
@@ -599,7 +581,7 @@ export default function ScheduleDetailPage() {
           </div>
         )}
 
-        <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--border-default)] rounded-xl cursor-pointer hover:border-[var(--accent-muted)] hover:bg-[var(--surface-elevated)] transition-all">
+        <label className="relative flex flex-col items-center justify-center w-full py-8 px-6 border border-dashed border-[var(--hairline-strong)] bg-[var(--well)] rounded-md cursor-pointer hover:border-[var(--ink-faint)] transition-colors">
           <input
             type="file"
             accept={UPLOAD_ACCEPT_ATTR}
@@ -622,18 +604,14 @@ export default function ScheduleDetailPage() {
             {docs.map((d) => (
               <li
                 key={d.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--surface-inset)] text-sm"
+                className="flex items-center gap-2 px-3 py-2 rounded bg-[var(--surface-inset)] text-sm"
               >
                 <FileText className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" />
                 <span className="flex-1 truncate text-[var(--text-primary)]">{d.filename}</span>
                 {d.processedAt ? (
-                  <span className="flex items-center gap-1 text-xs text-[var(--success)]">
-                    <Check className="w-3.5 h-3.5" /> Processed
-                  </span>
+                  <StatusLed status="completed" label="Processed" />
                 ) : (
-                  <span className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
-                    <Clock className="w-3.5 h-3.5" /> Pending
-                  </span>
+                  <StatusLed status="pending" />
                 )}
               </li>
             ))}
@@ -645,9 +623,7 @@ export default function ScheduleDetailPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Run history
-        </h2>
+        <h2 className="etched-label">Run history</h2>
         {runs.length === 0 ? (
           <p className="text-sm text-[var(--text-tertiary)]">No runs yet.</p>
         ) : (
@@ -656,7 +632,7 @@ export default function ScheduleDetailPage() {
               const completed = run.rows.filter((r) => r.job.status === "completed").length;
               const failed = run.rows.filter((r) => r.job.status === "failed").length;
               return (
-                <details key={run.key} className="card-elevated rounded-xl overflow-hidden group">
+                <details key={run.key} className="card-elevated overflow-hidden group">
                   <summary className="px-4 py-3 flex items-center justify-between cursor-pointer select-none list-none">
                     <div>
                       <p className="text-sm font-medium text-[var(--text-primary)]">{run.label}</p>
@@ -672,7 +648,7 @@ export default function ScheduleDetailPage() {
                             e.preventDefault();
                             downloadRunCsv(run);
                           }}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
                           CSV
@@ -691,7 +667,7 @@ export default function ScheduleDetailPage() {
                             <p className="text-xs text-[var(--error)] mt-1">{job.error}</p>
                           )}
                         </div>
-                        <StatusBadge status={job.status} />
+                        <StatusLed status={job.status} />
                       </div>
                     ))}
                   </div>

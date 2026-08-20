@@ -72,7 +72,7 @@ export default function DatasetDetailPage() {
   if (isLoading) {
     return (
       <div className="p-8">
-        <div className="h-6 w-40 rounded-full bg-[var(--surface-overlay)] animate-pulse" />
+        <div className="h-6 w-40 rounded bg-[var(--surface-overlay)] animate-pulse" />
       </div>
     );
   }
@@ -82,10 +82,13 @@ export default function DatasetDetailPage() {
       <div className="p-8 max-w-4xl mx-auto space-y-3">
         <p className="text-sm text-[var(--error)]">{loadError ?? "Couldn't load this dataset."}</p>
         <div className="flex items-center gap-4">
-          <button onClick={load} className="px-3 py-2 rounded-lg btn-primary text-xs">
+          <button onClick={load} className="px-3 py-2 btn-primary text-xs">
             Retry
           </button>
-          <Link href="/dashboard/datasets" className="text-sm text-[var(--accent)] font-medium">
+          <Link
+            href="/dashboard/datasets"
+            className="text-sm text-[var(--text-secondary)] font-medium underline underline-offset-2 hover:text-[var(--text-primary)]"
+          >
             Back to datasets
           </Link>
         </div>
@@ -117,7 +120,7 @@ export default function DatasetDetailPage() {
         </div>
         <a
           href={`/api/datasets/${dataset.id}/csv`}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-2 rounded border border-[var(--border-default)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors flex-shrink-0"
         >
           <Download className="w-3.5 h-3.5" />
           CSV
@@ -129,7 +132,7 @@ export default function DatasetDetailPage() {
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--text-tertiary)]">No rows yet.</p>
       ) : (
-        <div className="card-elevated rounded-xl overflow-hidden">
+        <div className="card-elevated overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -159,13 +162,13 @@ export default function DatasetDetailPage() {
                           <button
                             onClick={() => handleDeleteRow(r.id)}
                             disabled={deletingRowId === r.id}
-                            className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors disabled:opacity-50"
+                            className="px-2 py-1.5 rounded text-xs font-medium text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors disabled:opacity-50"
                           >
                             Confirm
                           </button>
                           <button
                             onClick={() => setConfirmingRowId(null)}
-                            className="px-2 py-1.5 rounded-md text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                            className="px-2 py-1.5 rounded text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                           >
                             Cancel
                           </button>
@@ -178,7 +181,7 @@ export default function DatasetDetailPage() {
                           }}
                           aria-label="Delete row"
                           title="Delete row"
-                          className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
+                          className="p-1.5 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

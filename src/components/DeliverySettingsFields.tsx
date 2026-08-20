@@ -1,5 +1,7 @@
 "use client";
 
+import { InstrumentSwitch } from "./InstrumentSwitch";
+
 export interface DatasetOption {
   id: string;
   name: string;
@@ -31,23 +33,8 @@ interface DeliverySettingsFieldsProps {
 }
 
 function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-        on ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)]"
-      }`}
-      aria-label={label}
-      aria-pressed={on}
-    >
-      <div
-        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-          on ? "left-6" : "left-1"
-        }`}
-      />
-    </button>
-  );
+  // Instrument-switch treatment (DESIGN.md): square-ish, phosphor when on.
+  return <InstrumentSwitch checked={on} onChange={onClick} ariaLabel={label} />;
 }
 
 /**
@@ -56,15 +43,13 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
  * they're extracted on arrival, who may send, and where results land. Both
  * parents render it behind useHosted(), so the local profile never sees it.
  * Same idiom as OutputSettingsFields: §13 label style (uppercase
- * tracking-wider sub-heading, mono for data-shaped input), §4 voice.
+ * micro-label sub-heading, mono for data-shaped input), §4 voice.
  */
 export function DeliverySettingsFields({ value, onChange, datasets, showHeading = true }: DeliverySettingsFieldsProps) {
   return (
     <div className={showHeading ? "space-y-3 pt-3 border-t border-[var(--border-subtle)]" : "space-y-3"}>
       {showHeading && (
-        <h3 className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider">
-          Delivery
-        </h3>
+        <h3 className="etched-label">Delivery</h3>
       )}
 
       <div>
@@ -73,7 +58,7 @@ export function DeliverySettingsFields({ value, onChange, datasets, showHeading 
           onChange={(e) =>
             onChange({ ...value, ingestMode: e.target.value as DeliverySettingsValue["ingestMode"] })
           }
-          className="w-full px-3 py-2 rounded-lg input-base text-sm"
+          className="w-full px-3 py-2 input-base text-sm"
           aria-label="Ingest mode"
         >
           <option value="auto">Smart — attachments, or the email itself if none</option>
@@ -106,7 +91,7 @@ export function DeliverySettingsFields({ value, onChange, datasets, showHeading 
           value={value.allowedSenders}
           onChange={(e) => onChange({ ...value, allowedSenders: e.target.value })}
           placeholder="billing@xero.com, @acme.com (optional)"
-          className="w-full px-3 py-2 rounded-lg input-base text-sm font-mono"
+          className="w-full px-3 py-2 input-base text-sm font-mono"
           aria-label="Allowed senders"
         />
         <p className="text-xs text-[var(--text-tertiary)] mt-1">
@@ -118,7 +103,7 @@ export function DeliverySettingsFields({ value, onChange, datasets, showHeading 
         <select
           value={value.datasetId}
           onChange={(e) => onChange({ ...value, datasetId: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg input-base text-sm"
+          className="w-full px-3 py-2 input-base text-sm"
           aria-label="Dataset"
         >
           <option value="">None</option>

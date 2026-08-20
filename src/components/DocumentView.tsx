@@ -295,7 +295,7 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
             onClick={() => onCollapsedChange(false)}
             aria-label="Expand document pane"
             title="Expand"
-            className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+            className="flex-shrink-0 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
           >
             <PanelLeftOpen className="w-4 h-4" strokeWidth={1.75} />
           </button>
@@ -322,15 +322,15 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
           </div>
 
           {extractedText && (
-            <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium flex-shrink-0">
+            <div className="flex items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-inset)] p-0.5 text-xs font-medium flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setView("document")}
                 aria-pressed={view === "document"}
-                className={`px-2.5 py-1 rounded-md transition-colors ${
+                className={`px-2.5 py-1 rounded-[3px] transition-colors ${
                   view === "document"
-                    ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+                    : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 Document
@@ -339,10 +339,10 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
                 type="button"
                 onClick={() => setView("extracted")}
                 aria-pressed={view === "extracted"}
-                className={`px-2.5 py-1 rounded-md transition-colors ${
+                className={`px-2.5 py-1 rounded-[3px] transition-colors ${
                   view === "extracted"
-                    ? "bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm"
-                    : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                    ? "bg-[var(--panel-raised)] text-[var(--text-primary)] border border-[var(--hairline-strong)]"
+                    : "border border-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 Extracted text
@@ -354,14 +354,14 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
             onClick={() => onCollapsedChange(true)}
             aria-label="Collapse document pane"
             title="Collapse document pane"
-            className="hidden lg:inline-flex flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
+            className="hidden lg:inline-flex flex-shrink-0 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] transition-colors"
           >
             <PanelLeftClose className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           <button
             onClick={onClear}
-            className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
+            className="flex-shrink-0 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
             aria-label="Remove file"
           >
             <X className="w-4 h-4" />
@@ -378,7 +378,9 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
               className="h-full overflow-auto p-6 bg-[var(--surface-inset)]"
             >
               <div className="doc-sheet">
-                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                {/* Sheet ink is inherited from .doc-sheet (fixed, calibration-
+                    independent) — never a theme text token on the platen. */}
+                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-inherit">
                   {segments}
                 </pre>
               </div>
@@ -389,13 +391,15 @@ export const DocumentView = forwardRef<DocumentViewHandle, DocumentViewProps>(fu
             <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)] flex items-start justify-center">
               {imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element -- local blob: URL, next/image can't optimize it
-                <img src={imageUrl} alt={file.name} className="max-w-full h-auto rounded-sm shadow-lg" />
+                <img src={imageUrl} alt={file.name} className="max-w-full h-auto rounded-[2px] sheet-rim" />
               )}
             </div>
           ) : (
             <div className="h-full overflow-auto p-6 bg-[var(--surface-inset)]">
               <div className="doc-sheet">
-                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text-primary)]">
+                {/* Sheet ink is inherited from .doc-sheet (fixed, calibration-
+                    independent) — never a theme text token on the platen. */}
+                <pre className="data whitespace-pre-wrap break-words text-sm leading-relaxed text-inherit">
                   {rawText}
                 </pre>
               </div>

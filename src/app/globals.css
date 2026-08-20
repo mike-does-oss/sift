@@ -692,3 +692,50 @@ html.light .field-tint {
   border-color: var(--hairline-strong);
   color: var(--ink);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+ * R2 — dashboard sweep additions. R1's blocks above are untouched; rules
+ * here intentionally re-declare .doc-sheet later in the file so they win.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* The PLATEN (DESIGN.md signature interaction): the document sheet is
+   PHYSICALLY LIGHT in both calibrations — a lit specimen under instrument
+   light, edge-lit against the dark case. Sheet ink is a fixed value, not a
+   theme token: content on the sheet inherits `color` from here, so the
+   dark calibration's light ink never lands on the light paper. */
+.doc-sheet {
+  --sheet: #f7f7f4;
+  --sheet-ink: #202224;
+  background: var(--sheet);
+  color: var(--sheet-ink);
+  /* The sheet's own edge — calibration-independent, like the paper itself. */
+  border: 1px solid #c8cac5;
+  border-radius: 2px; /* paper, not a panel */
+  /* Edge-lit rim: a 1px light line, not a blur (law 3 stays honored). */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+html.light .doc-sheet {
+  /* On the lab bench the white rim is invisible — a faint graphite line
+     seats the sheet on the bench instead. */
+  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.05);
+}
+
+/* Marks on the platen always sit on light paper, so they always use the
+   LIGHT palette variant (saturated-dark trace + dark ink), regardless of
+   calibration — overrides R1's theme-driven variant selection. */
+.doc-sheet .sift-mark,
+html.light .doc-sheet .sift-mark {
+  --trace: var(--mark-text-light, var(--phosphor));
+  color: var(--sheet-ink);
+}
+
+/* Same edge-lit rim for other specimen surfaces (PDF page canvas, image
+   previews) that sit on the platen surround. */
+.sheet-rim {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+html.light .sheet-rim {
+  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.08);
+}

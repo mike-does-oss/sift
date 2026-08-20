@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { UPLOAD_ACCEPT_ATTR } from "@/lib/upload-accept";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, X, Check } from "lucide-react";
+import { Upload, FileText, X } from "lucide-react";
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -63,16 +63,16 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="relative card-elevated rounded-xl p-4"
+            className="relative card-elevated p-4"
           >
             <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-[var(--success-subtle)] flex items-center justify-center">
-                <FileText className="w-6 h-6 text-[var(--success)]" strokeWidth={1.5} />
+              <div className="flex-shrink-0 w-12 h-12 rounded bg-[var(--well)] border border-[var(--hairline)] flex items-center justify-center">
+                <FileText className="w-6 h-6 text-[var(--ink-dim)]" strokeWidth={1.5} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <Check className="w-3.5 h-3.5 text-[var(--success)]" strokeWidth={2.5} />
-                  <span className="text-xs font-medium text-[var(--success)]">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="led led-on" aria-hidden />
+                  <span className="data text-[11px] uppercase tracking-[0.06em] text-[var(--ink-dim)]">
                     Ready
                   </span>
                 </div>
@@ -85,7 +85,7 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               </div>
               <button
                 onClick={onClear}
-                className="flex-shrink-0 p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
+                className="flex-shrink-0 p-2 rounded text-[var(--text-tertiary)] hover:text-[var(--error)] hover:bg-[var(--error-subtle)] transition-all"
                 aria-label="Remove file"
               >
                 <X className="w-4 h-4" />
@@ -104,12 +104,12 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
             onDrop={handleDrop}
             className={`
               relative flex flex-col items-center justify-center w-full py-10 px-6
-              border border-dashed rounded-xl cursor-pointer
-              transition-all duration-200 ease-out
+              border border-dashed rounded-md cursor-pointer
+              transition-colors duration-200 ease-out
               ${
                 isDragging
-                  ? "border-[var(--accent)] bg-[var(--accent-subtle)] scale-[1.01]"
-                  : "border-[var(--border-default)] hover:border-[var(--accent-muted)] bg-[var(--surface-elevated)]/50 hover:bg-[var(--surface-elevated)]"
+                  ? "border-[var(--phosphor-dim)] bg-[var(--phosphor-well)]"
+                  : "border-[var(--hairline-strong)] hover:border-[var(--ink-faint)] bg-[var(--well)]"
               }
             `}
           >
@@ -119,22 +119,24 @@ export function FileUpload({ onFileSelect, selectedFile, onClear }: FileUploadPr
               onChange={handleFileInput}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
-            <motion.div
-              animate={isDragging ? { scale: 1.1, y: -4 } : { scale: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            <div
               className={`
-                w-12 h-12 rounded-xl flex items-center justify-center mb-4
-                ${isDragging ? "bg-[var(--accent)]" : "bg-[var(--surface-overlay)] border border-[var(--border-subtle)]"}
+                w-12 h-12 rounded flex items-center justify-center mb-4 border
+                ${
+                  isDragging
+                    ? "bg-[var(--phosphor-well)] border-[var(--phosphor-dim)]"
+                    : "bg-[var(--panel-raised)] border-[var(--hairline)]"
+                }
                 transition-colors duration-200
               `}
             >
               <Upload
                 className={`w-5 h-5 ${
-                  isDragging ? "text-[var(--surface-base)]" : "text-[var(--text-tertiary)]"
+                  isDragging ? "text-[var(--phosphor)]" : "text-[var(--text-tertiary)]"
                 }`}
                 strokeWidth={1.5}
               />
-            </motion.div>
+            </div>
             <p className="text-sm font-medium text-[var(--text-primary)] mb-1">
               {isDragging ? "Drop it" : "Drop a document to get started"}
             </p>

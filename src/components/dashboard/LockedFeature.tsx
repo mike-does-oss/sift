@@ -18,15 +18,15 @@ export function LockedFeature({
   requiredPlan: string;
 }) {
   return (
-    <div className="card-elevated rounded-xl p-8 flex flex-col items-center text-center space-y-3">
-      <div className="w-10 h-10 rounded-lg bg-[var(--surface-inset)] flex items-center justify-center border border-[var(--border-subtle)]">
+    <div className="card-elevated p-8 flex flex-col items-center text-center space-y-3">
+      <div className="w-10 h-10 rounded bg-[var(--well)] flex items-center justify-center border border-[var(--hairline)]">
         <Lock className="w-4.5 h-4.5 text-[var(--text-tertiary)]" />
       </div>
       <div className="space-y-1">
         <h2 className="text-sm font-medium text-[var(--text-primary)]">{title}</h2>
         <p className="text-sm text-[var(--text-tertiary)] max-w-sm">{description}</p>
       </div>
-      <Link href="/dashboard/settings" className="px-4 py-2 rounded-lg btn-primary text-xs">
+      <Link href="/dashboard/settings" className="px-4 py-2 btn-primary text-xs">
         Upgrade to {requiredPlan}
       </Link>
     </div>

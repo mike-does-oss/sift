@@ -8,9 +8,9 @@ export function UsageMeter({ used, limit }: { used: number; limit: number }) {
   const nearLimit = pct >= 80;
   return (
     <div className="space-y-1.5">
-      <div className="h-2 rounded-full bg-[var(--surface-overlay)] overflow-hidden">
+      <div className="h-2 rounded-[2px] bg-[var(--well)] border border-[var(--hairline)] overflow-hidden">
         <div
-          className={`h-full transition-all ${nearLimit ? "bg-[var(--error)]" : "bg-[var(--accent)]"}`}
+          className={`h-full transition-all ${nearLimit ? "bg-[var(--warn)]" : "bg-[var(--phosphor)]"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
