@@ -16,16 +16,16 @@
  * (--bg / --surface* / --text-* / --border-* / --accent* / --line* ...) so
  * existing component classnames re-skin through the token layer unchanged.
  *
- * THEME INVERSION (vs the pre-bench §13 world): dark is now the DEFAULT
- * calibration on :root; light ("lab bench") is the opt-in via `html.light`.
- * The old world was light-default with `html.dark` opt-in — Sidebar.tsx maps
- * the stored preference (localStorage "sift-theme"): stored "dark" → default
- * (no class), stored "light" → html.light, nothing stored → OS preference.
+ * THEMES: light "lab bench" is the DEFAULT calibration on :root (founder
+ * 2026-08-20: "not dark bg"); dark "graphite case" is the opt-in via
+ * `html.dark`. Sidebar.tsx maps the stored preference (localStorage
+ * "sift-theme"): stored "light" → default (no class), stored "dark" →
+ * html.dark, nothing stored → OS preference.
  *
  * ── WCAG contrast verification (computed 2026-08-20, WCAG 2.x relative
  *    luminance; floor is 4.5:1 for ALL text incl. placeholders) ────────────
  *
- * DARK (default)      case     panel    raised   well     phos-well
+ * DARK (html.dark)    case     panel    raised   well     phos-well
  *   ink #e9ebe7       15.65    14.71    13.82    16.23    12.75
  *   ink-dim #a9ada7    8.24     7.75     7.28     8.55     6.72
  *   ink-faint #878b86  5.42     5.10     4.79     5.63     4.42 (!)
@@ -34,7 +34,7 @@
  *   fault #e5655a      5.67     5.33     5.01     5.88     4.62
  *   phosphor-contrast #07130e on phosphor #35e0a0: 11.12
  *
- * LIGHT (lab bench)   case     panel    raised   well     phos-well
+ * LIGHT (default)     case     panel    raised   well     phos-well
  *   ink #17191b       15.73    17.02    17.63    14.60    15.21
  *   ink-dim #4c4f4c    7.40     8.02     8.30     6.87     7.16
  *   ink-faint #666964  4.97     5.38     5.57     4.61     4.81
@@ -57,34 +57,36 @@
  * Each is the smallest darkening step that clears 4.5 on all five surfaces.
  */
 
-/* Dark — the default calibration (the instrument case) */
+/* Light "lab bench" — the DEFAULT calibration (founder 2026-08-20: "not
+   dark bg"). Brushed-aluminum lab, cool and clinical, zero cream. Dark (the
+   graphite case) is the html.dark opt-in below. */
 :root {
   /* Native chrome (select popups, scrollbars, form controls) renders in the
-     dark palette by default; html.light overrides below. */
-  color-scheme: dark;
+     light palette by default; html.dark overrides below. */
+  color-scheme: light;
 
   /* Canonical tokens */
-  --case: #101214;
-  --panel: #16191c;
-  --panel-raised: #1b1f23;
-  --well: #0b0d0e;
-  --ink: #e9ebe7;
-  --ink-dim: #a9ada7;
-  --ink-faint: #878b86;
-  --hairline: #26292d;
-  --hairline-strong: #34383d;
-  --phosphor: #35e0a0;
-  --phosphor-dim: #1e8f68;
-  --phosphor-well: #0f2a20;
-  --warn: #e0a845;
-  --fault: #e5655a;
+  --case: #f2f2f0;
+  --panel: #fbfbfa;
+  --panel-raised: #ffffff;
+  --well: #e9eae7;
+  --ink: #17191b;
+  --ink-dim: #4c4f4c;
+  --ink-faint: #666964;
+  --hairline: #d8d9d5;
+  --hairline-strong: #bfc1bc;
+  --phosphor: #0d7350;
+  --phosphor-dim: #4f9c78;
+  --phosphor-well: #e2f2ea;
+  --warn: #8a5e0f;
+  --fault: #b3362c;
   /* Text set ON a phosphor plate (the one primary action per view). */
-  --phosphor-contrast: #07130e;
+  --phosphor-contrast: #ffffff;
   /* rgb triplet of --phosphor for rgba() effects with variable alpha. */
-  --phosphor-rgb: 53, 224, 160;
+  --phosphor-rgb: 13, 115, 80;
 
   /* Legacy aliases — old token names, re-pointed at the bench tokens.
-     Defined once here; they re-resolve automatically under html.light
+     Defined once here; they re-resolve automatically under html.dark
      because var() lookups happen at computed-value time. */
   --bg: var(--case);
   --surface: var(--panel);
@@ -113,7 +115,7 @@
   --success: var(--phosphor);
   --success-subtle: var(--phosphor-well);
   --error: var(--fault);
-  --error-subtle: rgba(229, 101, 90, 0.14);
+  --error-subtle: rgba(179, 54, 44, 0.1);
 
   /* Typography — semantic tokens chained to the next/font-generated vars
      (see layout.tsx). Chaining rather than redeclaring keeps next/font's
@@ -124,41 +126,41 @@
 
   /* Shadows — law 3: box-shadow exists only on true overlays (modals,
      popovers, toasts) and is tight, offset, dark. Panels get hairlines. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(16, 18, 20, 0.1);
+  --shadow-md: 0 2px 4px rgba(16, 18, 20, 0.08), 0 6px 16px rgba(16, 18, 20, 0.08);
+  --shadow-lg: 0 4px 8px rgba(16, 18, 20, 0.1), 0 12px 28px rgba(16, 18, 20, 0.12);
   /* Cards elevate by hairline, not blur — kept as a token because legacy
      classnames reference it; resolves to no shadow at all. */
   --card-shadow: none;
 }
 
-/* Light — the "lab bench" calibration: brushed-aluminum, cool and clinical,
-   zero cream. Its own design, not an inversion. */
-html.light {
-  color-scheme: light;
+/* Dark "graphite case" — the opt-in calibration. Its own design, not an
+   inversion of the bench. */
+html.dark {
+  color-scheme: dark;
 
-  --case: #f2f2f0;
-  --panel: #fbfbfa;
-  --panel-raised: #ffffff;
-  --well: #e9eae7;
-  --ink: #17191b;
-  --ink-dim: #4c4f4c;
-  --ink-faint: #666964;
-  --hairline: #d8d9d5;
-  --hairline-strong: #bfc1bc;
-  --phosphor: #0d7350;
-  --phosphor-dim: #4f9c78;
-  --phosphor-well: #e2f2ea;
-  --warn: #8a5e0f;
-  --fault: #b3362c;
-  --phosphor-contrast: #ffffff;
-  --phosphor-rgb: 13, 115, 80;
+  --case: #101214;
+  --panel: #16191c;
+  --panel-raised: #1b1f23;
+  --well: #0b0d0e;
+  --ink: #e9ebe7;
+  --ink-dim: #a9ada7;
+  --ink-faint: #878b86;
+  --hairline: #26292d;
+  --hairline-strong: #34383d;
+  --phosphor: #35e0a0;
+  --phosphor-dim: #1e8f68;
+  --phosphor-well: #0f2a20;
+  --warn: #e0a845;
+  --fault: #e5655a;
+  --phosphor-contrast: #07130e;
+  --phosphor-rgb: 53, 224, 160;
 
-  --error-subtle: rgba(179, 54, 44, 0.1);
+  --error-subtle: rgba(229, 101, 90, 0.14);
 
-  --shadow-sm: 0 1px 2px rgba(16, 18, 20, 0.1);
-  --shadow-md: 0 2px 4px rgba(16, 18, 20, 0.08), 0 6px 16px rgba(16, 18, 20, 0.08);
-  --shadow-lg: 0 4px 8px rgba(16, 18, 20, 0.1), 0 12px 28px rgba(16, 18, 20, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -448,8 +450,8 @@ body {
  * bg variant is no longer painted as a wash.
  */
 .sift-mark {
-  /* Dark default → dark variant; html.light flips below. */
-  --trace: var(--mark-text-dark, var(--phosphor));
+  /* Light default → light variant; html.dark flips below. */
+  --trace: var(--mark-text-light, var(--phosphor));
   color: var(--ink);
   font-family: var(--font-mono);
   background: color-mix(in srgb, var(--trace) 12%, transparent);
@@ -461,8 +463,8 @@ body {
   transition: background-color 0.15s ease;
 }
 
-html.light .sift-mark {
-  --trace: var(--mark-text-light, var(--phosphor));
+html.dark .sift-mark {
+  --trace: var(--mark-text-dark, var(--phosphor));
 }
 
 /* Hovering the matching results cell deepens every mark for that field
@@ -506,34 +508,34 @@ html.light .sift-mark {
 
 /* Column-header swatch: the field's identity chip, now the trace hue. */
 .field-swatch {
-  background: var(--mark-text-dark);
+  background: var(--mark-text-light);
 }
 
-html.light .field-swatch {
-  background: var(--mark-text-light);
+html.dark .field-swatch {
+  background: var(--mark-text-dark);
 }
 
 /* Results-cell edge-tick (law 2): a 2px left tick in the field color marks
    a reading's cell — apply to positioned <td> content or the cell itself. */
 .field-tick {
-  --trace: var(--mark-text-dark, var(--phosphor));
+  --trace: var(--mark-text-light, var(--phosphor));
   box-shadow: inset 2px 0 0 0 var(--trace);
 }
 
-html.light .field-tick {
-  --trace: var(--mark-text-light, var(--phosphor));
+html.dark .field-tick {
+  --trace: var(--mark-text-dark, var(--phosphor));
 }
 
 /* Hover tint on a linked column's cells while its field is hovered in
    either pane — a trace-tinted veil (≤14%), no more solid wash. */
 .field-tint {
-  background: color-mix(in srgb, var(--mark-text-dark) 12%, transparent);
-  box-shadow: inset 2px 0 0 0 var(--mark-text-dark);
-}
-
-html.light .field-tint {
   background: color-mix(in srgb, var(--mark-text-light) 12%, transparent);
   box-shadow: inset 2px 0 0 0 var(--mark-text-light);
+}
+
+html.dark .field-tint {
+  background: color-mix(in srgb, var(--mark-text-dark) 12%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--mark-text-dark);
 }
 
 /* Reverse-direction flash (ResultsDisplay.flashCell): clicking a document
@@ -681,21 +683,21 @@ html.light .field-tint {
   /* The sheet's own edge — calibration-independent, like the paper itself. */
   border: 1px solid #c8cac5;
   border-radius: 2px; /* paper, not a panel */
-  /* Edge-lit rim: a 1px light line, not a blur (law 3 stays honored). */
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* On the (default) lab bench a faint graphite line seats the sheet. */
+  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.05);
 }
 
-html.light .doc-sheet {
-  /* On the lab bench the white rim is invisible — a faint graphite line
-     seats the sheet on the bench instead. */
-  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.05);
+html.dark .doc-sheet {
+  /* Against the graphite case the sheet is edge-lit instead: a 1px light
+     line, not a blur (law 3 stays honored). */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 /* Marks on the platen always sit on light paper, so they always use the
    LIGHT palette variant (saturated-dark trace + dark ink), regardless of
    calibration — overrides R1's theme-driven variant selection. */
 .doc-sheet .sift-mark,
-html.light .doc-sheet .sift-mark {
+html.dark .doc-sheet .sift-mark {
   --trace: var(--mark-text-light, var(--phosphor));
   color: var(--sheet-ink);
 }
@@ -703,9 +705,9 @@ html.light .doc-sheet .sift-mark {
 /* Same edge-lit rim for other specimen surfaces (PDF page canvas, image
    previews) that sit on the platen surround. */
 .sheet-rim {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.08);
 }
 
-html.light .sheet-rim {
-  box-shadow: 0 0 0 1px rgba(16, 18, 20, 0.08);
+html.dark .sheet-rim {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }

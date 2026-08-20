@@ -48,14 +48,14 @@ export const metadata: Metadata = {
   },
 };
 
-// Pre-hydration theme init: dark is the default calibration (:root), light is
-// the `html.light` opt-in. Without this, a visitor whose stored/OS preference
-// is light gets a dark first paint until Sidebar's post-hydration effect runs
-// (R1's theme inversion introduced that flash). Same mapping as Sidebar.tsx:
-// stored "light" → html.light; nothing stored → OS preference; stored "dark"
-// (or anything else) → default. Parser-blocking inline script so it runs
-// before first paint; try/catch for storage-disabled contexts.
-const THEME_INIT = `try{var t=localStorage.getItem("sift-theme");if(t==="light"||(!t&&matchMedia("(prefers-color-scheme: light)").matches))document.documentElement.classList.add("light")}catch(e){}`;
+// Pre-hydration theme init: light "lab bench" is the default calibration
+// (:root), dark is the `html.dark` opt-in. Without this, a visitor whose
+// stored/OS preference is dark gets a light first paint until Sidebar's
+// post-hydration effect runs. Same mapping as Sidebar.tsx: stored "dark" →
+// html.dark; nothing stored → OS preference; stored "light" (or anything
+// else) → default. Parser-blocking inline script so it runs before first
+// paint; try/catch for storage-disabled contexts.
+const THEME_INIT = `try{var t=localStorage.getItem("sift-theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`;
 
 export default function RootLayout({
   children,

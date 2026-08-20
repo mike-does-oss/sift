@@ -7,7 +7,9 @@ Sift is a **calibrated measurement instrument for documents**. Every extraction 
 
 ## Palette
 
-### Dark (default calibration)
+**Default calibration: LIGHT "lab bench"** (founder revision 2026-08-20: "not dark bg"). Dark "graphite case" is the `html.dark` opt-in. Both remain fully designed calibrations; every law below applies to each.
+
+### Dark (opt-in calibration)
 | Token | Value | Role |
 |---|---|---|
 | `--case` | `#101214` | app ground (the instrument case) |
@@ -25,7 +27,7 @@ Sift is a **calibrated measurement instrument for documents**. Every extraction 
 | `--warn` | `#e0a845` | amber: attention, degraded |
 | `--fault` | `#e5655a` | red: failure only |
 
-### Light ("lab bench" calibration — its own design, not an inversion)
+### Light ("lab bench" — THE DEFAULT; its own design, not an inversion)
 Brushed-aluminum lab, cool and clinical, zero cream: `--case #f2f2f0`, `--panel #fbfbfa`, `--well #e9eae7`, `--ink #17191b`, `--ink-dim #4c4f4c`, `--ink-faint #6b6e6a`, hairlines `#d8d9d5`/`#bfc1bc`, `--phosphor #0e7a55` (text-safe on light), `--phosphor-well #e2f2ea`, warn `#9a6a12`, fault `#b3362c`.
 
 Legacy token names (`--bg --surface* --text-* --border-* --accent*`) remain as aliases onto the new set so the whole app re-skins through the token layer first.
@@ -54,7 +56,7 @@ New mark, drawn in this world's language, same concept (unstructured → structu
 
 ## Modes
 - Dashboard = Operate: density welcome, expression only through the instrument grammar; task/state clarity outrank everything.
-- Landing = Persuade: dark bench hero, lit-paper specimen, phosphor readings; pricing/features re-set in the same grammar; §4 voice.
+- Landing = Persuade: the LIGHT lab bench (founder revision 2026-08-20 — no dark pin), paper specimens as full proper documents (complete portrait pages, not cropped squares), readings panel and probe-line in the light calibration's grammar; pricing/features re-set in the same grammar; §4 voice.
 
 ## Quality gates
 WCAG 4.5:1 for all text incl. placeholders (both calibrations); detector clean; accent budget audited by eye per view; both themes designed, not derived; 15px base density kept.
