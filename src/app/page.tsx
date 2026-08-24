@@ -105,13 +105,12 @@ export default async function Home() {
 
       {/* Hero — the instrument reading a document */}
       <section className="mx-auto max-w-4xl px-6 pb-0 pt-16 text-center sm:pt-20">
-        <h1 className="font-display mx-auto max-w-2xl text-balance text-[2.75rem] leading-[1.08] tracking-[-0.02em] sm:text-6xl">
-          Turn documents into structured data
+        <h1 className="font-display mx-auto max-w-3xl text-balance text-[2.75rem] leading-[1.08] tracking-[-0.02em] sm:text-6xl">
+          Turn invoices, statements, receipts and contracts into structured data
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-[var(--ink-dim)]">
           Define the fields you need, let AI extract them, and check every value against the exact
-          place it appears in the source. Bank statements, contracts, invoices, emails — clean rows
-          out, every time.
+          place it appears in the source document — clean rows out, every time.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link href={ctaHref} className="btn-primary flex items-center gap-1.5 px-6 py-3 text-sm">
