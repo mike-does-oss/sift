@@ -29,7 +29,7 @@ The reference deployment shape is Vercel + Neon:
    STRIPE_SECRET_KEY=sk_test_... npx tsx scripts/setup-stripe.ts
    ```
    It prints the three `STRIPE_PRICE_*` env lines to copy into your environment. Not idempotent — run it once per Stripe account. Point a Stripe webhook at `/api/stripe/webhook`; the webhook is the only thing that ever changes a user's plan.
-5. **Crons** — `vercel.json` declares two every-minute crons: `/api/jobs/process` (the extraction worker) and `/api/schedules/run` (the schedule ticker). Both require an `Authorization: Bearer <CRON_SECRET>` header.
+5. **Crons** — `vercel.json` declares two hourly crons: `/api/jobs/process` (the extraction worker's crash-recovery sweep — normal work never waits for it, since extractions run inline and batch/schedule/email-arrival enqueues kick the worker directly, which then self-chains) and `/api/schedules/run` (the schedule ticker; schedules have hourly granularity, so hourly is exact). Both require an `Authorization: Bearer <CRON_SECRET>` header. Don't be tempted to run them every minute: on a serverless Postgres (Neon), a per-minute ping keeps the database compute awake 24/7 and burns your entire compute quota on idle polling.
 
 ### Environment variables
 
