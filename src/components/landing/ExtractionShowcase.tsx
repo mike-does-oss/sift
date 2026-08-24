@@ -95,10 +95,19 @@ const DOCS: DocDef[] = [
   },
 ];
 
-const CYCLE_MS = 4600;
-const SWEEP_START = 0.8; // s after the sheet lands
+/* The cycle tells the product's ACTUAL story (founder 2026-08-24: values
+   just appearing read as magic auto-extraction): fields are DEFINED first —
+   the reading rows arrive as named, color-ticked, EMPTY slots — then the
+   panel flips to EXTRACTING (amber), traces draw on the paper, and the
+   values fill the slots that were waiting for them. Define → run → grounded. */
+const CYCLE_MS = 5600;
+const DEFINE_START = 0.5; // s — field rows (names + ticks, values empty) land
+const DEFINE_STAGGER = 0.22; // s between field definitions
+const RUN_AT = 1.55; // s — status flips to EXTRACTING
+const SWEEP_START = 1.9; // s — traces start drawing on the paper
 const STAGGER = 0.45; // s between fields
-const ROW_LAG = 0.35; // s between a trace starting and its reading landing
+const ROW_LAG = 0.35; // s between a trace starting and its value filling
+const DONE_AT = SWEEP_START + ROW_LAG + 2 * STAGGER + 0.35; // status → GROUNDED
 
 // Reduced-motion users get a static, fully-traced invoice.
 const STATIC_DOC_INDEX = 2;
@@ -636,6 +645,63 @@ function measureProbe(stage: HTMLElement, docId: DocDef["id"], i: number): Probe
 
 /* ---------------------------------------------------------------- showcase */
 
+/**
+ * The panel's cycle status, replayed per specimen (keyed remount by doc id):
+ * FIELDS DEFINED (idle LED) → EXTRACTING (amber) → GROUNDED (phosphor).
+ * The ordering IS the message — sift's contract is define-then-extract, and
+ * the status line narrates it. Reduced motion: static GROUNDED.
+ */
+function PanelStatus({ reduced }: { reduced: boolean }) {
+  const label = (text: string) => (
+    <span className="data text-[10px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">{text}</span>
+  );
+  if (reduced) {
+    return (
+      <span className="flex flex-shrink-0 items-center gap-1.5">
+        <span className="led led-on" />
+        {label("grounded")}
+      </span>
+    );
+  }
+  const FADE = 0.15;
+  const timed = (from: number, to: number) => {
+    const d = to - from;
+    return {
+      opacity: [0, 1, 1, 0],
+      transition: { delay: from, duration: d, times: [0, FADE / d, 1 - FADE / d, 1] },
+    };
+  };
+  return (
+    <span className="relative flex h-4 min-w-[7.5rem] flex-shrink-0 items-center">
+      <motion.span
+        className="absolute right-0 flex items-center gap-1.5 whitespace-nowrap"
+        initial={{ opacity: 0 }}
+        animate={timed(DEFINE_START, RUN_AT)}
+      >
+        <span className="led led-idle" />
+        {label("fields defined")}
+      </motion.span>
+      <motion.span
+        className="absolute right-0 flex items-center gap-1.5 whitespace-nowrap"
+        initial={{ opacity: 0 }}
+        animate={timed(RUN_AT, DONE_AT)}
+      >
+        <span className="led led-warn" />
+        {label("extracting")}
+      </motion.span>
+      <motion.span
+        className="absolute right-0 flex items-center gap-1.5 whitespace-nowrap"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: DONE_AT, duration: 0.2 }}
+      >
+        <span className="led led-on" />
+        {label("grounded")}
+      </motion.span>
+    </span>
+  );
+}
+
 // "Am I hydrated yet?" via useSyncExternalStore: the server snapshot is false,
 // the client snapshot is true, so SSR and the first client render agree.
 const subscribeNoop = () => () => {};
@@ -733,7 +799,7 @@ export function ExtractionShowcase() {
   return (
     <figure
       role="img"
-      aria-label="Demo of sift reading a bank statement, contract, invoice, and email — each a full document page, each value traced on the paper and linked by a probe line to its reading in the results panel"
+      aria-label="Demo of sift's workflow on a bank statement, contract, invoice, and email: fields are defined first as empty named slots, extraction runs, and each value fills its slot — traced on the paper and linked by a probe line to its reading"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className="mx-auto w-full max-w-3xl text-left"
@@ -787,12 +853,7 @@ export function ExtractionShowcase() {
             <div className="flex flex-col justify-center p-4 sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <span className="etched-label">Readings</span>
-                <span className="flex flex-shrink-0 items-center gap-1.5">
-                  <span className="led led-on" />
-                  <span className="data text-[10px] uppercase tracking-[0.08em] text-[var(--ink-dim)]">
-                    grounded
-                  </span>
-                </span>
+                <PanelStatus key={active.id} reduced={reduced} />
               </div>
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -805,11 +866,14 @@ export function ExtractionShowcase() {
                     <motion.div
                       key={field.name}
                       data-probe-row={i}
+                      // DEFINE beat: the row arrives early as a named,
+                      // color-ticked, EMPTY slot — the user's field
+                      // definition, waiting for extraction.
                       initial={reduced ? false : { opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{
-                        delay: SWEEP_START + ROW_LAG + i * STAGGER,
-                        duration: 0.32,
+                        delay: DEFINE_START + i * DEFINE_STAGGER,
+                        duration: 0.3,
                         ease: [0.22, 1, 0.36, 1],
                       }}
                       // The reading's edge-tick (law 2): 2px left tick in the
@@ -822,11 +886,33 @@ export function ExtractionShowcase() {
                       <span className="data text-[10px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
                         {field.name}
                       </span>
-                      <span
-                        className="data ml-auto truncate text-[11.5px] font-medium text-[var(--ink)]"
-                        style={{ fontVariantNumeric: "tabular-nums" }}
-                      >
-                        {field.value}
+                      {/* EXTRACT beat: the empty-slot dash yields to the
+                          value at this field's fill time. */}
+                      <span className="relative ml-auto flex min-w-0 items-baseline justify-end">
+                        {!reduced && (
+                          <motion.span
+                            aria-hidden
+                            className="data absolute right-0 text-[11.5px] text-[var(--ink-faint)]"
+                            initial={{ opacity: 1 }}
+                            animate={{ opacity: 0 }}
+                            transition={{ delay: SWEEP_START + ROW_LAG + i * STAGGER, duration: 0.15 }}
+                          >
+                            —
+                          </motion.span>
+                        )}
+                        <motion.span
+                          className="data truncate text-[11.5px] font-medium text-[var(--ink)]"
+                          style={{ fontVariantNumeric: "tabular-nums" }}
+                          initial={reduced ? false : { opacity: 0, x: -6 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            delay: SWEEP_START + ROW_LAG + i * STAGGER,
+                            duration: 0.32,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                        >
+                          {field.value}
+                        </motion.span>
                       </span>
                     </motion.div>
                   ))}
@@ -837,7 +923,7 @@ export function ExtractionShowcase() {
                   {active.file}
                 </span>
                 <span className="data flex-shrink-0 text-[10px] text-[var(--ink-faint)]">
-                  3 fields
+                  3 fields defined
                 </span>
               </div>
             </div>
